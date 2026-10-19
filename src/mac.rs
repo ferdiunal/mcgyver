@@ -584,6 +584,13 @@ pub fn run() -> Result<(), String> {
                 pressed_at: None,
                 on_card: false,
                 frames: 0,
+                debug: std::env::var_os("MCGYVER_DEBUG").map(|_| Debug {
+                    start: Instant::now(),
+                    logic_passes: 0,
+                    ui_passes: 0,
+                    hovered: 0,
+                    reported_at: Instant::now(),
+                }),
             }))
         }),
     )
@@ -617,16 +624,38 @@ struct App {
     on_card: bool,
     /// Frames painted, up to the one after eframe showed the window.
     frames: u8,
+    /// `MCGYVER_DEBUG` is set: say what happens on stderr.
+    debug: Option<Debug>,
+}
+
+/// What `MCGYVER_DEBUG` reports while a wheel is up: how often the app runs and where it sees
+/// the pointer, so a wheel that doesn't follow the pointer can be told from one not redrawn.
+struct Debug {
+    start: Instant,
+    logic_passes: u32,
+    ui_passes: u32,
+    hovered: usize,
+    reported_at: Instant,
 }
 
 impl App {
+    fn log(&self, said: impl std::fmt::Display) {
+        if let Some(debug) = &self.debug {
+            eprintln!("[{:>7} ms] {said}", debug.start.elapsed().as_millis());
+        }
+    }
+
     /// Moves the window under the pointer, inside the display, and has it take the drag.
     fn take_drag(&mut self, ctx: &egui::Context, pointer: Pos2) {
         let mut origin = pointer - WHEEL_AT;
-        if let Some(display) = display_at(pointer) {
+        let display = display_at(pointer);
+        if let Some(display) = display {
             let max = (display.max - WINDOW).max(display.min);
             origin = origin.clamp(display.min, max);
         }
+        self.log(format!(
+            "taking the drag: pointer {pointer:?}, window at {origin:?}, display {display:?}"
+        ));
         if self.origin != Some(origin) {
             if let Some(before) = self.origin {
                 // Cards still fading stay where they are on screen.
@@ -715,6 +744,19 @@ impl eframe::App for App {
         if settings_changed {
             self.reload();
         }
+        if let Some(debug) = &mut self.debug {
+            debug.logic_passes += 1;
+        }
+        if input.trigger_down != self.last.trigger_down
+            || input.button_down != self.last.button_down
+        {
+            self.log(format!(
+                "key {}, button {}, pointer {:?}",
+                if input.trigger_down { "down" } else { "up" },
+                if input.button_down { "down" } else { "up" },
+                input.pointer
+            ));
+        }
         if !input.button_down {
             // The drag is over; the next one needs the key pressed again.
             self.held = false;
@@ -761,6 +803,7 @@ impl eframe::App for App {
             if !self.overlay.wants_input() {
                 self.let_go_at = None;
             } else if now >= at + LET_GO {
+                self.log("key let go during the drag: wheel folded");
                 self.let_go_at = None;
                 self.overlay.cancel(now);
                 self.let_through(ctx);
@@ -773,6 +816,7 @@ impl eframe::App for App {
             if !self.overlay.wants_input() {
                 self.released_at = None;
             } else if now >= at + DROP_WAIT {
+                self.log("button up, but no drop came: wheel folded");
                 self.released_at = None;
                 self.overlay.cancel(now);
             } else {
@@ -823,6 +867,7 @@ impl eframe::App for App {
             }
         }
         let local = self.local(self.last.pointer);
+        self.report(ui, local, now);
         let (hovered, dropped) = ui.input(|i| {
             let hovered: Vec<PathBuf> = i
                 .raw
@@ -839,6 +884,7 @@ impl eframe::App for App {
             && !self.overlay.wants_input()
         {
             let window = Rect::from_min_size(Pos2::ZERO, WINDOW);
+            self.log(format!("wheel opened at {local:?} in the window"));
             self.overlay
                 .open(hovered, local, window, Mode::Convert, now);
         }
@@ -846,7 +892,8 @@ impl eframe::App for App {
             self.overlay.drag_moved(local, now);
         }
         if dropped && self.overlay.wants_input() {
-            self.overlay.drop(now);
+            let picked = self.overlay.drop(now);
+            self.log(format!("dropped at {local:?}, picked: {picked}"));
             self.released_at = None;
             self.let_go_at = None;
             // The card that follows lets clicks through.
@@ -867,6 +914,45 @@ impl eframe::App for App {
 }
 
 impl App {
+    /// With `MCGYVER_DEBUG`: the dragged files coming and going, and while a wheel is up, every
+    /// quarter second, how many passes ran and where the pointer is in the window.
+    fn report(&mut self, ui: &egui::Ui, local: Pos2, now: Instant) {
+        let live = self.overlay.wants_input();
+        let Some(debug) = &mut self.debug else {
+            return;
+        };
+        debug.ui_passes += 1;
+        let (hovered, viewport) = ui.input(|i| {
+            let v = i.viewport();
+            (
+                i.raw.hovered_files.len(),
+                format!(
+                    "focused {:?}, occluded {:?}, minimized {:?}",
+                    v.focused, v.occluded, v.minimized
+                ),
+            )
+        });
+        let mut said = Vec::new();
+        if hovered != debug.hovered {
+            said.push(format!(
+                "{hovered} file(s) dragged over the window ({viewport})"
+            ));
+            debug.hovered = hovered;
+        }
+        if live && now >= debug.reported_at + Duration::from_millis(250) {
+            said.push(format!(
+                "wheel up: {} logic and {} ui passes since last, pointer at {local:?} in the window",
+                debug.logic_passes, debug.ui_passes
+            ));
+            debug.logic_passes = 0;
+            debug.ui_passes = 0;
+            debug.reported_at = now;
+        }
+        for said in said {
+            self.log(said);
+        }
+    }
+
     /// A card under the pointer: holding it moves it, its close button cancels or puts it away.
     fn cards(&mut self, ui: &egui::Ui, local: Pos2, now: Instant) {
         self.overlay.card_hover(self.on_card.then_some(local));
