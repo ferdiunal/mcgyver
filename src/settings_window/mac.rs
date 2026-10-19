@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use crate::glass::{GREEN, RED};
 use crate::i18n::tr;
-use crate::settings::{APP_ID, Trigger, config_home};
+use crate::settings::Trigger;
 
 use super::{AMBER, Row, row};
 
@@ -26,34 +26,22 @@ pub(super) const CHECK_EVERY: Duration = Duration::from_secs(1);
 /// How long a restart may take before the button comes back.
 const RESTART_WAIT: Duration = Duration::from_secs(10);
 
-/// One settings window at a time, however it was opened: the guard holds a lock on a file in
-/// the settings folder. Without the folder, the window opens anyway.
+/// One settings window at a time.
 pub(super) fn claim() -> Option<Option<File>> {
-    let Some(dir) = config_home().map(|d| d.join(APP_ID)) else {
-        return Some(None);
-    };
-    let _ = std::fs::create_dir_all(&dir);
-    let Ok(file) = File::create(dir.join("settings.lock")) else {
-        return Some(None);
-    };
-    match file.try_lock() {
-        Ok(()) => Some(Some(file)),
-        Err(std::fs::TryLockError::WouldBlock) => None,
-        Err(_) => Some(Some(file)),
-    }
+    super::claim_lock_file()
 }
 
 /// The running app reads the settings file again by itself when it changes; this only says
 /// whether it is running.
 pub(super) fn tell_app() -> bool {
-    crate::mac::running()
+    crate::desktop::running()
 }
 
 /// The bundle starts as a menu bar app, whose windows open behind the app in front and can't be
 /// switched to: make this one a regular app and bring its window forward.
 pub(super) fn bring_forward(ctx: &egui::Context) {
-    crate::mac::regular_app();
-    crate::mac::activate();
+    crate::desktop::regular_app();
+    crate::desktop::activate();
     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
 }
 
@@ -139,14 +127,14 @@ impl Permissions {
         match (self.state, row(ui, &shown)) {
             // The first time, macOS shows its own prompt; after that only System Settings can.
             (State::NotAllowed, Some(0)) => {
-                crate::mac::request_input_monitoring();
+                crate::desktop::request_input_monitoring();
             }
             (State::NotAllowed, Some(_)) => {
                 let _ = std::process::Command::new("open")
                     .arg(INPUT_MONITORING)
                     .status();
             }
-            (State::NeedsRestart, Some(_)) if crate::mac::ask_restart() => {
+            (State::NeedsRestart, Some(_)) if crate::desktop::ask_restart() => {
                 self.restarting = Some(Instant::now());
             }
             _ => {}
@@ -155,9 +143,9 @@ impl Permissions {
 }
 
 fn state() -> State {
-    if !crate::mac::input_monitoring() {
+    if !crate::desktop::input_monitoring() {
         State::NotAllowed
-    } else if crate::mac::keys_heard() == Some(false) {
+    } else if crate::desktop::keys_heard() == Some(false) {
         State::NeedsRestart
     } else {
         State::On

@@ -73,7 +73,7 @@ pub fn available() -> bool {
 /// stopped if the job is cancelled.
 pub fn convert(input: &Path, target: Target, output: &Path, progress: &Progress) -> io::Result<()> {
     let mut command = Command::new("ffmpeg");
-    command
+    crate::actions::quiet(&mut command)
         .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i"])
         .arg(input)
         .args(["-map_metadata", "0", "-map_chapters", "0"]);
@@ -168,8 +168,7 @@ pub fn convert(input: &Path, target: Target, output: &Path, progress: &Progress)
 }
 
 fn command_on_path(name: &str) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
+    crate::actions::has(name)
 }
 
 fn command_error(stderr: &[u8], fallback: &str) -> String {

@@ -1,3 +1,7 @@
+// No console window behind the app; `attach_console` borrows the one it was started from, when
+// there is something to say.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 /// Prints `log` records (egui_glow reports GL problems through it) when `MCGYVER_DEBUG` is set.
 struct StderrLog;
 
@@ -40,6 +44,26 @@ wheel's centre switches between Convert, Tools and Actions. Starting it again wh
 opens its settings.
   --settings   open the settings window: language, trigger key, start at login, and Input
                Monitoring";
+
+#[cfg(windows)]
+const WINDOWS_USAGE: &str = "\
+mcgyver [--settings]
+
+Starts in the background with an icon in the notification area. Drag files, then hold the
+trigger key (Shift unless the settings say otherwise) and drop them on an option; the ring
+around the wheel's centre switches between Convert, Tools and Actions. Starting it again while
+it runs opens its settings.
+  --settings   open the settings window: language, trigger key and start at login";
+
+/// A windowed program has no console of its own: started from one, it writes to that one, so
+/// `--help`, errors and `MCGYVER_DEBUG` are seen (after the prompt, which doesn't wait for it).
+/// Only then: attached, it would also be closed by Ctrl+C there, or with the terminal.
+#[cfg(windows)]
+fn attach_console() {
+    use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+    // SAFETY: fails harmlessly when there is no console to attach to.
+    unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+}
 
 /// An app opened from Finder gets only the system's PATH; ffmpeg usually comes from Homebrew.
 #[cfg(target_os = "macos")]
@@ -94,7 +118,7 @@ fn main() {
             .find(|a| !a.starts_with("-psn_"))
             .as_deref()
         {
-            None => mcgyver::mac::run(),
+            None => mcgyver::desktop::run(),
             Some("--settings") => mcgyver::settings_window::run(),
             Some("-h" | "--help") => {
                 println!("{MAC_USAGE}");
@@ -106,11 +130,33 @@ fn main() {
             }
         }
     };
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(windows)]
+    let result = {
+        if std::env::var_os("MCGYVER_DEBUG").is_some() {
+            attach_console();
+        }
+        match std::env::args().nth(1).as_deref() {
+            None => mcgyver::desktop::run(),
+            Some("--settings") => mcgyver::settings_window::run(),
+            Some("-h" | "--help") => {
+                attach_console();
+                println!("{WINDOWS_USAGE}");
+                Ok(())
+            }
+            Some(_) => {
+                attach_console();
+                eprintln!("{WINDOWS_USAGE}");
+                std::process::exit(2);
+            }
+        }
+    };
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     let result: Result<(), String> =
-        Err("only KDE Plasma on Wayland and macOS are supported so far".into());
+        Err("only KDE Plasma on Wayland, macOS and Windows are supported so far".into());
 
     if let Err(err) = result {
+        #[cfg(windows)]
+        attach_console();
         eprintln!("mcgyver: {err}");
         std::process::exit(1);
     }

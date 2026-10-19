@@ -95,5 +95,14 @@ in zstd and friends) checks that it compiles. Distribution beyond the build mach
 
 ## Windows
 
-Not ported yet; not packaged. It needs a low-level keyboard hook or polled key state, a layered
-topmost window and `IDropTarget`; distribution would be GitHub Releases or winget.
+`packaging/windows/build.sh`, run on Linux, builds `mcgyver.exe` for `x86_64-pc-windows-gnu` and
+`aarch64-pc-windows-gnullvm` with `cargo zigbuild` and zips each with the README and licences:
+`dist/McGyver-<version>-windows-x64.zip` and `-arm64.zip` (pass `x64` or `arm64` for one).
+unRAR's sources include `PowrProf.h` and `Wbemidl.h` as the Windows SDK spells them; MinGW's are
+in lower case, so `packaging/windows/include` forwards them, through `CXXFLAGS_<target>`. Its
+build script chose its Windows sources by the build machine, so `vendor/unrar_sys` asks for the
+target instead. On Windows itself, `cargo build --release` (MSVC) needs neither.
+
+The exe is unsigned, so SmartScreen warns on first start; a code signing certificate (or Azure
+Trusted Signing) would stop that. It has no icon of its own in Explorer yet (the tray and the
+windows draw `assets/icon.svg`). Distribution would be GitHub Releases, then winget.

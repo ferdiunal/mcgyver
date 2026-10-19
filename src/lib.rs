@@ -30,12 +30,12 @@ pub mod wheel;
 pub mod kde;
 #[cfg(target_os = "linux")]
 pub mod service;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", windows))]
 pub mod settings_window;
 #[cfg(target_os = "linux")]
 mod tap;
 #[cfg(target_os = "linux")]
 mod tray;
 
-#[cfg(target_os = "macos")]
-pub mod mac;
+#[cfg(any(target_os = "macos", windows))]
+pub mod desktop;

@@ -3,7 +3,7 @@ name = "mcgyver"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "Drag files, hold Shift, and drop them on a wheel to convert them (KDE Plasma 6 on Wayland, macOS)"
+description = "Drag files, hold Shift, and drop them on a wheel to convert them (KDE Plasma 6 on Wayland, macOS, Windows)"
 
 [features]
 default = ["rar"]
@@ -71,15 +71,39 @@ wayland-protocols = { version = "0.32", features = ["client", "staging"] }
 wayland-protocols-plasma = { version = "0.3", features = ["client"] }
 zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
 
-# macOS (src/mac.rs): the menu bar icon, and AppKit for making the app a menu bar one.
+# macOS and Windows (src/desktop): the menu bar or tray icon, and the overlay's native window.
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+raw-window-handle = "0.6"
+tray-icon = { version = "0.26", default-features = false }
+
+# macOS (src/desktop/mac.rs): AppKit, for making the app a menu bar one.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSMenu", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSView", "NSWindow"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSString", "NSURL"] }
-raw-window-handle = "0.6"
-tray-icon = { version = "0.26", default-features = false }
 # eframe's own winit, for its macOS event loop options (a menu bar app that doesn't take focus).
 winit = { version = "0.30", default-features = false }
+
+# Windows (src/desktop/windows.rs and the Windows branches elsewhere): the input hooks, the
+# clipboard, the click, start at login, and the folder picker.
+[target.'cfg(windows)'.dependencies]
+rfd = { version = "0.17", default-features = false }
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Media_Audio",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_Registry",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [dev-dependencies]
 # Only for examples/preview.rs: renders the overlay UI in a normal window for screenshots.
@@ -147,3 +171,7 @@ krilla = { git = "https://github.com/storytold/craft-libs", rev = "c3487320b2d1d
 # vello_cpu's `multithreading` feature. vendor/epaint is epaint 0.37.0 (MIT OR Apache-2.0) with
 # that context made single-threaded; see `single_threaded` in src/text/font_face.rs.
 epaint = { path = "vendor/epaint" }
+# unrar_sys 0.5.8 (MIT OR Apache-2.0) picks its Windows sources and libraries with `cfg!` in its
+# build script, which is the build machine's: vendor/unrar_sys asks for the target's instead,
+# so Windows builds cross-compiled on Linux link (see `McGyver:` in its build.rs).
+unrar_sys = { path = "vendor/unrar_sys" }

@@ -403,7 +403,38 @@ fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     fs::rename(from, to)
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(windows)]
+fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::MoveFileExW;
+
+    // Past MAX_PATH only the \\?\ form of a full path works (std does the same for its calls).
+    let wide = |path: &Path| -> io::Result<Vec<u16>> {
+        let mut text = std::ffi::OsString::new();
+        if path.as_os_str().len() >= 248 && !path.as_os_str().to_string_lossy().starts_with(r"\\")
+        {
+            text.push(r"\\?\");
+            text.push(std::path::absolute(path)?);
+        } else {
+            text.push(path);
+        }
+        Ok(text.encode_wide().chain([0]).collect())
+    };
+    let (wide_from, wide_to) = (wide(from)?, wide(to)?);
+    // SAFETY: both paths end in a NUL; without MOVEFILE_REPLACE_EXISTING it fails rather than
+    // replace what is at `to` (ERROR_ALREADY_EXISTS, which is `AlreadyExists`).
+    if unsafe { MoveFileExW(wide_from.as_ptr(), wide_to.as_ptr(), 0) } != 0 {
+        return Ok(());
+    }
+    let error = io::Error::last_os_error();
+    // A folder in the way is "access denied".
+    if error.kind() == io::ErrorKind::PermissionDenied && fs::symlink_metadata(to).is_ok() {
+        return Err(io::ErrorKind::AlreadyExists.into());
+    }
+    Err(error)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     // The application targets Linux; other builds retain the platform's native rename behavior.
     fs::rename(from, to)

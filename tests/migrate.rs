@@ -1,5 +1,7 @@
 //! What the app left behind when it was called Zero-Click carries over to McGyver. Its own test
-//! binary: it points `XDG_CONFIG_HOME` at a temporary folder for the whole process.
+//! binary: it points `XDG_CONFIG_HOME` at a temporary folder for the whole process. Zero-Click
+//! only ever ran on Linux, where starting at login is an XDG autostart entry.
+#![cfg(target_os = "linux")]
 
 use std::fs;
 

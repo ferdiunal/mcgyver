@@ -1,7 +1,7 @@
 //! The settings window (`--settings`), a process of its own so the overlay never waits on it:
 //! language, trigger key, starting at login, and the permissions the desktop grants, each with
-//! the button that fixes it (`linux`, `mac`). Each change is saved at once and the running app
-//! picks it up.
+//! the button that fixes it (`linux`, `mac`, `windows`). Each change is saved at once and the
+//! running app picks it up.
 
 use std::time::{Duration, Instant};
 
@@ -19,10 +19,15 @@ use linux as platform;
 mod mac;
 #[cfg(target_os = "macos")]
 use mac as platform;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows as platform;
 
 use platform::{CHECK_EVERY, Permissions, TRIGGER_HELP};
 
 /// Something that needs one more step, as a restart.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const AMBER: Color32 = Color32::from_rgb(226, 146, 18);
 /// How long "Saved" stays up.
 const NOTE_FOR: Duration = Duration::from_secs(3);
@@ -212,7 +217,33 @@ impl Window {
     }
 }
 
+/// One settings window at a time, however it was opened: the guard holds a lock on a file in
+/// the settings folder. Without the folder, the window opens anyway. (On Linux, the session bus
+/// does this.)
+#[cfg(any(target_os = "macos", windows))]
+fn claim_lock_file() -> Option<Option<std::fs::File>> {
+    let Some(dir) = settings::config_home().map(|d| d.join(APP_ID)) else {
+        return Some(None);
+    };
+    let _ = std::fs::create_dir_all(&dir);
+    // Not emptied on opening: Windows refuses to empty a file another process has locked.
+    let Ok(file) = std::fs::File::options()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(dir.join("settings.lock"))
+    else {
+        return Some(None);
+    };
+    match file.try_lock() {
+        Ok(()) => Some(Some(file)),
+        Err(std::fs::TryLockError::WouldBlock) => None,
+        Err(_) => Some(Some(file)),
+    }
+}
+
 /// One permission as the card shows it.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 struct Row<'a> {
     title: &'a str,
     help: &'a str,
@@ -226,6 +257,7 @@ struct Row<'a> {
 
 /// Draws a permission: a dot in its colour, its title, where it stands and why it matters, and
 /// its buttons. Returns the index of the one clicked.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn row(ui: &mut egui::Ui, row: &Row) -> Option<usize> {
     let mut clicked = None;
     ui.horizontal(|ui| {

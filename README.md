@@ -26,7 +26,7 @@ merged, zipped, shared. Drop them on a wedge and it's done, without opening anot
 
 Media editing, PDF conversions other than to Markdown, document and spreadsheet Merge, and
 presentation Compress are still simulated. It runs on **KDE Plasma 6 (Wayland)**, and on
-**macOS** as a first, untested port (see [macOS](#macos)).
+**macOS** and **Windows** as first ports (see [macOS](#macos) and [Windows](#windows)).
 
 ## Run
 
@@ -92,6 +92,46 @@ to one build is lost with the next. To keep it, make a code signing certificate 
 Access → Certificate Assistant → Create a Certificate…, type "Code Signing") and build with
 `MCGYVER_SIGN_IDENTITY="its name" packaging/macos/build-app.sh`. Handing the app to others needs
 an Apple Developer ID and notarization, not set up yet.
+
+### Windows
+
+A first port, not yet run on a real Windows machine, for x64 and ARM64 PCs (Windows 10 and 11).
+It is built on Linux with [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) (zig
+brings MinGW's headers and libraries for both):
+
+```sh
+rustup target add x86_64-pc-windows-gnu aarch64-pc-windows-gnullvm
+packaging/windows/build.sh          # → dist/McGyver-<version>-windows-x64.zip and -arm64.zip
+packaging/windows/build.sh arm64    # or x64: one of them
+```
+
+Unzip it anywhere and run `mcgyver.exe`. It isn't signed, so SmartScreen warns the first time
+(More info → Run anyway). It sits in the notification area (Pause, Settings…, Quit), and starting
+it again while it runs opens its settings. Drag files in Explorer, hold the trigger key, and the
+wheel appears under the pointer, as on macOS: a transparent, topmost window that lets every
+click through until the key goes down during a drag, then takes the drag with Windows' own drag
+and drop. What differs:
+
+- **Trigger key:** Shift, Ctrl or Alt.
+- **No permission:** low-level keyboard and mouse hooks hear the key and the mouse as they
+  change, and Windows asks nothing for them (if they can't be set, the state is read every
+  30 ms). The settings' Permissions card says so.
+- **Any drag:** Windows can't tell what a drag carries before it reaches a window, so the key
+  takes whatever drag it goes down in. When no files come once the pointer has moved on, the
+  drag goes through to what is below; pressing the key again takes it again.
+- **Actions:** Copy and Cut are Explorer's (Ctrl+V pastes them; cut files are moved); Copy To and
+  Move To ask with Windows' folder picker; Copy Path uses the clipboard directly; Terminal opens
+  Windows Terminal, or else Command Prompt; Share needs KDE Connect's `kdeconnect-cli` on the
+  PATH. The click plays from memory (`assets/sounds/click.wav`).
+- **FFmpeg** for audio and video: `winget install Gyan.FFmpeg`, or any `ffmpeg.exe` on the PATH.
+  HEIC and AVIF need libheif's `heif.dll` next to `mcgyver.exe` or on the PATH.
+- **Files:** settings in `%APPDATA%\mcgyver\settings.conf`; Start at login writes `McGyver` under
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, and asks for the zip to be unzipped
+  first (opened from inside it, Explorer runs a copy that is gone later).
+- **ARM64:** the wheel is drawn with OpenGL, which Windows on ARM gets from the graphics driver
+  or from Microsoft's "OpenCL, OpenGL, and Vulkan Compatibility Pack" (Microsoft Store).
+- **Debugging:** `set MCGYVER_DEBUG=1` and start `mcgyver.exe` from a terminal: it writes what
+  happens to that terminal (after the prompt, which doesn't wait for it).
 
 ### Tray and settings
 
@@ -174,7 +214,8 @@ switches between the three modes:
   in halves (the first on top), and with one there is no ring at all: a JSON file, say, opens
   straight on its Actions.
 - **Sound:** the wheel opening, a mode switch, moving onto another wedge and a pick each play
-  `assets/sounds/click.mp3` through `pw-play` (or `paplay`; `afplay` on macOS). `MCGYVER_SOUND=0` turns it off.
+  `assets/sounds/click.mp3` through `pw-play` (or `paplay`; `afplay` on macOS; PlaySound and
+  `click.wav` on Windows). `MCGYVER_SOUND=0` turns it off.
 - **Merge** (documents, spreadsheets, PDFs, audio) shows up only with two or more files; a single
   document has no other tool, so it gets no Tools slice at all.
 - **Mixed selections:** the wheel offers what every recognised file supports. A file already in
@@ -274,10 +315,10 @@ folders alike:
 | Action | What it does |
 |--------|--------------|
 | Zip | Packs everything into one ZIP next to it: `name.zip` for one item, `Archive.zip` for several |
-| Copy, Cut | Puts the files on the clipboard as Dolphin's Ctrl+C and Ctrl+X do (a URI list, KDE's cut mark, GNOME's form, and the paths as text), through ext-data-control; paste them in a file manager. Cut files are moved where they are pasted. Without ext-data-control, Copy goes through wl-copy as a URI list and Cut isn't offered. On macOS, Copy is Finder's Copy and there is no Cut (Option-Command-V moves what was copied) |
-| Copy To, Move To | Asks for a folder (kdialog or zenity) and copies or moves there. Names that are taken get a number. Copying into the same folder duplicates; moving there changes nothing. A move to another disk copies, syncs to disk, then removes the original |
-| Copy Path | Puts the full paths on the clipboard, one per line (wl-copy, or Klipper) |
-| Terminal | Opens Konsole (or the first terminal found) in the folder |
+| Copy, Cut | Puts the files on the clipboard as Dolphin's Ctrl+C and Ctrl+X do (a URI list, KDE's cut mark, GNOME's form, and the paths as text), through ext-data-control; paste them in a file manager. Cut files are moved where they are pasted. Without ext-data-control, Copy goes through wl-copy as a URI list and Cut isn't offered. On macOS, Copy is Finder's Copy and there is no Cut (Option-Command-V moves what was copied); on Windows they are Explorer's |
+| Copy To, Move To | Asks for a folder (kdialog or zenity; the system's picker on macOS and Windows) and copies or moves there. Names that are taken get a number. Copying into the same folder duplicates; moving there changes nothing. A move to another disk copies, syncs to disk, then removes the original |
+| Copy Path | Puts the full paths on the clipboard, one per line (wl-copy, or Klipper; pbcopy on macOS) |
+| Terminal | Opens Konsole (or the first terminal found; Terminal on macOS, Windows Terminal or Command Prompt on Windows) in the folder |
 | Share | Sends the files to the first phone KDE Connect can reach |
 
 An action only shows up if its tool is installed. Pinning a preview above other windows isn't
@@ -393,9 +434,9 @@ overlay reports where it drew glass: the disc, the caption and the progress card
 goes to `ext_background_effect_v1`, approximated by 2 px horizontal bands. Compositors without
 that protocol get the same look without the blur.
 
-GNOME has neither protocol. macOS, Windows and X11 can do the same with their own APIs: poll the
-modifier state, detect a drag, and show a topmost window at the cursor. None of that is written
-yet.
+GNOME has neither protocol. macOS and Windows do the same with their own APIs (`src/desktop`):
+they hear the modifier keys and the mouse, and a topmost window that lets clicks through takes the
+drag under the cursor. X11 isn't written yet.
 
 ## UI development
 
@@ -449,7 +490,8 @@ the context was first made current without a surface, which left the draw buffer
 | `src/tray.rs` | The tray icon and its menu (StatusNotifierItem, through ksni) |
 | `src/service.rs` | The app's session-bus name: one instance, and what the settings window and `--quit` ask it |
 | `src/settings.rs` | The settings file, the trigger keys, starting at login |
-| `src/settings_window.rs` | The settings window (eframe), run as `--settings` |
+| `src/settings_window/` | The settings window (eframe), run as `--settings`; its Permissions card per platform (`linux`, `mac`, `windows`) |
+| `src/desktop/` | The macOS and Windows backend: the overlay window, the menu bar or tray icon, the input thread (`mod.rs`), and what differs (`mac.rs`, `windows.rs`) |
 | `src/i18n.rs` | English and Turkish text; everything shown is looked up there |
 | `src/icon.rs` | The app icon (`assets/icon.svg`) drawn for the tray and the window |
 | `assets/icon.svg`, `assets/logo.svg`, `assets/logo-on-dark.svg` | The icon (a paper clip bent into an M) and the logo with the name, its text turned into paths so it needs no font |

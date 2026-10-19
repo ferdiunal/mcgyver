@@ -1,6 +1,6 @@
 //! What the settings window sets, kept as `key = value` lines in
-//! `$XDG_CONFIG_HOME/mcgyver/settings.conf` (on macOS `~/Library/Application Support`), and
-//! starting at login.
+//! `$XDG_CONFIG_HOME/mcgyver/settings.conf` (on macOS `~/Library/Application Support`, on
+//! Windows `%APPDATA%`), and starting at login.
 
 use std::io;
 use std::path::PathBuf;
@@ -163,18 +163,25 @@ pub fn migrate() {
     }
 }
 
-/// `$XDG_CONFIG_HOME`, or `~/.config` (`~/Library/Application Support` on macOS). Per the XDG
-/// spec a relative one is ignored.
+/// `$XDG_CONFIG_HOME`, or `~/.config` (`~/Library/Application Support` on macOS, `%APPDATA%`
+/// on Windows). Per the XDG spec a relative one is ignored.
 pub fn config_home() -> Option<PathBuf> {
+    let xdg = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute());
+    if cfg!(windows) {
+        return xdg.or_else(|| {
+            std::env::var_os("APPDATA")
+                .map(PathBuf::from)
+                .filter(|p| p.is_absolute())
+        });
+    }
     let default = if cfg!(target_os = "macos") {
         "Library/Application Support"
     } else {
         ".config"
     };
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(default)))
+    xdg.or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(default)))
 }
 
 fn path() -> Option<PathBuf> {
@@ -182,6 +189,7 @@ fn path() -> Option<PathBuf> {
 }
 
 /// What starts the app at login: an XDG autostart entry, or on macOS a launch agent.
+#[cfg(not(windows))]
 fn autostart_file() -> Option<PathBuf> {
     if cfg!(target_os = "macos") {
         return std::env::var_os("HOME").map(|home| {
@@ -194,10 +202,12 @@ fn autostart_file() -> Option<PathBuf> {
 }
 
 /// Whether the desktop starts the app at login.
+#[cfg(not(windows))]
 pub fn starts_at_login() -> bool {
     autostart_file().is_some_and(|p| p.exists())
 }
 
+#[cfg(not(windows))]
 pub fn set_start_at_login(on: bool) -> io::Result<()> {
     let path = autostart_file()
         .ok_or_else(|| io::Error::other("neither XDG_CONFIG_HOME nor HOME is set"))?;
@@ -235,6 +245,91 @@ pub fn set_start_at_login(on: bool) -> io::Result<()> {
         )
     };
     std::fs::write(&path, entry)
+}
+
+/// Where Windows keeps what starts at login for this user; the app's line there is named
+/// `APP_NAME`.
+#[cfg(windows)]
+const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+
+#[cfg(windows)]
+fn wide(text: &str) -> Vec<u16> {
+    text.encode_utf16().chain([0]).collect()
+}
+
+/// Whether Windows starts the app at login.
+#[cfg(windows)]
+pub fn starts_at_login() -> bool {
+    has_run_entry(APP_NAME)
+}
+
+#[cfg(windows)]
+pub fn set_start_at_login(on: bool) -> io::Result<()> {
+    let command = if on {
+        Some(format!("\"{}\"", launcher()?))
+    } else {
+        None
+    };
+    set_run_entry(APP_NAME, command.as_deref())
+}
+
+/// Whether the Run key has a line called `name`.
+#[cfg(windows)]
+fn has_run_entry(name: &str) -> bool {
+    use windows_sys::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_SZ, RegGetValueW};
+    let (key, name) = (wide(RUN_KEY), wide(name));
+    let mut size = 0u32;
+    // SAFETY: NUL-terminated names; only the value's size is asked for.
+    let found = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            key.as_ptr(),
+            name.as_ptr(),
+            RRF_RT_REG_SZ,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut size,
+        )
+    };
+    found == 0
+}
+
+/// Writes the Run key's line called `name`, or takes it away.
+#[cfg(windows)]
+fn set_run_entry(name: &str, command: Option<&str>) -> io::Result<()> {
+    use windows_sys::Win32::System::Registry::{
+        HKEY_CURRENT_USER, REG_SZ, RegDeleteKeyValueW, RegSetKeyValueW,
+    };
+    let (key, name) = (wide(RUN_KEY), wide(name));
+    let code = match command {
+        Some(command) => {
+            let command = wide(command);
+            // SAFETY: NUL-terminated names, and the command with its size in bytes, NUL
+            // included.
+            unsafe {
+                RegSetKeyValueW(
+                    HKEY_CURRENT_USER,
+                    key.as_ptr(),
+                    name.as_ptr(),
+                    REG_SZ,
+                    command.as_ptr().cast(),
+                    (command.len() * 2) as u32,
+                )
+            }
+        }
+        // SAFETY: NUL-terminated names.
+        None => match unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, key.as_ptr(), name.as_ptr()) }
+        {
+            // ERROR_FILE_NOT_FOUND: it wasn't there.
+            2 => 0,
+            code => code,
+        },
+    };
+    if code == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::from_raw_os_error(code as i32))
+    }
 }
 
 /// Whether macOS runs this copy only for now: from a disk image (mounted read-only), or the
@@ -282,6 +377,10 @@ fn launcher() -> io::Result<String> {
         PathBuf::from("/snap/bin").join(name)
     } else if let Some(image) = std::env::var_os("APPIMAGE") {
         PathBuf::from(image)
+    } else if cfg!(windows) {
+        // Already absolute; made canonical it would start with \\?\, which not every program
+        // that reads the Run key takes.
+        own_exe()?
     } else {
         own_exe()?.canonicalize()?
     };
@@ -291,9 +390,21 @@ fn launcher() -> io::Result<String> {
             "Move McGyver to Applications first.",
         )));
     }
-    // Quoted in Exec; anything that would need escaping there is refused.
+    // Opened from inside a zip, Explorer runs a copy in the temporary folder, gone in time.
+    #[cfg(windows)]
+    if exe.starts_with(std::env::temp_dir()) {
+        return Err(io::Error::other(crate::i18n::tr(
+            "Unzip McGyver to a folder first.",
+        )));
+    }
+    // Quoted in Exec (or the Run key); anything that would need escaping there is refused.
+    let refused: &[char] = if cfg!(windows) {
+        &['"']
+    } else {
+        &['"', '\\', '`', '$', '%']
+    };
     exe.to_str()
-        .filter(|s| !s.contains(['"', '\\', '`', '$', '%']))
+        .filter(|s| !s.contains(refused))
         .map(str::to_owned)
         .ok_or_else(|| {
             io::Error::other(format!(
@@ -314,6 +425,19 @@ mod tests {
             trigger: Trigger::Ctrl,
         };
         assert_eq!(Settings::parse(&settings.to_text()), settings);
+    }
+
+    /// Under a name of its own, so McGyver's own line is left alone.
+    #[cfg(windows)]
+    #[test]
+    fn a_run_entry_comes_and_goes() {
+        let name = "McGyver test";
+        set_run_entry(name, Some(r#""C:\Program Files\McGyver\mcgyver.exe""#)).unwrap();
+        assert!(has_run_entry(name));
+        set_run_entry(name, None).unwrap();
+        assert!(!has_run_entry(name));
+        // Already gone is fine.
+        set_run_entry(name, None).unwrap();
     }
 
     #[test]

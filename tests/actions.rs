@@ -1,5 +1,7 @@
 //! The Actions wheel through its real entry point, with a stand-in folder picker: its own test
-//! binary, so PATH can point at the stand-in before anything looks for a picker.
+//! binary, so PATH can point at the stand-in before anything looks for a picker. The stand-in is
+//! a shell script, so this runs on Linux and macOS.
+#![cfg(unix)]
 
 use std::fs;
 use std::path::Path;
@@ -15,14 +17,10 @@ fn fake_picker(bin: &Path) {
         "#!/bin/sh\nprintf '%s\\n' \"$MCGYVER_TEST_PICK\"\n",
     )
     .unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
 }
 
-#[cfg(unix)]
 #[test]
 fn copy_keeps_the_original_and_move_takes_it() {
     let bin = tempfile::tempdir().unwrap();

@@ -76,8 +76,11 @@ impl Action {
             Action::Copy => FILE_CLIPBOARD.get().is_some() || has("wl-copy"),
             // Only a clipboard that carries KDE's cut mark can say the files are to be moved.
             Action::Cut => FILE_CLIPBOARD.get().is_some_and(|c| c.can_cut),
-            Action::CopyTo | Action::MoveTo => picker().is_some(),
-            Action::CopyPath => has("wl-copy") || has("dbus-send") || has("pbcopy"),
+            // Windows has its own folder picker and clipboard.
+            Action::CopyTo | Action::MoveTo => cfg!(windows) || picker().is_some(),
+            Action::CopyPath => {
+                cfg!(windows) || has("wl-copy") || has("dbus-send") || has("pbcopy")
+            }
             Action::Terminal => terminal().is_some(),
             Action::Share => has("kdeconnect-cli"),
         }
@@ -146,7 +149,7 @@ pub fn run(files: &[PathBuf], action: Action, progress: &Progress) -> io::Result
                 .iter()
                 .map(|f| f.to_string_lossy())
                 .collect::<Vec<_>>()
-                .join("\n");
+                .join(if cfg!(windows) { "\r\n" } else { "\n" });
             set_clipboard(&text)?;
             Ok(if files.len() > 1 {
                 trf("{} paths copied", &[&files.len()])
@@ -157,7 +160,7 @@ pub fn run(files: &[PathBuf], action: Action, progress: &Progress) -> io::Result
         Action::Terminal => {
             let (name, args) = terminal().ok_or_else(|| io::Error::other("no terminal found"))?;
             let dir = work_dir(files);
-            let mut child = Command::new(name)
+            let mut child = quiet(&mut Command::new(name))
                 .args(args.iter().map(|a| {
                     if *a == "{dir}" {
                         dir.as_os_str()
@@ -203,9 +206,32 @@ fn work_dir(files: &[PathBuf]) -> PathBuf {
     }
 }
 
+/// Whether `tool` is on the PATH (as `tool.exe` on Windows, where Windows Terminal's is a link
+/// only `symlink_metadata` can look at).
 pub(crate) fn has(tool: &str) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(tool).is_file()))
+    let tool = if cfg!(windows) && Path::new(tool).extension().is_none() {
+        format!("{tool}.exe")
+    } else {
+        tool.to_owned()
+    };
+    std::env::var_os("PATH").is_some_and(|paths| {
+        std::env::split_paths(&paths).any(|dir| {
+            let path = dir.join(&tool);
+            path.is_file() || cfg!(windows) && path.symlink_metadata().is_ok_and(|m| !m.is_dir())
+        })
+    })
+}
+
+/// Keeps a console program from opening a window of its own on Windows, where the app has no
+/// console to lend it.
+pub(crate) fn quiet(command: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NO_WINDOW
+        command.creation_flags(0x0800_0000);
+    }
+    command
 }
 
 /// The first terminal found, with the arguments that open it in `{dir}`.
@@ -215,6 +241,11 @@ fn terminal() -> Option<(&'static str, &'static [&'static str])> {
         const KNOWN: &[(&str, &[&str])] = &[
             #[cfg(target_os = "macos")]
             ("open", &["-a", "Terminal", "{dir}"]),
+            #[cfg(windows)]
+            ("wt", &["-d", "{dir}"]),
+            // A new Command Prompt in the folder the hidden one runs in.
+            #[cfg(windows)]
+            ("cmd", &["/c", "start", "cmd.exe"]),
             ("konsole", &["--workdir", "{dir}"]),
             ("ptyxis", &["--new-window", "--working-directory", "{dir}"]),
             ("kgx", &["--working-directory", "{dir}"]),
@@ -234,6 +265,8 @@ fn pretty_terminal(name: &str) -> &str {
     match name {
         "konsole" => "Konsole",
         "kgx" | "gnome-terminal" | "ptyxis" | "open" => "Terminal",
+        "wt" => "Windows Terminal",
+        "cmd" => crate::i18n::tr("Command Prompt"),
         _ => name,
     }
 }
@@ -248,6 +281,13 @@ fn picker() -> Option<&'static str> {
 }
 
 /// Asks for a folder; `Err` if none is picked.
+#[cfg(windows)]
+fn pick_folder(title: &str, start: &Path) -> io::Result<PathBuf> {
+    crate::desktop::pick_folder(title, start)
+}
+
+/// Asks for a folder; `Err` if none is picked.
+#[cfg(not(windows))]
 fn pick_folder(title: &str, start: &Path) -> io::Result<PathBuf> {
     let tool =
         picker().ok_or_else(|| io::Error::other("no folder picker (kdialog or zenity) found"))?;
@@ -417,7 +457,7 @@ fn files_to_clipboard(files: &[PathBuf], cut: bool) -> io::Result<()> {
     if let Some(clipboard) = FILE_CLIPBOARD.get() {
         return (clipboard.put)(files, cut);
     }
-    if cut || !has("wl-copy") {
+    if cfg!(windows) || cut || !has("wl-copy") {
         return Err(io::Error::other("couldn't reach the clipboard"));
     }
     let uris: String = files
@@ -444,9 +484,13 @@ fn files_to_clipboard(files: &[PathBuf], cut: bool) -> io::Result<()> {
 
 /// `path` (absolute) as a `file://` URI, with anything but plain characters escaped.
 pub(crate) fn file_uri(path: &Path) -> String {
-    use std::os::unix::ffi::OsStrExt;
+    #[cfg(unix)]
+    let bytes = std::os::unix::ffi::OsStrExt::as_bytes(path.as_os_str());
+    // Windows paths as URIs: file:///C:/folder/name.
+    #[cfg(not(unix))]
+    let bytes = format!("/{}", path.to_string_lossy().replace('\\', "/")).into_bytes();
     let mut uri = String::from("file://");
-    for &byte in path.as_os_str().as_bytes() {
+    for &byte in bytes.iter() {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'.' | b'_' | b'~') {
             uri.push(byte as char);
         } else {
@@ -457,6 +501,13 @@ pub(crate) fn file_uri(path: &Path) -> String {
 }
 
 /// wl-copy where it exists (any Wayland desktop), else KDE's Klipper over D-Bus; pbcopy on macOS.
+#[cfg(windows)]
+fn set_clipboard(text: &str) -> io::Result<()> {
+    crate::desktop::put_text(text)
+}
+
+/// wl-copy where it exists (any Wayland desktop), else KDE's Klipper over D-Bus; pbcopy on macOS.
+#[cfg(not(windows))]
 fn set_clipboard(text: &str) -> io::Result<()> {
     for tool in ["wl-copy", "pbcopy"].into_iter().filter(|t| has(t)) {
         let mut child = Command::new(tool)
@@ -503,7 +554,7 @@ fn share(files: &[PathBuf]) -> io::Result<String> {
     if files.iter().any(|f| f.is_dir()) {
         return Err(io::Error::other("folders can't be sent; zip them first"));
     }
-    let out = Command::new("kdeconnect-cli")
+    let out = quiet(&mut Command::new("kdeconnect-cli"))
         .args(["-a", "--id-name-only"])
         .stderr(Stdio::null())
         .output()?;
@@ -513,7 +564,7 @@ fn share(files: &[PathBuf]) -> io::Result<String> {
         .find_map(|line| line.split_once(' '))
         .ok_or_else(|| io::Error::other("no phone is connected (KDE Connect)"))?;
     for file in files {
-        let status = Command::new("kdeconnect-cli")
+        let status = quiet(&mut Command::new("kdeconnect-cli"))
             .args(["-d", id, "--share"])
             .arg(file)
             .stderr(Stdio::null())

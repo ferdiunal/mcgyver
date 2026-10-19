@@ -346,6 +346,11 @@ fn turkish(english: &str) -> Option<&'static str> {
             "İzin verildi. McGyver yeniden başlayınca kullanmaya başlar."
         }
         "Restart McGyver" => "McGyver'ı yeniden başlat",
+        "Windows asks no permission for McGyver to notice the trigger key and the drag." => {
+            "Windows, McGyver'ın tetik tuşunu ve sürüklemeyi fark etmesi için izin istemez."
+        }
+        "Command Prompt" => "Komut İstemi",
+        "Unzip McGyver to a folder first." => "Önce McGyver'ı zip'ten bir klasöre çıkarın.",
         "Not allowed" => "İzin verilmedi",
         "Ask" => "İzin iste",
         "Open System Settings" => "Sistem Ayarları'nı aç",
