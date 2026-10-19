@@ -293,6 +293,8 @@ fn turkish(english: &str) -> Option<&'static str> {
         "Settings…" => "Ayarlar…",
         "Quit" => "Çık",
         "Paused" => "Duraklatıldı",
+        "{} — ready" => "{} — hazır",
+        "{} — paused" => "{} — duraklatıldı",
         "Hold {} while dragging files, or tap it with files selected in Dolphin" => {
             "Dosya sürüklerken {} tuşunu basılı tut ya da Dolphin'de dosya seçip tek başına bas"
         }

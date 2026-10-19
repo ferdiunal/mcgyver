@@ -16,6 +16,17 @@ pub const BUNDLE_ID: &str = "io.github.ferdiunal.mcgyver";
 /// The ID before the app was called McGyver.
 const OLD_APP_ID: &str = "zero-click-converter";
 
+/// The tray menu's first line, greyed out: the app's name and whether it is paused. It also
+/// gives the menu a comfortable width.
+pub fn status_line(paused: bool) -> String {
+    let state = if paused {
+        "{} — paused"
+    } else {
+        "{} — ready"
+    };
+    crate::i18n::trf(state, &[&APP_NAME])
+}
+
 /// The modifier held during a drag to open the wheel, and tapped on its own to open it for
 /// Dolphin's selection. On Linux, Meta (`Cmd`) isn't offered: Plasma opens its launcher when it
 /// is tapped. On macOS, Command tapped alone does nothing, so it is.

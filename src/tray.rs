@@ -1,5 +1,5 @@
-//! The tray icon (a StatusNotifierItem, which Plasma shows in its system tray): pause, settings
-//! and quit. Clicking the icon opens the settings too.
+//! The tray icon (a StatusNotifierItem, which Plasma shows in its system tray): a status line,
+//! then pause, settings and quit. Clicking the icon opens the settings too.
 
 use ksni::blocking::{Handle, TrayMethods};
 use ksni::menu::{CheckmarkItem, StandardItem};
@@ -8,7 +8,7 @@ use smithay_client_toolkit::reexports::calloop::channel::Sender;
 
 use crate::i18n::{tr, trf};
 use crate::service::Command;
-use crate::settings::{APP_ID, APP_NAME, Trigger};
+use crate::settings::{APP_ID, APP_NAME, Trigger, status_line};
 
 /// Sizes handed to the tray, which picks the closest.
 const SIZES: [u32; 5] = [16, 22, 24, 32, 48];
@@ -79,6 +79,13 @@ impl ksni::Tray for Tray {
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
         vec![
+            StandardItem {
+                label: status_line(self.paused),
+                enabled: false,
+                ..Default::default()
+            }
+            .into(),
+            MenuItem::Separator,
             CheckmarkItem {
                 label: tr("Pause").into(),
                 checked: self.paused,
@@ -135,6 +142,14 @@ fn icons(opacity: f32) -> Vec<Icon> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::i18n::{Lang, translate};
+
+    #[test]
+    fn the_menu_has_turkish() {
+        for text in ["{} — ready", "{} — paused", "Pause", "Settings…", "Quit"] {
+            assert_ne!(translate(Lang::Turkish, text), text);
+        }
+    }
 
     #[test]
     fn the_tray_gets_every_size_and_a_faded_one_when_paused() {

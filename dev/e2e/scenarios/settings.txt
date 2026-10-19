@@ -35,7 +35,7 @@ sleep 300
 release
 sleep 800
 log 5 pause from the tray menu: Ctrl does nothing
-shell for n in $(dbus-send --session --print-reply --dest=org.freedesktop.DBus / org.freedesktop.DBus.ListNames | grep -o 'org.kde.StatusNotifierItem-[0-9-]*'); do echo $n; dbus-send --session --print-reply --dest=$n /MenuBar com.canonical.dbusmenu.Event int32:1 string:clicked variant:int32:0 uint32:0; done > $OUT/pause.log 2>&1
+shell for n in $(dbus-send --session --print-reply --dest=org.freedesktop.DBus / org.freedesktop.DBus.ListNames | grep -o 'org.kde.StatusNotifierItem-[0-9-]*'); do echo $n; dbus-send --session --print-reply --dest=$n /MenuBar com.canonical.dbusmenu.Event int32:3 string:clicked variant:int32:0 uint32:0; dbus-send --session --print-reply --dest=$n /MenuBar com.canonical.dbusmenu.GetLayout int32:0 int32:-1 array:string:label,enabled | grep -A1 '"label"\|"enabled"' > $OUT/tray-menu.txt; done > $OUT/pause.log 2>&1
 sleep 500
 move 300 300
 sleep 500

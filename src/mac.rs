@@ -474,19 +474,38 @@ fn watch(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
 /// The menu bar icon and its menu.
 struct MenuBar {
     _icon: TrayIcon,
+    /// Greyed out: the app's name and whether it is paused.
+    status: MenuItem,
     pause: CheckMenuItem,
     settings: MenuItem,
     quit: MenuItem,
 }
 
+/// The menu is at least this wide, in points, whichever line is longest.
+const MENU_WIDTH: f64 = 180.0;
+
 impl MenuBar {
     fn new() -> Option<MenuBar> {
+        let status = MenuItem::new(crate::settings::status_line(false), false, None);
         let pause = CheckMenuItem::new(tr("Pause"), true, false, None);
         let settings = MenuItem::new(tr("Settings…"), true, None);
         let quit = MenuItem::new(tr("Quit"), true, None);
         let menu = Menu::new();
-        menu.append_items(&[&pause, &settings, &PredefinedMenuItem::separator(), &quit])
-            .ok()?;
+        menu.append_items(&[
+            &status,
+            &PredefinedMenuItem::separator(),
+            &pause,
+            &settings,
+            &PredefinedMenuItem::separator(),
+            &quit,
+        ])
+        .ok()?;
+        {
+            use tray_icon::menu::ContextMenu;
+            // SAFETY: the menu's own NSMenu, alive as long as the menu, on the main thread.
+            let ns_menu = unsafe { &*menu.ns_menu().cast::<objc2_app_kit::NSMenu>() };
+            ns_menu.setMinimumWidth(MENU_WIDTH);
+        }
         // The menu is all that's used; clicks and hovers on the icon would only pile up.
         tray_icon::TrayIconEvent::set_event_handler(Some(|_| {}));
         // 22 points high in the menu bar, drawn for Retina.
@@ -501,14 +520,16 @@ impl MenuBar {
             .ok()?;
         Some(MenuBar {
             _icon: icon,
+            status,
             pause,
             settings,
             quit,
         })
     }
 
-    /// The menu in the current language.
-    fn retitle(&self) {
+    /// The menu in the current language, and whether the app is paused.
+    fn retitle(&self, paused: bool) {
+        self.status.set_text(crate::settings::status_line(paused));
         self.pause.set_text(tr("Pause"));
         self.settings.set_text(tr("Settings…"));
         self.quit.set_text(tr("Quit"));
@@ -697,6 +718,7 @@ impl App {
             // Kept here and shown on the item, whether or not the menu ticked it itself.
             self.paused = !self.paused;
             menu.pause.set_checked(self.paused);
+            menu.retitle(self.paused);
             if self.paused {
                 self.held = false;
                 self.overlay.cancel(Instant::now());
@@ -717,7 +739,7 @@ impl App {
             .unwrap_or_else(|e| e.into_inner())
             .trigger = Some(settings.trigger);
         if let Some(menu) = &self.menu {
-            menu.retitle();
+            menu.retitle(self.paused);
         }
     }
 }
