@@ -41,14 +41,19 @@ Packages for the Snap Store, Debian/Ubuntu and Fedora: see [PACKAGING.md](PACKAG
 
 ### macOS
 
-A first port, built for Apple Silicon and Intel alike but not yet run on a Mac. Build the app on
-the Mac (needs Xcode's command line tools, `xcode-select --install`, and Rust from
-[rustup.rs](https://rustup.rs)):
+A first port, in testing on Apple Silicon. Build the app on a Mac (needs Xcode's command line
+tools, `xcode-select --install`, and Rust from [rustup.rs](https://rustup.rs)):
 
 ```sh
-packaging/macos/build-app.sh    # → dist/McGyver.app and dist/McGyver-<version>-arm64.dmg
+packaging/macos/build-app.sh          # → dist/McGyver.app and dist/McGyver-<version>-universal.dmg
+packaging/macos/build-app.sh arm64    # or x86_64: one architecture, about twice as fast to build
 open dist/McGyver.app
 ```
+
+The universal app holds both an Apple Silicon and an Intel build, so the same `.dmg` runs on any
+Mac with macOS 11 or later; either Mac can build it. On a Mac other than the one that built it,
+macOS refuses an app that isn't notarized: after copying it to Applications, run
+`xattr -dr com.apple.quarantine /Applications/McGyver.app` once (or Control-click it → Open).
 
 It sits in the menu bar (Pause, Settings…, Quit); there is no Dock icon, and opening the app
 again while it runs opens its settings. Drag files in Finder, hold the trigger key, and the

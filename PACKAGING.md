@@ -84,11 +84,13 @@ only reads `$SNAP_USER_DATA/.config/autostart` for it, and a classic snap writes
 `packaging/macos/`, `LSUIElement` so it lives in the menu bar; bundle id
 `io.github.ferdiunal.mcgyver`, also `BUNDLE_ID` in `src/settings.rs`; the icon made from
 `packaging/macos/icon-1024.png` with `sips` and `iconutil`), signs it, and wraps it in
-`dist/McGyver-<version>-<arch>.dmg`. The signature is ad hoc unless `MCGYVER_SIGN_IDENTITY` names a
-certificate in the keychain; see the README. It can't be built from Linux: linking needs Apple's
-SDK. From Linux, `cargo check --target aarch64-apple-darwin` (with `CC_aarch64_apple_darwin`
-pointing at a `zig cc -target aarch64-macos` wrapper for the C in zstd and friends) checks that it
-compiles. Distribution beyond the build machine needs a Developer ID certificate and notarization
+`dist/McGyver-<version>-<arch>.dmg`. The arch is `universal` unless `arm64` or `x86_64` is
+passed: both are built (`aarch64-apple-darwin`, `x86_64-apple-darwin`) and joined with `lipo`.
+The signature is ad hoc unless `MCGYVER_SIGN_IDENTITY` names a certificate in the keychain; see
+the README. It can't be built from Linux: linking needs Apple's SDK. From Linux,
+`cargo check --target aarch64-apple-darwin` (and `x86_64-apple-darwin`, with
+`CC_<target>` pointing at a `zig cc -target aarch64-macos` or `x86_64-macos` wrapper for the C
+in zstd and friends) checks that it compiles. Distribution beyond the build machine needs a Developer ID certificate and notarization
 (`xcrun notarytool`); Homebrew would come after.
 
 ## Windows
