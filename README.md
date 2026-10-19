@@ -63,11 +63,15 @@ every click through until files are dragged and the key goes down; it then takes
 macOS's own drag and drop. Holding the key while dragging something that isn't files (a shape,
 some text) does nothing. What differs from KDE:
 
-- **Trigger key:** Shift, Control, Option or Command. It is read from the keyboard's state, which
-  macOS usually gives without asking; if holding it does nothing, allow **Input Monitoring**
-  (the settings' Permissions card has **Ask** and **Open System Settings**) and reopen the app.
-  Control and Command change what a drag offers (a link, a move); the wheel accepts those too.
-  Letting go of the key and the button together drops on the wheel; the key alone folds it.
+- **Trigger key:** Shift, Control, Option or Command. Control and Command change what a drag
+  offers (a link, a move); the wheel accepts those too. Letting go of the key and the button
+  together drops on the wheel; the key alone folds it.
+- **Input Monitoring:** asked for on the first start (macOS shows its prompt once; the settings'
+  Permissions card has **Ask** and **Open System Settings**, and comes first until it's allowed).
+  With it, an event tap that only listens hears the trigger key and the mouse as they change,
+  and nothing runs while nothing happens. Without it McGyver still works, reading the keys' and
+  the mouse's state every 30 ms. Reopen McGyver after allowing it; an ad hoc signed build loses
+  the permission with each build.
 - **No tap without a drag:** tapping the key on its own does nothing, and finished files aren't
   selected in Finder.
 - **Actions:** Copy and Move ask for a folder with macOS's own picker, Copy Path uses `pbcopy`,

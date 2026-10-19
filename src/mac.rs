@@ -6,14 +6,17 @@
 //! drag and drop hands it the files when the pointer moves over it. (Hidden instead, eframe would
 //! look at it a tenth of a second late.) A thread reads the modifier keys, the mouse button and
 //! the pointer from CoreGraphics, which needs no permission for their state, and wakes the app
-//! when something changes. The menu bar icon has Pause, Settings… and Quit; the settings window
-//! is a process of its own, as on Linux, and the app reads the settings file again when it
-//! changes.
+//! when something changes. With Input Monitoring allowed, an event tap hears the keys and the
+//! mouse instead, and nothing is read while nothing happens; the app asks for it on first start
+//! and reads the state until it has it. The menu bar icon has Pause, Settings… and Quit; the
+//! settings window is a process of its own, as on Linux, and the app reads the settings file
+//! again when it changes.
 
 use std::ffi::{CString, c_void};
 use std::fs::File;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant, SystemTime};
 
 use eframe::egui::{self, Pos2, Rect, Vec2, ViewportCommand, pos2, vec2};
@@ -89,12 +92,52 @@ unsafe extern "C" {
     fn CGDisplayBounds(display: u32) -> CGRect;
     fn CGPreflightListenEventAccess() -> bool;
     fn CGRequestListenEventAccess() -> bool;
+    fn CGEventTapCreate(
+        tap: u32,
+        place: u32,
+        options: u32,
+        events_of_interest: u64,
+        callback: TapCallback,
+        user_info: *mut c_void,
+    ) -> *mut c_void;
+    fn CGEventTapEnable(tap: *mut c_void, enable: bool);
+    fn CGEventGetFlags(event: *const c_void) -> u64;
 }
 
 #[link(name = "CoreFoundation", kind = "framework")]
 unsafe extern "C" {
     fn CFRelease(cf: *const c_void);
+    fn CFMachPortCreateRunLoopSource(
+        allocator: *const c_void,
+        port: *mut c_void,
+        order: isize,
+    ) -> *mut c_void;
+    fn CFRunLoopGetCurrent() -> *mut c_void;
+    fn CFRunLoopAddSource(run_loop: *mut c_void, source: *mut c_void, mode: *const c_void);
+    fn CFRunLoopRun();
+    static kCFRunLoopCommonModes: *const c_void;
 }
+
+type TapCallback = unsafe extern "C" fn(
+    proxy: *mut c_void,
+    kind: u32,
+    event: *mut c_void,
+    info: *mut c_void,
+) -> *mut c_void;
+
+// kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionListenOnly.
+const SESSION_TAP: u32 = 1;
+const HEAD_INSERT: u32 = 0;
+const LISTEN_ONLY: u32 = 1;
+// CGEventType: the mouse's left button, its moves, and the modifier keys.
+const LEFT_DOWN: u32 = 1;
+const LEFT_UP: u32 = 2;
+const MOUSE_MOVED: u32 = 5;
+const LEFT_DRAGGED: u32 = 6;
+const FLAGS_CHANGED: u32 = 12;
+// The system turns a tap off when it answers too slowly, or when the user is typing a password.
+const TAP_DISABLED_BY_TIMEOUT: u32 = 0xFFFF_FFFE;
+const TAP_DISABLED_BY_USER_INPUT: u32 = 0xFFFF_FFFF;
 
 /// The modifier flag (`kCGEventFlagMask…`) for each trigger key.
 fn flag(trigger: Trigger) -> u64 {
@@ -346,6 +389,107 @@ fn reintroduce_delegates(mtm: MainThreadMarker, window: &NSWindow) {
     app.setDelegate(app.delegate().as_deref());
 }
 
+/// What the event tap's callback works with; it lives as long as the app.
+struct Tap {
+    shared: Arc<Mutex<Shared>>,
+    ctx: egui::Context,
+    /// The tap itself, to turn it back on when the system turns it off.
+    port: AtomicPtr<c_void>,
+}
+
+/// Hears the keys and the mouse through an event tap that only listens, on a thread of its own,
+/// so nothing is read while nothing happens. Needs Input Monitoring; false without it, or if
+/// the tap can't be made.
+fn listen(shared: Arc<Mutex<Shared>>, ctx: egui::Context) -> bool {
+    if !input_monitoring() {
+        return false;
+    }
+    let (made, told) = mpsc::channel();
+    let spawned = std::thread::Builder::new()
+        .name("mcgyver keys".into())
+        .spawn(move || {
+            let tap: &'static Tap = Box::leak(Box::new(Tap {
+                shared,
+                ctx,
+                port: AtomicPtr::new(std::ptr::null_mut()),
+            }));
+            let events = [LEFT_DOWN, LEFT_UP, MOUSE_MOVED, LEFT_DRAGGED, FLAGS_CHANGED]
+                .iter()
+                .fold(0u64, |mask, kind| mask | 1 << kind);
+            // SAFETY: `heard` matches the callback type, and `tap` outlives the tap.
+            let port = unsafe {
+                CGEventTapCreate(
+                    SESSION_TAP,
+                    HEAD_INSERT,
+                    LISTEN_ONLY,
+                    events,
+                    heard,
+                    tap as *const Tap as *mut c_void,
+                )
+            };
+            if port.is_null() {
+                let _ = made.send(false);
+                return;
+            }
+            tap.port.store(port, Ordering::Release);
+            // SAFETY: the port is a live event tap; its source runs on this thread's run loop,
+            // which runs from here on.
+            unsafe {
+                let source = CFMachPortCreateRunLoopSource(std::ptr::null(), port, 0);
+                CFRunLoopAddSource(CFRunLoopGetCurrent(), source, kCFRunLoopCommonModes);
+                CGEventTapEnable(port, true);
+            }
+            let _ = made.send(true);
+            // SAFETY: runs this thread's run loop, for good.
+            unsafe { CFRunLoopRun() };
+        });
+    spawned.is_ok() && told.recv().unwrap_or(false)
+}
+
+/// The tap's callback: a key, the button or the pointer changed. Wakes the window when that
+/// matters to it.
+unsafe extern "C" fn heard(
+    _proxy: *mut c_void,
+    kind: u32,
+    event: *mut c_void,
+    info: *mut c_void,
+) -> *mut c_void {
+    // SAFETY: `info` is the `Tap` given to `CGEventTapCreate`, which is never freed.
+    let tap = unsafe { &*(info as *const Tap) };
+    if kind == TAP_DISABLED_BY_TIMEOUT || kind == TAP_DISABLED_BY_USER_INPUT {
+        let port = tap.port.load(Ordering::Acquire);
+        if !port.is_null() {
+            // SAFETY: the tap made in `listen`.
+            unsafe { CGEventTapEnable(port, true) };
+        }
+        return event;
+    }
+    // SAFETY: AppKit hands a live event for the kinds asked for.
+    let (flags, at) = unsafe { (CGEventGetFlags(event), CGEventGetLocation(event)) };
+    let wake = {
+        let mut s = tap.shared.lock().unwrap_or_else(|e| e.into_inner());
+        let before = s.input;
+        let mut input = before;
+        input.trigger_down = flags & flag(s.trigger.unwrap_or(Trigger::Shift)) != 0;
+        match kind {
+            LEFT_DOWN | LEFT_DRAGGED => input.button_down = true,
+            LEFT_UP => input.button_down = false,
+            _ => {}
+        }
+        if kind != FLAGS_CHANGED {
+            input.pointer = pos2(at.x as f32, at.y as f32);
+        }
+        s.input = input;
+        input.trigger_down != before.trigger_down
+            || input.button_down != before.button_down
+            || ((s.tracking || s.cards) && input.pointer != before.pointer)
+    };
+    if wake {
+        tap.ctx.request_repaint();
+    }
+    event
+}
+
 fn lock_file() -> Option<PathBuf> {
     crate::settings::config_home().map(|dir| dir.join(APP_ID).join("app.lock"))
 }
@@ -426,9 +570,11 @@ struct Shared {
     settings_changed: bool,
 }
 
-/// Reads the input, the menu and the settings file on a thread, and wakes the window when
-/// something it cares about changed.
-fn watch(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
+/// Reads the input and the settings file on a thread, and wakes the window when something it
+/// cares about changed. With the event tap (`heard`), the input is read only while a drag is
+/// over the wheel, which a drag between apps may not tell the tap about, and the thread
+/// otherwise sleeps until the window wakes it or the settings file is due a look.
+fn watch(shared: Arc<Mutex<Shared>>, ctx: egui::Context, tapped: bool) -> std::thread::Thread {
     std::thread::Builder::new()
         .name("mcgyver input".into())
         .spawn(move || {
@@ -439,18 +585,17 @@ fn watch(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
                     let s = shared.lock().unwrap_or_else(|e| e.into_inner());
                     (s.trigger.unwrap_or(Trigger::Shift), s.tracking, s.cards)
                 };
-                let input = read_input(trigger);
+                let reading = !tapped || tracking;
+                let input = reading.then(|| read_input(trigger));
                 let mut wake = false;
                 {
                     let mut s = shared.lock().unwrap_or_else(|e| e.into_inner());
-                    let before = s.input;
-                    wake |= input.trigger_down != before.trigger_down
-                        || input.button_down != before.button_down
-                        || ((tracking || cards) && input.pointer != before.pointer);
-                    s.input = input;
-                    while let Ok(event) = MenuEvent::receiver().try_recv() {
-                        s.menu.push(event.id);
-                        wake = true;
+                    if let Some(input) = input {
+                        let before = s.input;
+                        wake |= input.trigger_down != before.trigger_down
+                            || input.button_down != before.button_down
+                            || ((tracking || cards) && input.pointer != before.pointer);
+                        s.input = input;
                     }
                     if looked_at.elapsed() >= SETTINGS_EVERY {
                         looked_at = Instant::now();
@@ -465,10 +610,18 @@ fn watch(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
                 if wake {
                     ctx.request_repaint();
                 }
-                std::thread::sleep(if tracking { POLL_FAST } else { POLL_IDLE });
+                if tracking {
+                    std::thread::sleep(POLL_FAST);
+                } else if tapped {
+                    std::thread::park_timeout(SETTINGS_EVERY);
+                } else {
+                    std::thread::sleep(POLL_IDLE);
+                }
             }
         })
-        .expect("the input thread starts");
+        .expect("the input thread starts")
+        .thread()
+        .clone()
 }
 
 /// The menu bar icon and its menu.
@@ -548,6 +701,10 @@ pub fn run() -> Result<(), String> {
     };
     let settings = Settings::load();
     crate::i18n::set(settings.language);
+    // The first time, macOS asks whether McGyver may hear the keys; until it may, it reads them.
+    if !input_monitoring() {
+        request_input_monitoring();
+    }
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(APP_NAME)
@@ -584,12 +741,37 @@ pub fn run() -> Result<(), String> {
                 reintroduce_delegates(mtm, &window);
             }
             let shared = Arc::new(Mutex::new(Shared {
+                input: read_input(settings.trigger),
                 trigger: Some(settings.trigger),
                 ..Shared::default()
             }));
-            watch(shared.clone(), cc.egui_ctx.clone());
+            let tapped = listen(shared.clone(), cc.egui_ctx.clone());
+            let watcher = watch(shared.clone(), cc.egui_ctx.clone(), tapped);
+            // Picks from the menu bar menu come on the main thread; the window takes them.
+            {
+                let (shared, ctx) = (shared.clone(), cc.egui_ctx.clone());
+                MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
+                    shared
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .menu
+                        .push(event.id);
+                    ctx.request_repaint();
+                }));
+            }
+            if std::env::var_os("MCGYVER_DEBUG").is_some() {
+                eprintln!(
+                    "keys and mouse: {}",
+                    if tapped {
+                        "heard through an event tap"
+                    } else {
+                        "read every 30 ms (Input Monitoring isn't allowed)"
+                    }
+                );
+            }
             Ok(Box::new(App {
                 shared,
+                watcher,
                 overlay: Overlay::default(),
                 clicker: crate::sound::Clicker::new(),
                 menu: MenuBar::new(),
@@ -620,6 +802,8 @@ pub fn run() -> Result<(), String> {
 
 struct App {
     shared: Arc<Mutex<Shared>>,
+    /// The thread reading the input, woken when it has to read it often again.
+    watcher: std::thread::Thread,
     overlay: Overlay,
     clicker: crate::sound::Clicker,
     menu: Option<MenuBar>,
@@ -864,10 +1048,14 @@ impl eframe::App for App {
         if self.quitting && self.overlay.is_idle() {
             std::process::exit(0);
         }
+        let tracking = self.active || self.pressed_at.is_some() || self.on_card;
         self.shared
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .tracking = self.active || self.pressed_at.is_some() || self.on_card;
+            .tracking = tracking;
+        if tracking {
+            self.watcher.unpark();
+        }
         let cards = !self.overlay.card_rects().is_empty();
         self.shared.lock().unwrap_or_else(|e| e.into_inner()).cards = cards;
     }

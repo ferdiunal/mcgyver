@@ -1,19 +1,19 @@
-//! The Permissions card on macOS. Holding a modifier is read from its state, which macOS may
-//! give without asking; if it doesn't, Input Monitoring is what lets the app read keys while
-//! another app is in front, so the card offers it rather than insisting on it.
+//! The Permissions card on macOS: Input Monitoring, which lets the app hear the trigger key and
+//! the mouse as they change. Without it the app still works, reading their state every 30 ms,
+//! so the card asks for it first but nothing waits on it.
 
 use std::fs::File;
 use std::time::{Duration, Instant};
 
-use crate::glass::{GREEN, TEXT_MUTED};
+use crate::glass::{GREEN, RED};
 use crate::i18n::tr;
 use crate::settings::{APP_ID, Trigger, config_home};
 
 use super::{Row, row};
 
 pub(super) const TRIGGER_HELP: &str = "Hold it while dragging files to open the wheel.";
-const INPUT_HELP: &str = "Only needed if holding the key doesn't open the wheel. Reopen McGyver \
-                          after allowing it.";
+const INPUT_HELP: &str = "Lets McGyver hear the trigger key go down instead of checking it 33 \
+                          times a second. Reopen McGyver after allowing it.";
 /// System Settings → Privacy & Security → Input Monitoring.
 const INPUT_MONITORING: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent";
@@ -75,9 +75,9 @@ impl Permissions {
         None
     }
 
-    /// Input Monitoring is optional, so the card never comes first.
+    /// Without Input Monitoring the card comes first.
     pub(super) fn all_granted(&self) -> bool {
-        true
+        self.allowed
     }
 
     pub(super) fn card(&mut self, ui: &mut egui::Ui, _trigger: Trigger) {
@@ -88,7 +88,7 @@ impl Permissions {
         let shown = Row {
             title: tr("Input Monitoring"),
             help: tr(INPUT_HELP),
-            color: if self.allowed { GREEN } else { TEXT_MUTED },
+            color: if self.allowed { GREEN } else { RED },
             status: if self.allowed {
                 tr("On")
             } else {
