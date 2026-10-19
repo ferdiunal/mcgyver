@@ -14,14 +14,14 @@ use crate::jobs::{self, Job};
 use crate::wheel::{self, Hit};
 
 const OPEN_TIME: f32 = 0.16;
-const SWAP_TIME: f32 = 0.18;
+const SWAP_TIME: f32 = 0.12;
 /// How long the picked wedge stays lit before the wheel folds into the card.
 const FLASH: Duration = Duration::from_millis(140);
 /// How far a drag has to move after the wheel opens before it can pick anything.
 const ARM_DISTANCE: f32 = 12.0;
 /// A drag switches modes by stopping on another mode's slice for this long, too short to notice;
 /// moving over a slice on the way somewhere else never switches.
-const SETTLE: Duration = Duration::from_millis(120);
+const SETTLE: Duration = Duration::from_millis(50);
 const CARD_APPEAR: f32 = 0.18;
 const CARD_HOLD: Duration = Duration::from_millis(1600);
 /// A failure stays up longer, so the reason can be read.
