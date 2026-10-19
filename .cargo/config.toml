@@ -1,0 +1,5 @@
+# Fetch git dependencies with the git command rather than cargo's built-in git, so they come
+# however `git` itself is set up: an `insteadOf` that turns GitHub URLs into SSH, keys from the
+# macOS keychain or an ssh config, proxies.
+[net]
+git-fetch-with-cli = true
