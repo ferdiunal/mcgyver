@@ -9,11 +9,7 @@ use crate::i18n::{tr, trf};
 use crate::service;
 use crate::settings::{APP_NAME, Settings, Trigger};
 
-use egui::Color32;
-
-use super::{Row, row};
-
-const AMBER: Color32 = Color32::from_rgb(226, 146, 18);
+use super::{AMBER, Row, row};
 
 pub(super) const TRIGGER_HELP: &str = "Hold it while dragging files to open the wheel. Tapped on \
                                        its own, it opens the wheel for the files selected in \

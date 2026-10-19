@@ -70,8 +70,12 @@ some text) does nothing. What differs from KDE:
   Permissions card has **Ask** and **Open System Settings**, and comes first until it's allowed).
   With it, an event tap that only listens hears the trigger key and the mouse as they change,
   and nothing runs while nothing happens. Without it McGyver still works, reading the keys' and
-  the mouse's state every 30 ms. Reopen McGyver after allowing it; an ad hoc signed build loses
-  the permission with each build.
+  the mouse's state every 30 ms. Allowed while McGyver runs, it takes a restart: the card says so
+  and has **Restart McGyver** (the running app writes how it hears the keys into its lock file;
+  the settings ask for a restart through a `restart` file, which it takes once nothing is
+  converting). The build script signs ad hoc builds with the bundle identifier as their
+  designated requirement, so the permission outlives a rebuild; a build signed before that
+  needs McGyver removed from the Input Monitoring list (−) and allowed again.
 - **No tap without a drag:** tapping the key on its own does nothing, and finished files aren't
   selected in Finder.
 - **Actions:** Copy and Move ask for a folder with macOS's own picker, Copy Path uses `pbcopy`,

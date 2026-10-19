@@ -7,9 +7,11 @@
 #   packaging/macos/build-app.sh x86_64      # Intel only
 #
 # The app is signed ad hoc, which is enough to run it on the Mac that built it. macOS ties the
-# permissions it grants (Input Monitoring) to the signature, and an ad hoc one changes with every
-# build: to keep them across builds, make a code signing certificate once (Keychain Access →
-# Certificate Assistant → Create a Certificate…, type "Code Signing") and pass its name:
+# permissions it grants (Input Monitoring) to the signature's designated requirement, which for
+# an ad hoc signature is the build's own hash and so changes with every build; here it is the
+# bundle identifier instead, so a permission outlives a rebuild (any app claiming that identifier
+# would match it too, which is fine on the Mac that builds it). A code signing certificate does
+# better (Keychain Access → Certificate Assistant → Create a Certificate…, type "Code Signing"):
 #
 #   MCGYVER_SIGN_IDENTITY="McGyver Dev" packaging/macos/build-app.sh
 set -eu
@@ -54,7 +56,12 @@ done
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
 rm -rf "$(dirname "$iconset")"
 
-codesign --force --sign "${MCGYVER_SIGN_IDENTITY:--}" --identifier io.github.ferdiunal.mcgyver "$app"
+id=io.github.ferdiunal.mcgyver
+if [ -n "${MCGYVER_SIGN_IDENTITY:-}" ]; then
+	codesign --force --sign "$MCGYVER_SIGN_IDENTITY" --identifier "$id" "$app"
+else
+	codesign --force --sign - --identifier "$id" --requirements "=designated => identifier \"$id\"" "$app"
+fi
 codesign --verify --strict "$app"
 
 # The disk image: the app next to a link to Applications, to drag it onto.

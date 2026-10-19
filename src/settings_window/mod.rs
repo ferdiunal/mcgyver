@@ -22,6 +22,8 @@ use mac as platform;
 
 use platform::{CHECK_EVERY, Permissions, TRIGGER_HELP};
 
+/// Something that needs one more step, as a restart.
+const AMBER: Color32 = Color32::from_rgb(226, 146, 18);
 /// How long "Saved" stays up.
 const NOTE_FOR: Duration = Duration::from_secs(3);
 const BACKGROUND: Color32 = Color32::from_rgb(242, 243, 245);

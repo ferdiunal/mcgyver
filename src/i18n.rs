@@ -334,11 +334,18 @@ fn turkish(english: &str) -> Option<&'static str> {
             "Dosya sürüklerken basılı tutunca çark açılır."
         }
         "Input Monitoring" => "Girdi İzleme",
-        "Lets McGyver hear the trigger key go down instead of checking it 33 times a second. \
-         Reopen McGyver after allowing it." => {
-            "McGyver tetik tuşunu saniyede 33 kez yoklamak yerine basıldığı an duyar. İzin \
-             verdikten sonra McGyver'ı yeniden aç."
+        "Lets McGyver notice the trigger key the moment you press it, and saves battery. \
+         McGyver works without it too." => {
+            "McGyver tetik tuşuna bastığın anı hemen fark eder, pilin de daha az harcanır. İzin \
+             vermesen de çalışır."
         }
+        "If it is already switched on there, remove McGyver with − and allow it again." => {
+            "Orada zaten açık görünüyorsa McGyver'ı − ile kaldırıp yeniden izin ver."
+        }
+        "Allowed. McGyver starts using it once it restarts." => {
+            "İzin verildi. McGyver yeniden başlayınca kullanmaya başlar."
+        }
+        "Restart McGyver" => "McGyver'ı yeniden başlat",
         "Not allowed" => "İzin verilmedi",
         "Ask" => "İzin iste",
         "Open System Settings" => "Sistem Ayarları'nı aç",

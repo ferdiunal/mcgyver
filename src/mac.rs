@@ -494,7 +494,13 @@ fn lock_file() -> Option<PathBuf> {
     crate::settings::config_home().map(|dir| dir.join(APP_ID).join("app.lock"))
 }
 
-/// Holds the app's lock: one app at a time.
+/// Where the settings window asks the running app to restart.
+fn restart_file() -> Option<PathBuf> {
+    crate::settings::config_home().map(|dir| dir.join(APP_ID).join("restart"))
+}
+
+/// Holds the app's lock: one app at a time. The file also says how the running app hears the
+/// keys (see `keys_heard`), so opening it doesn't empty it.
 fn claim() -> Result<Option<File>, ()> {
     let Some(path) = lock_file() else {
         return Ok(None);
@@ -502,7 +508,12 @@ fn claim() -> Result<Option<File>, ()> {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let Ok(file) = File::create(&path) else {
+    let Ok(file) = File::options()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+    else {
         return Ok(None);
     };
     match file.try_lock() {
@@ -518,6 +529,46 @@ pub fn running() -> bool {
         return false;
     };
     matches!(file.try_lock(), Err(std::fs::TryLockError::WouldBlock))
+}
+
+/// Writes in the lock file whether this app hears the keys through the event tap.
+fn say_keys_heard(tapped: bool) {
+    if let Some(path) = lock_file() {
+        let _ = std::fs::write(path, if tapped { "tap\n" } else { "poll\n" });
+    }
+}
+
+/// How the running app hears the keys: `Some(true)` through the event tap, `Some(false)` by
+/// reading them (Input Monitoring wasn't allowed when it started), `None` if it isn't running.
+pub fn keys_heard() -> Option<bool> {
+    if !running() {
+        return None;
+    }
+    let said = std::fs::read_to_string(lock_file()?).ok()?;
+    match said.trim() {
+        "tap" => Some(true),
+        "poll" => Some(false),
+        _ => None,
+    }
+}
+
+/// Asks the running app to start over, once nothing is converting; it looks every second.
+pub fn ask_restart() -> bool {
+    restart_file().is_some_and(|path| std::fs::write(path, "").is_ok())
+}
+
+/// Starts this program over in the same process, as the Linux app does after `--install`.
+fn restart() -> ! {
+    use std::os::unix::process::CommandExt;
+    let _ = restart_file().map(std::fs::remove_file);
+    match crate::settings::own_exe() {
+        Ok(exe) => {
+            let e = std::process::Command::new(exe).exec();
+            eprintln!("mcgyver: can't restart: {e}");
+        }
+        Err(e) => eprintln!("mcgyver: can't restart: {e}"),
+    }
+    std::process::exit(1)
 }
 
 /// The McGyver.app this binary is in, if it is in one.
@@ -568,6 +619,8 @@ struct Shared {
     cards: bool,
     menu: Vec<MenuId>,
     settings_changed: bool,
+    /// The settings window asked for a restart.
+    restart: bool,
 }
 
 /// Reads the input and the settings file on a thread, and wakes the window when something it
@@ -599,6 +652,10 @@ fn watch(shared: Arc<Mutex<Shared>>, ctx: egui::Context, tapped: bool) -> std::t
                     }
                     if looked_at.elapsed() >= SETTINGS_EVERY {
                         looked_at = Instant::now();
+                        if restart_file().is_some_and(|path| path.exists()) {
+                            s.restart = true;
+                            wake = true;
+                        }
                         let now = settings_changed_at();
                         if now != settings_at {
                             settings_at = now;
@@ -746,6 +803,7 @@ pub fn run() -> Result<(), String> {
                 ..Shared::default()
             }));
             let tapped = listen(shared.clone(), cc.egui_ctx.clone());
+            say_keys_heard(tapped);
             let watcher = watch(shared.clone(), cc.egui_ctx.clone(), tapped);
             // Picks from the menu bar menu come on the main thread; the window takes them.
             {
@@ -936,14 +994,20 @@ impl eframe::App for App {
     /// The keys, the button, the menu and the settings.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let now = Instant::now();
-        let (input, picked, settings_changed) = {
+        let (input, picked, settings_changed, restart_asked) = {
             let mut s = self.shared.lock().unwrap_or_else(|e| e.into_inner());
             (
                 s.input,
                 std::mem::take(&mut s.menu),
                 std::mem::take(&mut s.settings_changed),
+                s.restart,
             )
         };
+        // A restart cuts nothing off halfway: it waits for conversions and cards.
+        if restart_asked && self.overlay.is_idle() {
+            self.log("restarting, as the settings asked");
+            restart();
+        }
         for id in &picked {
             self.menu_picked(id);
         }
