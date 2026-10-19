@@ -244,10 +244,15 @@ impl Overlay {
         self.clicked = true;
     }
 
+    /// The drag moved to `pos`. Told the same place again, nothing moved: the pointer resting on
+    /// a mode's slice is what switches to it, so that must not count as moving.
     pub fn drag_moved(&mut self, pos: Pos2, now: Instant) {
         let Some(w) = self.active_wheel() else {
             return;
         };
+        if w.pointer == Some(pos) {
+            return;
+        }
         let before = w.aim(now);
         w.pointer = Some(pos);
         w.armed |= (pos - w.origin).length() > ARM_DISTANCE;
@@ -1074,6 +1079,38 @@ mod tests {
         assert_eq!(wheel.pointer, Some(center + by));
         assert_eq!(overlay.cards.len(), 1);
         assert_eq!(overlay.cards[0].at, center + by);
+    }
+
+    #[test]
+    fn being_told_the_same_place_again_still_lets_a_slice_switch() {
+        // macOS reads the pointer on every frame rather than on each move.
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1600.0, 1000.0));
+        let center = screen.center();
+        let t0 = Instant::now();
+        let ms = |n: u64| Duration::from_millis(n);
+        let mut overlay = Overlay::default();
+        overlay.open(
+            vec![PathBuf::from("holiday.jpg")],
+            center,
+            screen,
+            Mode::Convert,
+            t0,
+        );
+        let ctx = egui::Context::default();
+        let paint = |overlay: &mut Overlay, now: Instant| {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                overlay.paint(ui, now);
+            });
+            output.textures_delta.clear();
+        };
+        let actions = ring_point(center, Mode::Actions);
+        overlay.drag_moved(actions, t0);
+        for k in 1..=10 {
+            let now = t0 + ms(k * 30);
+            overlay.drag_moved(actions, now);
+            paint(&mut overlay, now);
+        }
+        assert_eq!(overlay.wheel.as_ref().unwrap().mode, Mode::Actions);
     }
 
     #[test]
