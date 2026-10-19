@@ -1,0 +1,67 @@
+name: mcgyver
+title: McGyver
+base: core24
+adopt-info: app                       # version comes from Cargo.toml (see parts.app)
+summary: Drop files on an overlay to convert them (KDE Plasma 6)
+description: |
+  McGyver is a radial overlay for KDE Plasma 6 (Wayland). Drop files on it to
+  convert archives, images and documents in place.
+
+  This snap is classic-confined: the app talks to arbitrary session D-Bus services
+  (org.kde.kglobalaccel, Dolphin, StatusNotifierWatcher), binds KWin-specific Wayland
+  protocols, converts files anywhere the user has them (home, /media, hidden
+  directories) and launches host tools (terminal, kdialog, wl-copy, kdeconnect-cli).
+  None of this can be expressed with strict-confinement interfaces.
+license: MIT OR Apache-2.0
+icon: assets/icon.svg
+
+grade: devel                          # switch to "stable" before promoting past edge
+confinement: classic
+
+apps:
+  mcgyver:
+    # The rust plugin runs `cargo install --root $CRAFT_PART_INSTALL`: the binary is in bin/.
+    command: bin/mcgyver
+    desktop: usr/share/applications/mcgyver.desktop
+    # No `autostart:` (that only reads $SNAP_USER_DATA/.config/autostart): the settings
+    # window's "Start at login" writes ~/.config/autostart/mcgyver.desktop with
+    # Exec=/snap/bin/mcgyver, which a classic snap can.
+
+parts:
+  app:
+    plugin: rust
+    source: .
+    # Classic snaps on core24 must link against the base snap's libc, not the host's.
+    # Snippet from the Snapcraft Rust plugin reference (classic core24 example).
+    rust-inherit-ldflags: true
+    build-environment:
+      - LDFLAGS: >
+          -Wl,-rpath=\$ORIGIN/lib:/snap/core24/current/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR
+          -Wl,-dynamic-linker=$(find /snap/core24/current/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR -name 'ld*.so.*' -print | head -n1)
+    # Also patch the staged Ubuntu libraries (libheif, libEGL, ...) to find each other.
+    build-attributes:
+      - enable-patchelf
+    override-pull: |
+      craftctl default
+      craftctl set version="$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
+    override-build: |
+      craftctl default
+      install -Dm644 packaging/linux/mcgyver.desktop \
+        "$CRAFT_PART_INSTALL/usr/share/applications/mcgyver.desktop"
+      install -Dm644 assets/icon.svg \
+        "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/scalable/apps/mcgyver.svg"
+      # snapd only resolves Icon= paths that start with ${SNAP}
+      sed -i 's|^Icon=.*|Icon=${SNAP}/usr/share/icons/hicolor/scalable/apps/mcgyver.svg|' \
+        "$CRAFT_PART_INSTALL/usr/share/applications/mcgyver.desktop"
+    build-packages:
+      - build-essential   # zstd, libwebp, unrar are built from bundled C/C++ sources
+      - pkg-config
+      - libwayland-dev    # wayland-client "system" feature
+      - libxkbcommon-dev
+    stage-packages:
+      - libwayland-client0
+      - libwayland-egl1
+      - libegl1           # loaded at run time (glutin)
+      - libgl1
+      - libxkbcommon0
+      - libheif1          # dlopen'ed for HEIC/AVIF; optional but cheap

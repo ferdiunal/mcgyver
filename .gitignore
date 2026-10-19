@@ -1,0 +1,5 @@
+/target
+.omc/
+/dev/e2e/out/
+/dev/e2e/drive/target/
+/dev/e2e/drive/Cargo.lock

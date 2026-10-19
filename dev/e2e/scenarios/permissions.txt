@@ -1,0 +1,29 @@
+# The settings' Permissions card, with KWin checking permissions as on a real desktop
+# (PERMISSIONS=1): nothing is set up; "Set up" waits for KWin to see the entry, restarts the app
+# and both turn green (the card moves to the bottom); "Remove" undoes it.
+log 1 open the settings: nothing set up
+shell $ROOT/target/release/mcgyver > $OUT/second.log 2>&1 &
+sleep 3000
+shot perm-1-none
+log 2 Set up
+move 504 273
+sleep 200
+press
+sleep 80
+release
+sleep 1500
+shot perm-2-working
+sleep 8000
+shot perm-3-ready
+shell dbus-send --session --print-reply --dest=io.github.McGyver /io/github/McGyver io.github.McGyver.Granted > $OUT/granted-ready.txt 2>&1
+log 3 Remove
+move 491 688
+sleep 200
+press
+sleep 80
+release
+sleep 14000
+shot perm-4-removed
+shell dbus-send --session --print-reply --dest=io.github.McGyver /io/github/McGyver io.github.McGyver.Granted > $OUT/granted-removed.txt 2>&1
+shell ls $OUT/data/applications > $OUT/entries-removed.txt
+log done

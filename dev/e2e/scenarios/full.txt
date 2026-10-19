@@ -1,0 +1,72 @@
+# Key 42 = left Shift. Modes switch on the ring around the centre (Actions: lower left).
+# The drag source fills the 1280x800 screen; the wheel opens around (640, 400).
+log 1 shift without a drag: the overlay must go away at once
+move 300 300
+sleep 500
+key 42 1
+sleep 300
+key 42 0
+sleep 300
+log 2 drag + shift, aim at WEBP (wedge 1 of 6, at 60 degrees), drop
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+shot 1-bloom
+glide 748 337 15 20
+wiggle 300
+shot 2-hover
+release
+key 42 0
+sleep 300
+shot 3-card
+sleep 3000
+shot 4-after
+log 3 drag + shift, stop on the Actions slice to switch, drop on the centre cancels
+move 300 300
+sleep 300
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 598 424 10 20
+sleep 250
+glide 640 275 10 20
+wiggle 300
+shot 5-actions
+glide 640 400 10 20
+wiggle 300
+release
+key 42 0
+sleep 600
+shot 6-cancelled
+log 4 drag + shift, let go of shift: the wheel folds; shift again reopens it
+move 300 300
+sleep 300
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+key 42 0
+sleep 400
+wiggle 300
+shot 7-released
+key 42 1
+sleep 300
+wiggle 300
+glide 532 337 15 20
+wiggle 300
+shot 8-reopened
+release
+key 42 0
+sleep 1000
+log done

@@ -1,0 +1,13 @@
+log 1 install from the CLI, restart at once, then again 4 s later
+shell $ROOT/target/release/mcgyver --install > $OUT/install.log 2>&1
+shell cat $OUT/data/applications/mcgyver-kwin.desktop > $OUT/entry.txt
+shell dbus-send --session --print-reply --dest=io.github.McGyver /io/github/McGyver io.github.McGyver.Restart > /dev/null 2>&1
+sleep 2500
+shell dbus-send --session --print-reply --dest=io.github.McGyver /io/github/McGyver io.github.McGyver.Granted > $OUT/granted-1.txt 2>&1
+sleep 4000
+shell dbus-send --session --print-reply --dest=io.github.McGyver /io/github/McGyver io.github.McGyver.Restart > /dev/null 2>&1
+sleep 2500
+shell dbus-send --session --print-reply --dest=io.github.McGyver /io/github/McGyver io.github.McGyver.Granted > $OUT/granted-2.txt 2>&1
+shell gdbus call --session --dest org.kde.kglobalaccel --object-path /kglobalaccel --method org.kde.KGlobalAccel.shortcut "['other-app','toggle','Other app','Something else on Shift']" > $OUT/other.txt 2>&1
+shell gdbus call --session --dest org.kde.kglobalaccel --object-path /kglobalaccel --method org.kde.KGlobalAccel.shortcut "['mcgyver','open-wheel','McGyver','Open the wheel for the files selected in Dolphin']" > $OUT/ours.txt 2>&1
+log done

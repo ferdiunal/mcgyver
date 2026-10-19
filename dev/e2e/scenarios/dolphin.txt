@@ -1,0 +1,22 @@
+# For SOURCE=dolphin: drag the file icon out of Dolphin's view, then hold Shift.
+log dragging from dolphin
+move 476 240
+sleep 800
+press
+sleep 150
+glide 490 260 5 30
+glide 640 500 25 20
+wiggle 300
+log pressing shift
+key 42 1
+sleep 400
+wiggle 400
+shot dolphin-shift
+glide 748 437 15 20
+wiggle 400
+shot dolphin-hover
+release
+key 42 0
+sleep 1200
+shot dolphin-after
+log done

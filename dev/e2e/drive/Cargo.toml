@@ -1,0 +1,10 @@
+[package]
+name = "e2e-drive"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wayland-client = "0.31"
+wayland-protocols-plasma = { version = "0.3", features = ["client"] }
+
+[workspace]

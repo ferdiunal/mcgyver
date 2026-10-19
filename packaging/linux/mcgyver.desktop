@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=McGyver
+Name[tr]=McGyver
+GenericName=File converter
+GenericName[tr]=Dosya dönüştürücü
+Comment=Convert files by dropping them on a radial overlay
+Comment[tr]=Dosyaları dairesel bir katmana bırakarak dönüştürün
+Exec=mcgyver
+Icon=mcgyver
+Terminal=false
+StartupNotify=false
+Categories=Utility;FileTools;
+Keywords=convert;converter;file;archive;image;compress;
+Keywords[tr]=dönüştür;dönüştürücü;dosya;arşiv;resim;

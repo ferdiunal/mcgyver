@@ -1,0 +1,37 @@
+# Real conversions; run with FILE=photos.zip. The wheel opens around (640, 400).
+log 1 shift: drop photos.zip on TAR.ZST (wedge 4 of 7, just left of straight down)
+move 300 300
+sleep 500
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 589 506 15 20
+wiggle 300
+shot archive-hover
+release
+key 42 0
+sleep 400
+shot archive-card
+sleep 2500
+log 2 shift: drop photos.zip on Unzip (wedge 0, at the top)
+move 300 300
+sleep 300
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 640 282 15 20
+wiggle 300
+shot unzip-hover
+release
+key 42 0
+sleep 400
+shot unzip-card
+sleep 2500

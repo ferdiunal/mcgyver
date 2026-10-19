@@ -1,0 +1,16 @@
+# Drag + shift, aim at WEBP, screenshot, drop.
+move 300 300
+sleep 500
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 748 337 15 20
+wiggle 400
+shot hover
+release
+key 42 0
+sleep 500

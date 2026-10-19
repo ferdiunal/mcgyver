@@ -1,0 +1,74 @@
+# Real picture conversion and actions on holiday.jpg. The wheel opens around (640, 400);
+# wedge 0 is at twelve o'clock, 118 px out.
+log 1 shift: holiday.jpg to PNG (wedge 0 of 8)
+move 300 300
+sleep 500
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 640 282 15 20
+wiggle 300
+shot image-hover
+release
+key 42 0
+sleep 400
+shot image-card
+sleep 2500
+log 2 shift, Actions on the ring: Zip (wedge 0 of 6)
+move 300 300
+sleep 300
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 598 424 10 20
+sleep 250
+glide 640 282 15 20
+wiggle 300
+shot actions-hover
+release
+key 42 0
+sleep 2500
+log 3 shift, Actions on the ring: Copy Path (wedge 3 of 6, straight down)
+move 300 300
+sleep 300
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 598 424 10 20
+sleep 250
+glide 640 518 15 20
+wiggle 300
+release
+key 42 0
+sleep 1500
+shell wl-paste > "$OUT/clipboard.txt" 2>&1
+log 4 shift, Actions on the ring: Terminal (wedge 4 of 6, lower left)
+move 300 300
+sleep 300
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 598 424 10 20
+sleep 250
+glide 538 459 15 20
+wiggle 300
+release
+key 42 0
+sleep 3000
+shot terminal

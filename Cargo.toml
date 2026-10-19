@@ -1,0 +1,134 @@
+[package]
+name = "mcgyver"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Drag files, hold Shift, and drop them on a wheel to convert them (KDE Plasma 6, Wayland)"
+
+[features]
+default = ["rar"]
+# Opens RAR archives with the official unRAR code. Its licence lets anyone use and share it,
+# but not to make a RAR compressor; leave this out for a build without it.
+rar = ["dep:unrar", "dep:unrar_sys"]
+
+[dependencies]
+egui = { version = "0.37", default-features = false, features = ["default_fonts"] }
+egui_glow = { version = "0.37", default-features = false }
+glow = "0.17"
+glutin = { version = "0.32", default-features = false, features = ["egl", "wayland"] }
+log = "0.4"
+raw-window-handle = "0.6"
+smithay-client-toolkit = { version = "0.21", default-features = false, features = ["calloop"] }
+tempfile = "3"
+wayland-client = { version = "0.31", features = ["system"] }
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
+wayland-protocols-plasma = { version = "0.3", features = ["client"] }
+
+# Archives and compression (src/archive). Pure Rust except zstd and unRAR, which build their
+# bundled C/C++ sources.
+brotli = "9"
+bzip2 = "0.6"
+filetime = "0.2"
+flate2 = "1"
+jiff = "0.2"
+lz4_flex = "0.14"
+lzma-rust2 = "0.23"
+sevenz-rust2 = { version = "0.24", features = ["deflate"] }
+tar = "0.4"
+unrar = { version = "0.5", optional = true }
+unrar_sys = { version = "0.5", optional = true }
+zip = { version = "9", default-features = false, features = ["bzip2", "deflate", "deflate64", "jiff-02", "lzma", "ppmd", "xz", "zstd"] }
+zstd = { version = "0.14", features = ["zstdmt"] }
+
+# Pictures (src/images). Pure Rust except libwebp (bundled C, for lossy WebP); libheif (HEIC,
+# AVIF) is opened at run time with libloading, so building needs nothing installed.
+image = { version = "0.25", default-features = false, features = ["bmp", "dds", "exr", "ff", "gif", "hdr", "ico", "jpeg", "png", "pnm", "qoi", "tga", "tiff", "webp", "rayon"] }
+jxl-oxide = { version = "0.12", features = ["image"] }
+libloading = "0.9"
+pdf-writer = "0.15"
+rawler = "0.8"
+resvg = "0.48"
+tiff = { version = "0.11", features = ["deflate"] }
+webp = { version = "0.3", default-features = false }
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
+anydoc = "0.2.4"
+
+# The tray icon (StatusNotifierItem, over the same zbus) and the settings window.
+ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+
+# Office documents without LibreOffice: the "craft" apps' engines, pure Rust (MIT OR Apache-2.0),
+# pinned since they aren't on crates.io.
+wordcraft-engine = { git = "https://github.com/storytold/wordcraft", rev = "3af927501b3d205d80190c24946db65b4d04cb41" }
+deckcraft-engine = { git = "https://github.com/storytold/deckcraft", rev = "cb78440a1618e6a2c1df55dd7bff74719685518c" }
+gridcraft-engine = { git = "https://github.com/storytold/gridcraft", rev = "c30fa3f1cf324603f3bfc0171689b1d4083b40e5" }
+pdfcraft-cos = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+pdfcraft-organize = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+pdfcraft-optimize = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+
+[dev-dependencies]
+# Only for examples/preview.rs: renders the overlay UI in a normal window for screenshots.
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "x11", "__screenshot"] }
+
+# Packages (see PACKAGING.md): cargo-deb and cargo-generate-rpm read these.
+[package.metadata.deb]
+maintainer = "Ferdi <ferdi@apppricelens.com>"
+section = "utils"
+priority = "optional"
+# $auto adds the shared libraries the binary links against (libc, libwayland-client0, ...).
+depends = "$auto, libwayland-client0, libegl1, libgl1"
+recommends = "pipewire-bin | pulseaudio-utils, wl-clipboard, kdialog, libheif1, ffmpeg"
+suggests = "kdeconnect, konsole, dolphin"
+extended-description = """\
+Drop files on a radial overlay and convert them in place: archives, images and documents.
+Runs on KDE Plasma 6 (Wayland) only. Uses pw-play, wl-copy, kdialog and kdeconnect-cli when present."""
+assets = [
+    ["target/release/mcgyver", "usr/bin/", "755"],
+    ["packaging/linux/mcgyver.desktop", "usr/share/applications/", "644"],
+    ["assets/icon.svg", "usr/share/icons/hicolor/scalable/apps/mcgyver.svg", "644"],
+    ["README.md", "usr/share/doc/mcgyver/", "644"],
+    ["LICENSE-MIT", "usr/share/doc/mcgyver/", "644"],
+    ["LICENSE-APACHE", "usr/share/doc/mcgyver/", "644"],
+]
+
+[package.metadata.generate-rpm]
+summary = "Drop files on an overlay to convert them (KDE Plasma 6, Wayland)"
+assets = [
+    { source = "target/release/mcgyver", dest = "/usr/bin/mcgyver", mode = "755" },
+    { source = "packaging/linux/mcgyver.desktop", dest = "/usr/share/applications/mcgyver.desktop", mode = "644" },
+    { source = "assets/icon.svg", dest = "/usr/share/icons/hicolor/scalable/apps/mcgyver.svg", mode = "644" },
+    { source = "README.md", dest = "/usr/share/doc/mcgyver/README.md", mode = "644", doc = true },
+    { source = "LICENSE-MIT", dest = "/usr/share/licenses/mcgyver/LICENSE-MIT", mode = "644", license = true },
+    { source = "LICENSE-APACHE", dest = "/usr/share/licenses/mcgyver/LICENSE-APACHE", mode = "644", license = true },
+]
+
+# Shared-library requirements are detected automatically; these are explicit extras.
+[package.metadata.generate-rpm.requires]
+libwayland-client = "*"
+mesa-libEGL = "*"
+mesa-libGL = "*"
+
+[package.metadata.generate-rpm.recommends]
+# Either Fedora's ffmpeg-free or RPM Fusion's ffmpeg.
+"/usr/bin/ffmpeg" = "*"
+pipewire-utils = "*"
+wl-clipboard = "*"
+kdialog = "*"
+libheif = "*"
+
+[package.metadata.generate-rpm.suggests]
+kdeconnect = "*"
+konsole = "*"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# craft-pdf (wordcraft and deckcraft's PDF writer) needs its own krilla; a dependency's patches
+# don't carry over, so it is repeated here.
+[patch.crates-io]
+krilla = { git = "https://github.com/storytold/craft-libs", rev = "c3487320b2d1de657b860b3c8abb44e1f2b32bd8" }
+# egui's epaint 0.37.0 draws glyphs with vello_cpu's default context, which turns multithreaded
+# (and then needs a flush epaint never does) once WordCraft and DeckCraft's renderers enable
+# vello_cpu's `multithreading` feature. vendor/epaint is epaint 0.37.0 (MIT OR Apache-2.0) with
+# that context made single-threaded; see `single_threaded` in src/text/font_face.rs.
+epaint = { path = "vendor/epaint" }

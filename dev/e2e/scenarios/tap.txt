@@ -1,0 +1,43 @@
+# Tapping Shift with no drag opens the wheel for Dolphin's selection; run with SOURCE=dolphin.
+# The clipboard holds text before the tap and must hold it again afterwards.
+log 1 put text on the clipboard, select holiday.jpg in Dolphin
+shell printf 'before the tap' | wl-copy
+shell for s in $(dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.ListNames | grep -o 'org.kde.dolphin-[0-9]*'); do dbus-send --session --type=method_call --dest=$s /dolphin/Dolphin_1 org.kde.dolphin.MainWindow.openFiles array:string:file://$OUT/files/holiday.jpg boolean:false; done
+sleep 1000
+move 640 400
+sleep 300
+shot tap-before
+log 2 shift + click and typing a capital must not open it
+key 42 1
+sleep 200
+press
+sleep 30
+release
+sleep 100
+key 42 0
+sleep 300
+key 42 1
+sleep 40
+key 30 1
+sleep 40
+key 30 0
+sleep 40
+key 42 0
+sleep 600
+log 3 tap shift on its own
+key 42 1
+sleep 60
+key 42 0
+sleep 1000
+shot tap-open
+log 4 click PNG (wedge 0, at the top)
+glide 640 282 10 20
+sleep 300
+shot tap-aim
+press
+sleep 30
+release
+sleep 2500
+shot tap-done
+shell wl-paste > "$OUT/clipboard.txt" 2>&1
+log done

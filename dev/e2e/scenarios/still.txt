@@ -1,0 +1,23 @@
+# Shift with the mouse held still: the wheel has to open without any motion.
+# No drag first: the probe should see the pointer and go away.
+move 640 400
+sleep 500
+key 42 1
+sleep 300
+key 42 0
+sleep 300
+# Now a drag that stops moving before Shift goes down.
+move 300 300
+sleep 300
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+sleep 500
+key 42 1
+sleep 250
+shot still
+key 42 0
+sleep 300
+release
+sleep 500

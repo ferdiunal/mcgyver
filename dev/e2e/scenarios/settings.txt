@@ -1,0 +1,62 @@
+# The tray, the settings and switching the trigger key, with the app already running:
+# starting it again opens its settings window instead of a second app; saving Ctrl as the
+# trigger (and Turkish) and asking it to reload makes Ctrl open the wheel and Shift do nothing;
+# the tray's Pause stops it; a restart comes back with its name and tray; --quit ends it.
+log 1 a second launch opens the settings of the first
+shell dbus-send --session --print-reply --dest=org.freedesktop.DBus / org.freedesktop.DBus.ListNames > $OUT/names.txt
+shell $ROOT/target/release/mcgyver > $OUT/second.log 2>&1 &
+sleep 3000
+shot settings-open
+log 2 trigger Ctrl, in Turkish
+shell mkdir -p $OUT/config/mcgyver && printf 'language = tr\ntrigger = ctrl\n' > $OUT/config/mcgyver/settings.conf
+shell dbus-send --session --print-reply --dest=io.github.McGyver /io/github/McGyver io.github.McGyver.Reload > $OUT/reload.log 2>&1
+sleep 500
+shell gdbus call --session --dest org.kde.kglobalaccel --object-path /kglobalaccel --method org.kde.KGlobalAccel.shortcut "['mcgyver','open-wheel','McGyver','Open the wheel for the files selected in Dolphin']" > $OUT/shortcut.txt 2>&1
+shell gdbus call --session --dest org.kde.kglobalaccel --object-path /kglobalaccel --method org.kde.KGlobalAccel.shortcut "['zero-click-converter','open-wheel','Zero-Click','Open the wheel for the files selected in Dolphin']" > $OUT/old-shortcut.txt 2>&1
+log 3 Shift no longer opens the wheel
+move 300 300
+sleep 500
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+shot shift-ignored
+key 42 0
+log 4 Ctrl does
+key 29 1
+sleep 300
+wiggle 300
+shot ctrl-wheel
+key 29 0
+sleep 300
+release
+sleep 800
+log 5 pause from the tray menu: Ctrl does nothing
+shell for n in $(dbus-send --session --print-reply --dest=org.freedesktop.DBus / org.freedesktop.DBus.ListNames | grep -o 'org.kde.StatusNotifierItem-[0-9-]*'); do echo $n; dbus-send --session --print-reply --dest=$n /MenuBar com.canonical.dbusmenu.Event int32:1 string:clicked variant:int32:0 uint32:0; done > $OUT/pause.log 2>&1
+sleep 500
+move 300 300
+sleep 500
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 29 1
+sleep 300
+wiggle 300
+shot paused-ignored
+key 29 0
+sleep 300
+release
+sleep 500
+log 6 restart (what the settings window asks after KDE integration): the name comes back
+shell dbus-send --session --print-reply --dest=io.github.McGyver /io/github/McGyver io.github.McGyver.Restart > $OUT/restart.log 2>&1
+sleep 2500
+shell dbus-send --session --print-reply --dest=org.freedesktop.DBus / org.freedesktop.DBus.ListNames | grep -c 'McGyver\|StatusNotifierItem' > $OUT/after-restart.txt
+log 7 quit
+shell $ROOT/target/release/mcgyver --quit > $OUT/quit.log 2>&1
+sleep 1500
+shell dbus-send --session --print-reply --dest=org.freedesktop.DBus / org.freedesktop.DBus.ListNames | grep -c '"io.github.McGyver"' > $OUT/after-quit.txt
+log done

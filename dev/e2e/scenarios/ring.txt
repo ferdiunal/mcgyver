@@ -1,0 +1,46 @@
+# The mode ring: Shift opens Convert on holiday.jpg, stopping on the Actions slice (lower left of
+# the hub, 48 px out at 150 degrees) switches to Actions, and the drop zips the file.
+log 1 shift, stop on the Actions slice
+move 300 300
+sleep 500
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 598 424 10 20
+sleep 150
+shot ring-dwell
+sleep 500
+shot ring-switched
+log 2 out to Zip (wedge 0 of 6) and drop
+glide 640 282 15 20
+wiggle 300
+shot ring-zip-hover
+release
+key 42 0
+sleep 2500
+shot ring-done
+log 3 let go of shift and press it again without moving: the wheel must come back
+move 300 300
+sleep 300
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+key 42 0
+sleep 60
+key 42 1
+sleep 500
+shot ring-repressed
+glide 640 282 15 20
+wiggle 300
+release
+key 42 0
+sleep 1000
+log done
