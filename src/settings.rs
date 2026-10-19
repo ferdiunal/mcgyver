@@ -1,5 +1,6 @@
 //! What the settings window sets, kept as `key = value` lines in
-//! `$XDG_CONFIG_HOME/mcgyver/settings.conf`, and starting at login.
+//! `$XDG_CONFIG_HOME/mcgyver/settings.conf` (on macOS `~/Library/Application Support`), and
+//! starting at login.
 
 use std::io;
 use std::path::PathBuf;
@@ -10,20 +11,29 @@ use crate::i18n::Lang;
 pub const APP_ID: &str = "mcgyver";
 /// What people see.
 pub const APP_NAME: &str = "McGyver";
+/// The macOS bundle's identifier, which also names its login item.
+pub const BUNDLE_ID: &str = "io.github.ferdiunal.mcgyver";
 /// The ID before the app was called McGyver.
 const OLD_APP_ID: &str = "zero-click-converter";
 
 /// The modifier held during a drag to open the wheel, and tapped on its own to open it for
-/// Dolphin's selection. Meta isn't offered: Plasma opens its launcher when it is tapped.
+/// Dolphin's selection. On Linux, Meta (`Cmd`) isn't offered: Plasma opens its launcher when it
+/// is tapped. On macOS, Command tapped alone does nothing, so it is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Trigger {
     Shift,
     Ctrl,
+    /// Option on a Mac.
     Alt,
+    /// Command on a Mac, Meta elsewhere.
+    Cmd,
 }
 
 impl Trigger {
-    pub const ALL: [Trigger; 3] = [Trigger::Shift, Trigger::Ctrl, Trigger::Alt];
+    #[cfg(not(target_os = "macos"))]
+    pub const ALL: &[Trigger] = &[Trigger::Shift, Trigger::Ctrl, Trigger::Alt];
+    #[cfg(target_os = "macos")]
+    pub const ALL: &[Trigger] = &[Trigger::Shift, Trigger::Ctrl, Trigger::Alt, Trigger::Cmd];
 
     /// How the settings file names it.
     pub fn code(self) -> &'static str {
@@ -31,19 +41,25 @@ impl Trigger {
             Trigger::Shift => "shift",
             Trigger::Ctrl => "ctrl",
             Trigger::Alt => "alt",
+            Trigger::Cmd => "cmd",
         }
     }
 
+    /// Only keys this platform offers.
     pub fn from_code(code: &str) -> Option<Trigger> {
-        Trigger::ALL.into_iter().find(|t| t.code() == code)
+        Trigger::ALL.iter().copied().find(|t| t.code() == code)
     }
 
     /// The name on the key, the same in every language.
     pub fn label(self) -> &'static str {
         match self {
             Trigger::Shift => "Shift",
+            Trigger::Ctrl if cfg!(target_os = "macos") => "Control",
             Trigger::Ctrl => "Ctrl",
+            Trigger::Alt if cfg!(target_os = "macos") => "Option",
             Trigger::Alt => "Alt",
+            Trigger::Cmd if cfg!(target_os = "macos") => "Command",
+            Trigger::Cmd => "Meta",
         }
     }
 }
@@ -136,19 +152,33 @@ pub fn migrate() {
     }
 }
 
-/// `$XDG_CONFIG_HOME`, or `~/.config`. Per the XDG spec a relative one is ignored.
+/// `$XDG_CONFIG_HOME`, or `~/.config` (`~/Library/Application Support` on macOS). Per the XDG
+/// spec a relative one is ignored.
 pub fn config_home() -> Option<PathBuf> {
+    let default = if cfg!(target_os = "macos") {
+        "Library/Application Support"
+    } else {
+        ".config"
+    };
     std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(default)))
 }
 
 fn path() -> Option<PathBuf> {
     config_home().map(|dir| dir.join(APP_ID).join("settings.conf"))
 }
 
+/// What starts the app at login: an XDG autostart entry, or on macOS a launch agent.
 fn autostart_file() -> Option<PathBuf> {
+    if cfg!(target_os = "macos") {
+        return std::env::var_os("HOME").map(|home| {
+            PathBuf::from(home)
+                .join("Library/LaunchAgents")
+                .join(format!("{BUNDLE_ID}.plist"))
+        });
+    }
     config_home().map(|dir| dir.join("autostart").join(format!("{APP_ID}.desktop")))
 }
 
@@ -170,13 +200,57 @@ pub fn set_start_at_login(on: bool) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    std::fs::write(
-        &path,
+    let entry = if cfg!(target_os = "macos") {
+        // `launcher` refuses the characters XML would need escaped, but `&`, `<` and `>`.
+        let exec = exec
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
+        format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+             <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \
+             \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+             <plist version=\"1.0\"><dict>\n\
+             <key>Label</key><string>{BUNDLE_ID}</string>\n\
+             <key>ProgramArguments</key><array><string>{exec}</string></array>\n\
+             <key>RunAtLoad</key><true/>\n\
+             <key>ProcessType</key><string>Interactive</string>\n\
+             </dict></plist>\n"
+        )
+    } else {
         format!(
             "[Desktop Entry]\nType=Application\nName={APP_NAME}\nExec=\"{exec}\"\nIcon={APP_ID}\n\
              NoDisplay=true\nX-GNOME-Autostart-enabled=true\n"
-        ),
-    )
+        )
+    };
+    std::fs::write(&path, entry)
+}
+
+/// Whether macOS runs this copy only for now: from a disk image (mounted read-only), or the
+/// copy it makes of an app opened straight from Downloads (App Translocation). Either is gone by
+/// the next login.
+#[cfg(target_os = "macos")]
+fn fleeting(exe: &std::path::Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    unsafe extern "C" {
+        fn access(path: *const std::ffi::c_char, mode: i32) -> i32;
+    }
+    if exe.to_string_lossy().contains("/AppTranslocation/") {
+        return true;
+    }
+    if !exe.starts_with("/Volumes") {
+        return false;
+    }
+    let Some(Ok(dir)) = exe
+        .parent()
+        .map(|dir| std::ffi::CString::new(dir.as_os_str().as_bytes()))
+    else {
+        return false;
+    };
+    // SAFETY: a NUL-terminated path; W_OK (2) only asks.
+    let writable = unsafe { access(dir.as_ptr(), 2) } == 0;
+    // EROFS: a read-only file system, which a mounted disk image is.
+    !writable && io::Error::last_os_error().raw_os_error() == Some(30)
 }
 
 /// This program's path, also after a package upgrade replaced it: the kernel then reports
@@ -200,6 +274,12 @@ fn launcher() -> io::Result<String> {
     } else {
         own_exe()?.canonicalize()?
     };
+    #[cfg(target_os = "macos")]
+    if fleeting(&exe) {
+        return Err(io::Error::other(crate::i18n::tr(
+            "Move McGyver to Applications first.",
+        )));
+    }
     // Quoted in Exec; anything that would need escaping there is refused.
     exe.to_str()
         .filter(|s| !s.contains(['"', '\\', '`', '$', '%']))

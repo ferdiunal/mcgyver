@@ -1,4 +1,4 @@
-# Packaging (Linux)
+# Packaging
 
 The product is McGyver: snap and package `mcgyver`, binary `mcgyver`, bus name `io.github.McGyver`.
 The name lives in `snap/snapcraft.yaml`, `packaging/linux/mcgyver.desktop`, the package name and asset
@@ -78,8 +78,20 @@ only reads `$SNAP_USER_DATA/.config/autostart` for it, and a classic snap writes
   https://ubuntu.com/docs/snapcraft/stable/reference/snapcraft-yaml/ and
   https://forum.snapcraft.io/t/how-to-set-up-classic-confinement/34416
 
-## Windows and macOS
+## macOS
 
-Not ported yet; not packaged. Windows needs a Win32 low-level keyboard hook, a layered topmost window and
-`IDropTarget`. macOS needs an NSEvent global monitor, an NSPanel and the Accessibility permission.
-Distribution there would be GitHub Releases / winget (Windows) and Homebrew (macOS), not snapcraft.
+`packaging/macos/build-app.sh`, run on a Mac, builds `dist/McGyver.app` (`Info.plist` from
+`packaging/macos/`, `LSUIElement` so it lives in the menu bar; bundle id
+`io.github.ferdiunal.mcgyver`, also `BUNDLE_ID` in `src/settings.rs`; the icon made from
+`packaging/macos/icon-1024.png` with `sips` and `iconutil`), signs it, and wraps it in
+`dist/McGyver-<version>-<arch>.dmg`. The signature is ad hoc unless `MCGYVER_SIGN_IDENTITY` names a
+certificate in the keychain; see the README. It can't be built from Linux: linking needs Apple's
+SDK. From Linux, `cargo check --target aarch64-apple-darwin` (with `CC_aarch64_apple_darwin`
+pointing at a `zig cc -target aarch64-macos` wrapper for the C in zstd and friends) checks that it
+compiles. Distribution beyond the build machine needs a Developer ID certificate and notarization
+(`xcrun notarytool`); Homebrew would come after.
+
+## Windows
+
+Not ported yet; not packaged. It needs a low-level keyboard hook or polled key state, a layered
+topmost window and `IDropTarget`; distribution would be GitHub Releases or winget.

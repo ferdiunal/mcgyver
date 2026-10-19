@@ -39,6 +39,8 @@ fn qt_key(trigger: Trigger) -> i32 {
         Trigger::Shift => 0x0100_0020,
         Trigger::Ctrl => 0x0100_0021,
         Trigger::Alt => 0x0100_0023,
+        // `Qt::Key_Meta`; not offered on Linux (see `Trigger`).
+        Trigger::Cmd => 0x0100_0022,
     }
 }
 // KGlobalAccel's SetShortcutFlag.

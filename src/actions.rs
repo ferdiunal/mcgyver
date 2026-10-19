@@ -1,6 +1,7 @@
 //! The Actions wheel: things done with the dropped files as a whole, rather than to each one.
 //! They lean on the desktop's own tools: a folder picker (kdialog or zenity), the clipboard
-//! (wl-copy or Klipper), a terminal, and KDE Connect for sending to a phone.
+//! (wl-copy or Klipper), a terminal, and KDE Connect for sending to a phone. On macOS: AppleScript's
+//! folder picker, pbcopy and Terminal.
 
 use std::fs;
 use std::io::{self, Write};
@@ -63,7 +64,7 @@ impl Action {
         match self {
             Action::Zip => true,
             Action::Copy | Action::Move => picker().is_some(),
-            Action::CopyPath => has("wl-copy") || has("dbus-send"),
+            Action::CopyPath => has("wl-copy") || has("dbus-send") || has("pbcopy"),
             Action::Terminal => terminal().is_some(),
             Action::Share => has("kdeconnect-cli"),
         }
@@ -187,6 +188,8 @@ fn terminal() -> Option<(&'static str, &'static [&'static str])> {
     static FOUND: OnceLock<Option<(&str, &[&str])>> = OnceLock::new();
     *FOUND.get_or_init(|| {
         const KNOWN: &[(&str, &[&str])] = &[
+            #[cfg(target_os = "macos")]
+            ("open", &["-a", "Terminal", "{dir}"]),
             ("konsole", &["--workdir", "{dir}"]),
             ("ptyxis", &["--new-window", "--working-directory", "{dir}"]),
             ("kgx", &["--working-directory", "{dir}"]),
@@ -205,14 +208,18 @@ fn terminal() -> Option<(&'static str, &'static [&'static str])> {
 fn pretty_terminal(name: &str) -> &str {
     match name {
         "konsole" => "Konsole",
-        "kgx" | "gnome-terminal" | "ptyxis" => "Terminal",
+        "kgx" | "gnome-terminal" | "ptyxis" | "open" => "Terminal",
         _ => name,
     }
 }
 
 fn picker() -> Option<&'static str> {
     static FOUND: OnceLock<Option<&str>> = OnceLock::new();
-    *FOUND.get_or_init(|| ["kdialog", "zenity"].into_iter().find(|t| has(t)))
+    *FOUND.get_or_init(|| {
+        ["kdialog", "zenity", "osascript"]
+            .into_iter()
+            .find(|t| has(t))
+    })
 }
 
 /// Asks for a folder; `Err` if none is picked.
@@ -223,6 +230,20 @@ fn pick_folder(title: &str, start: &Path) -> io::Result<PathBuf> {
     let mut command = Command::new(tool);
     match tool {
         "kdialog" => command.args(["--title", title, "--getexistingdirectory", &start]),
+        // The title and folder go in as arguments, so nothing in them is read as AppleScript.
+        "osascript" => command.args([
+            "-e",
+            "on run argv",
+            "-e",
+            "activate",
+            "-e",
+            "POSIX path of (choose folder with prompt (item 1 of argv) \
+             default location (POSIX file (item 2 of argv)))",
+            "-e",
+            "end run",
+            title,
+            &start,
+        ]),
         _ => command.args([
             "--file-selection",
             "--directory",
@@ -300,7 +321,14 @@ fn sync(dir: &Path) -> io::Result<()> {
     #[cfg(unix)]
     {
         // syncfs-like: syncing every copied file would mean walking them again.
+        #[cfg(target_os = "linux")]
         let status = Command::new("sync").arg("-f").arg(dir).status()?;
+        // Elsewhere `sync` takes no folder and flushes everything.
+        #[cfg(not(target_os = "linux"))]
+        let status = {
+            let _ = dir;
+            Command::new("sync").status()?
+        };
         if !status.success() {
             return Err(io::Error::other("couldn't make sure the copy is on disk"));
         }
@@ -339,10 +367,13 @@ fn copy_tree(from: &Path, to: &Path, progress: &Progress) -> io::Result<()> {
     Ok(())
 }
 
-/// wl-copy where it exists (any Wayland desktop), else KDE's Klipper over D-Bus.
+/// wl-copy where it exists (any Wayland desktop), else KDE's Klipper over D-Bus; pbcopy on macOS.
 fn set_clipboard(text: &str) -> io::Result<()> {
-    if has("wl-copy") {
-        let mut child = Command::new("wl-copy")
+    for tool in ["wl-copy", "pbcopy"].into_iter().filter(|t| has(t)) {
+        let mut child = Command::new(tool)
+            // pbcopy reads the text in the locale's encoding, which an app opened from Finder
+            // doesn't have.
+            .env("LC_CTYPE", "UTF-8")
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -356,6 +387,9 @@ fn set_clipboard(text: &str) -> io::Result<()> {
         if child.wait()?.success() {
             return Ok(());
         }
+    }
+    if !has("dbus-send") {
+        return Err(io::Error::other("couldn't reach the clipboard"));
     }
     let status = Command::new("dbus-send")
         .args([

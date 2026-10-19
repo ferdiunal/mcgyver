@@ -1,6 +1,6 @@
 //! The click on every transition of the wheel: opening, switching modes, moving onto another
-//! wedge, picking one. PipeWire's `pw-play` (or PulseAudio's `paplay`) plays it, so nothing
-//! links against the audio stack. `MCGYVER_SOUND=0` turns it off.
+//! wedge, picking one. PipeWire's `pw-play` (or PulseAudio's `paplay`, or macOS's `afplay`)
+//! plays it, so nothing links against the audio stack. `MCGYVER_SOUND=0` turns it off.
 
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -19,7 +19,7 @@ pub struct Clicker {
 impl Clicker {
     pub fn new() -> Self {
         let wanted = std::env::var_os("MCGYVER_SOUND").is_none_or(|v| v != "0");
-        let player = ["pw-play", "paplay"]
+        let player = ["pw-play", "paplay", "afplay"]
             .into_iter()
             .find(|p| crate::actions::has(p))
             .filter(|_| wanted)
@@ -53,6 +53,7 @@ impl Clicker {
 }
 
 /// The click as a file the player can open, in the user's private runtime directory.
+#[cfg(not(target_os = "macos"))]
 fn write_click() -> Option<PathBuf> {
     let dir = std::env::var_os("XDG_RUNTIME_DIR")
         .map(PathBuf::from)
@@ -60,4 +61,18 @@ fn write_click() -> Option<PathBuf> {
     let path = dir.join("mcgyver-click.mp3");
     std::fs::write(&path, CLICK).ok()?;
     Some(path)
+}
+
+/// The click as a file the player can open, in the temporary folder under a fresh name (made
+/// new, so nothing someone else put there is written through). macOS clears it out in time.
+#[cfg(target_os = "macos")]
+fn write_click() -> Option<PathBuf> {
+    use std::io::Write;
+    let mut file = tempfile::Builder::new()
+        .prefix("mcgyver-click-")
+        .suffix(".mp3")
+        .tempfile()
+        .ok()?;
+    file.write_all(CLICK).ok()?;
+    file.into_temp_path().keep().ok()
 }

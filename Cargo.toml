@@ -3,7 +3,7 @@ name = "mcgyver"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "Drag files, hold Shift, and drop them on a wheel to convert them (KDE Plasma 6, Wayland)"
+description = "Drag files, hold Shift, and drop them on a wheel to convert them (KDE Plasma 6 on Wayland, macOS)"
 
 [features]
 default = ["rar"]
@@ -13,16 +13,8 @@ rar = ["dep:unrar", "dep:unrar_sys"]
 
 [dependencies]
 egui = { version = "0.37", default-features = false, features = ["default_fonts"] }
-egui_glow = { version = "0.37", default-features = false }
-glow = "0.17"
-glutin = { version = "0.32", default-features = false, features = ["egl", "wayland"] }
 log = "0.4"
-raw-window-handle = "0.6"
-smithay-client-toolkit = { version = "0.21", default-features = false, features = ["calloop"] }
 tempfile = "3"
-wayland-client = { version = "0.31", features = ["system"] }
-wayland-protocols = { version = "0.32", features = ["client", "staging"] }
-wayland-protocols-plasma = { version = "0.3", features = ["client"] }
 
 # Archives and compression (src/archive). Pure Rust except zstd and unRAR, which build their
 # bundled C/C++ sources.
@@ -50,12 +42,10 @@ rawler = "0.8"
 resvg = "0.48"
 tiff = { version = "0.11", features = ["deflate"] }
 webp = { version = "0.3", default-features = false }
-zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
 anydoc = "0.2.4"
 
-# The tray icon (StatusNotifierItem, over the same zbus) and the settings window.
-ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
-eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+# The settings window, and on macOS the overlay too.
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow"] }
 
 # Office documents without LibreOffice: the "craft" apps' engines, pure Rust (MIT OR Apache-2.0),
 # pinned since they aren't on crates.io.
@@ -65,6 +55,31 @@ gridcraft-engine = { git = "https://github.com/storytold/gridcraft", rev = "c30f
 pdfcraft-cos = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
 pdfcraft-organize = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
 pdfcraft-optimize = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+
+# KDE Plasma on Wayland (src/kde.rs and the modules it uses): the overlay is a layer-shell
+# surface drawn with egui_glow; the tray, the single instance and KDE's shortcuts go over D-Bus.
+[target.'cfg(target_os = "linux")'.dependencies]
+eframe = { version = "0.37", default-features = false, features = ["wayland", "x11"] }
+egui_glow = { version = "0.37", default-features = false }
+glow = "0.17"
+glutin = { version = "0.32", default-features = false, features = ["egl", "wayland"] }
+ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
+raw-window-handle = "0.6"
+smithay-client-toolkit = { version = "0.21", default-features = false, features = ["calloop"] }
+wayland-client = { version = "0.31", features = ["system"] }
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
+wayland-protocols-plasma = { version = "0.3", features = ["client"] }
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
+
+# macOS (src/mac.rs): the menu bar icon, and AppKit for making the app a menu bar one.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSView", "NSWindow"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSString"] }
+raw-window-handle = "0.6"
+tray-icon = { version = "0.26", default-features = false }
+# eframe's own winit, for its macOS event loop options (a menu bar app that doesn't take focus).
+winit = { version = "0.30", default-features = false }
 
 [dev-dependencies]
 # Only for examples/preview.rs: renders the overlay UI in a normal window for screenshots.

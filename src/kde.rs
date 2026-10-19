@@ -126,6 +126,8 @@ fn keystate_key(trigger: Trigger) -> u32 {
         Trigger::Alt => 3,
         Trigger::Ctrl => 4,
         Trigger::Shift => 5,
+        // Not offered on Linux (see `Trigger`).
+        Trigger::Cmd => 6,
     }
 }
 

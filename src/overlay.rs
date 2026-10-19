@@ -274,6 +274,20 @@ impl Overlay {
             .is_some_and(|w| w.chosen.is_none() && w.closing_at.is_none())
     }
 
+    /// The window moved by `-by` on screen: what is drawn stays where it was.
+    pub fn shift(&mut self, by: Vec2) {
+        if let Some(w) = &mut self.wheel {
+            w.center += by;
+            w.origin += by;
+            if let Some(p) = &mut w.pointer {
+                *p += by;
+            }
+        }
+        for card in &mut self.cards {
+            card.at += by;
+        }
+    }
+
     /// Where the last frame drew glass; the platform blurs the backdrop there.
     pub fn glass(&self) -> &[GlassShape] {
         &self.glass
@@ -846,6 +860,42 @@ mod tests {
         overlay.drag_moved(ring_point(center, Mode::Tools), now);
         assert!(!overlay.would_accept(now));
         assert!(!overlay.drop(now));
+    }
+
+    #[test]
+    fn shifting_keeps_the_wheel_and_cards_where_they_were_on_screen() {
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1600.0, 1000.0));
+        let center = screen.center();
+        let now = Instant::now();
+        let mut overlay = Overlay::default();
+        overlay.open(
+            vec![PathBuf::from("holiday.jpg")],
+            center,
+            screen,
+            Mode::Convert,
+            now,
+        );
+        overlay.drag_moved(
+            center + vec2(0.0, -(wheel::RING_R0 + wheel::RING_R1) / 2.0),
+            now,
+        );
+        assert!(overlay.drop(now));
+        overlay.open(
+            vec![PathBuf::from("notes.txt")],
+            center,
+            screen,
+            Mode::Convert,
+            now,
+        );
+
+        let by = vec2(-120.0, 45.0);
+        overlay.shift(by);
+        let wheel = overlay.wheel.as_ref().unwrap();
+        assert_eq!(wheel.center, center + by);
+        assert_eq!(wheel.origin, center + by);
+        assert_eq!(wheel.pointer, Some(center + by));
+        assert_eq!(overlay.cards.len(), 1);
+        assert_eq!(overlay.cards[0].at, center + by);
     }
 
     #[test]

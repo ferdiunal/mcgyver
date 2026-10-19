@@ -25,7 +25,8 @@ merged, zipped, shared. Drop them on a wedge and it's done, without opening anot
 - every [action](#actions)
 
 Media editing, PDF conversions other than to Markdown, document and spreadsheet Merge, and
-presentation Compress are still simulated. It runs only on **KDE Plasma 6 (Wayland)** for now.
+presentation Compress are still simulated. It runs on **KDE Plasma 6 (Wayland)**, and on
+**macOS** as a first, untested port (see [macOS](#macos)).
 
 ## Run
 
@@ -37,6 +38,47 @@ cargo run --release -- --install   # once: wheel opens at once; tapping Shift op
 ```
 
 Packages for the Snap Store, Debian/Ubuntu and Fedora: see [PACKAGING.md](PACKAGING.md).
+
+### macOS
+
+A first port, built for Apple Silicon and Intel alike but not yet run on a Mac. Build the app on
+the Mac (needs Xcode's command line tools, `xcode-select --install`, and Rust from
+[rustup.rs](https://rustup.rs)):
+
+```sh
+packaging/macos/build-app.sh    # → dist/McGyver.app and dist/McGyver-<version>-arm64.dmg
+open dist/McGyver.app
+```
+
+It sits in the menu bar (Pause, Settings…, Quit); there is no Dock icon, and opening the app
+again while it runs opens its settings. Drag files in Finder, hold the trigger key, and the
+wheel appears under the pointer (kept on the display near an edge). It is drawn in a
+transparent window that is always there, on every Space and over full-screen apps, and lets
+every click through until files are dragged and the key goes down; it then takes the drag with
+macOS's own drag and drop. Holding the key while dragging something that isn't files (a shape,
+some text) does nothing. What differs from KDE:
+
+- **Trigger key:** Shift, Control, Option or Command. It is read from the keyboard's state, which
+  macOS usually gives without asking; if holding it does nothing, allow **Input Monitoring**
+  (the settings' Permissions card has **Ask** and **Open System Settings**) and reopen the app.
+  Control and Command change what a drag offers (a link, a move); the wheel accepts those too.
+  Letting go of the key and the button together drops on the wheel; the key alone folds it.
+- **No tap without a drag:** tapping the key on its own does nothing, and finished files aren't
+  selected in Finder.
+- **Actions:** Copy and Move ask for a folder with macOS's own picker, Copy Path uses `pbcopy`,
+  Terminal opens Terminal.app; Share isn't offered. The click plays through `afplay`.
+- **FFmpeg** for audio and video: `brew install ffmpeg`. The app looks in `/opt/homebrew/bin` and
+  `/usr/local/bin` too, which an app opened from Finder doesn't otherwise see.
+- **Files:** settings in `~/Library/Application Support/mcgyver/settings.conf`; Start at login
+  writes `~/Library/LaunchAgents/io.github.ferdiunal.mcgyver.plist`, and asks for the app to be
+  in Applications first (run from the disk image, macOS runs a copy that is gone by the next
+  login). Converting onto a disk without exclusive renames (exFAT, FAT, SMB) works too.
+
+The script signs the app ad hoc, which only runs on the Mac that built it, and a permission granted
+to one build is lost with the next. To keep it, make a code signing certificate once (Keychain
+Access → Certificate Assistant → Create a Certificate…, type "Code Signing") and build with
+`MCGYVER_SIGN_IDENTITY="its name" packaging/macos/build-app.sh`. Handing the app to others needs
+an Apple Developer ID and notarization, not set up yet.
 
 ### Tray and settings
 
@@ -113,7 +155,7 @@ switches between the three modes:
   in halves (the first on top), and with one there is no ring at all: a JSON file, say, opens
   straight on its Actions.
 - **Sound:** the wheel opening, a mode switch, moving onto another wedge and a pick each play
-  `assets/sounds/click.mp3` through `pw-play` (or `paplay`). `MCGYVER_SOUND=0` turns it off.
+  `assets/sounds/click.mp3` through `pw-play` (or `paplay`; `afplay` on macOS). `MCGYVER_SOUND=0` turns it off.
 - **Merge** (documents, spreadsheets, PDFs, audio) shows up only with two or more files; a single
   document has no other tool, so it gets no Tools slice at all.
 - **Mixed selections:** the wheel offers what every recognised file supports. A file already in

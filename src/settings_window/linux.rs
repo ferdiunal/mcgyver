@@ -1,89 +1,43 @@
-//! The settings window (`--settings`), a process of its own so the overlay never waits on it:
-//! language, trigger key, starting at login, and the permissions KWin and KDE grant, each with
-//! the button that fixes it. Each change is saved at once and the running app is told to reload.
+//! The Permissions card on KDE Plasma: what KWin and KDE actually granted the running app,
+//! checked every second over D-Bus, each with the button that fixes it.
 
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
-use egui::{Color32, CornerRadius, Frame, Margin, RichText, Stroke, Vec2};
-
-use crate::glass::{ACCENT, GREEN, RED, TEXT, TEXT_MUTED};
-use crate::i18n::{self, Lang, tr, trf};
+use crate::glass::{GREEN, RED, TEXT_MUTED};
+use crate::i18n::{tr, trf};
 use crate::service;
-use crate::settings::{self, APP_ID, APP_NAME, Settings, Trigger};
+use crate::settings::{APP_NAME, Settings, Trigger};
 
-const TRIGGER_HELP: &str = "Hold it while dragging files to open the wheel. Tapped on its own, it \
-                            opens the wheel for the files selected in Dolphin.";
+use egui::Color32;
+
+use super::{Row, row};
+
+const AMBER: Color32 = Color32::from_rgb(226, 146, 18);
+
+pub(super) const TRIGGER_HELP: &str = "Hold it while dragging files to open the wheel. Tapped on \
+                                       its own, it opens the wheel for the files selected in \
+                                       Dolphin.";
 const FAST_OPEN_HELP: &str = "Without it, the wheel opens once the mouse moves.";
 const TAP_HELP: &str = "For the files selected in Dolphin.";
 /// How long a restart this window asked for may take (a conversion delays it) before its
 /// buttons come back.
 const RESTART_GRACE: Duration = Duration::from_secs(60);
 /// How often the permissions are looked at again while the window is open.
-const CHECK_EVERY: Duration = Duration::from_secs(1);
-const AMBER: Color32 = Color32::from_rgb(226, 146, 18);
-/// How long "Saved" stays up.
-const NOTE_FOR: Duration = Duration::from_secs(3);
-const BACKGROUND: Color32 = Color32::from_rgb(242, 243, 245);
-const CARD: Color32 = Color32::WHITE;
+pub(super) const CHECK_EVERY: Duration = Duration::from_secs(1);
 
-pub fn run() -> Result<(), String> {
-    // One window at a time, however it was opened.
-    let Some(_name) = service::claim_settings() else {
-        println!("The settings are open already.");
-        return Ok(());
-    };
-    settings::migrate();
-    let settings = Settings::load();
-    i18n::set(settings.language);
-    let mut viewport = egui::ViewportBuilder::default()
-        .with_title(title())
-        .with_app_id(APP_ID)
-        .with_inner_size([440.0, 680.0])
-        .with_min_inner_size([380.0, 360.0]);
-    if let Some(rgba) = crate::icon::rgba(64) {
-        viewport = viewport.with_icon(egui::IconData {
-            rgba,
-            width: 64,
-            height: 64,
-        });
-    }
-    let options = eframe::NativeOptions {
-        viewport,
-        renderer: eframe::Renderer::Glow,
-        ..Default::default()
-    };
-    eframe::run_native(
-        APP_ID,
-        options,
-        Box::new(move |cc| {
-            crate::glass::install_fonts(&cc.egui_ctx);
-            style(&cc.egui_ctx);
-            Ok(Box::new(Window::new(settings)))
-        }),
-    )
-    .map_err(|e| e.to_string())
+/// One settings window at a time, however it was opened: the guard holds its bus name.
+pub(super) fn claim() -> Option<impl Sized> {
+    service::claim_settings()
 }
 
-fn title() -> String {
-    format!("{} — {APP_NAME}", tr("Settings"))
+/// Has the running app read the saved settings again; false when it isn't running.
+pub(super) fn tell_app() -> bool {
+    service::call("Reload")
 }
 
-fn style(ctx: &egui::Context) {
-    ctx.set_theme(egui::Theme::Light);
-    ctx.all_styles_mut(|style| {
-        style.spacing.item_spacing = Vec2::new(8.0, 8.0);
-        style.spacing.button_padding = Vec2::new(14.0, 6.0);
-        let v = &mut style.visuals;
-        v.panel_fill = BACKGROUND;
-        v.override_text_color = Some(TEXT);
-        v.selection.bg_fill = ACCENT;
-        v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
-        v.widgets.inactive.corner_radius = CornerRadius::same(8);
-        v.widgets.hovered.corner_radius = CornerRadius::same(8);
-        v.widgets.active.corner_radius = CornerRadius::same(8);
-    });
-}
+/// KDE brings a new window forward by itself.
+pub(super) fn bring_forward(_: &egui::Context) {}
 
 /// What the running app was granted (see `service::Granted`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -210,9 +164,30 @@ enum Job {
     Rebind,
 }
 
-struct Window {
-    settings: Settings,
-    start_at_login: bool,
+/// What a permission's button does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Fix {
+    SetUp,
+    Restart,
+    /// Start the app, which isn't running.
+    Start,
+    OpenShortcuts,
+    TryAgain,
+}
+
+impl Fix {
+    fn label(self) -> &'static str {
+        match self {
+            Fix::SetUp => "Set up",
+            Fix::Restart => "Restart",
+            Fix::Start => "Start",
+            Fix::OpenShortcuts => "Open shortcuts",
+            Fix::TryAgain => "Try again",
+        }
+    }
+}
+
+pub(super) struct Permissions {
     checks: Receiver<Check>,
     /// The latest check; `None` until the first arrives.
     check: Option<Check>,
@@ -222,15 +197,13 @@ struct Window {
     restart: Option<Restart>,
     /// The running app is one this window restarted.
     fresh: bool,
-    /// What the last change came to, and when.
-    note: Option<(String, Instant)>,
+    /// What a finished job came to, for the window to show.
+    note: Option<String>,
 }
 
-impl Window {
-    fn new(settings: Settings) -> Self {
-        Window {
-            settings,
-            start_at_login: settings::starts_at_login(),
+impl Permissions {
+    pub(super) fn new() -> Self {
+        Permissions {
             checks: checks(),
             check: None,
             working: None,
@@ -240,78 +213,12 @@ impl Window {
         }
     }
 
-    fn start(&mut self, job: Job) {
-        self.fresh = false;
-        let trigger = self.settings.trigger;
-        let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
-            let done = match job {
-                // Both return once KWin has caught up, so the restart in `finished` connects
-                // with the new rights.
-                Job::SetUp => crate::kde::install(),
-                Job::Remove => crate::kde::uninstall(),
-                Job::Rebind => crate::tap::rebind(trigger),
-            };
-            let _ = tx.send(done);
-        });
-        self.working = Some((job, rx));
-    }
-
-    fn finished(&mut self, job: Job, done: Result<(), String>) {
-        match done {
-            Ok(()) => {
-                // KWin hands new rights to a new connection.
-                if job != Job::Rebind {
-                    self.restart();
-                }
-                self.note(tr("Saved").to_owned());
-            }
-            Err(e) => self.note(trf("Couldn't save: {}", &[&e])),
-        }
-    }
-
-    /// Saves, and has the running app pick the change up.
-    fn changed(&mut self) {
-        i18n::set(self.settings.language);
-        let said = match self.settings.save() {
-            Err(e) => trf("Couldn't save: {}", &[&e]),
-            Ok(()) if service::call("Reload") => tr("Saved").to_owned(),
-            Ok(()) => trf(
-                "{} isn't running; it will use these when it starts.",
-                &[&APP_NAME],
-            ),
-        };
-        self.note = Some((said, Instant::now()));
-    }
-
-    fn note(&mut self, said: String) {
-        self.note = Some((said, Instant::now()));
-    }
-}
-
-impl eframe::App for Window {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let before = self.settings;
-        egui::CentralPanel::default()
-            .frame(Frame::new().fill(BACKGROUND).inner_margin(Margin::same(18)))
-            .show(ui, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| self.cards(ui));
-            });
-        if self.settings != before {
-            self.changed();
-            ui.ctx()
-                .send_viewport_cmd(egui::ViewportCommand::Title(title()));
-        }
-    }
-}
-
-impl Window {
-    fn cards(&mut self, ui: &mut egui::Ui) {
+    /// Takes in what the checks and the jobs came to; call once a frame.
+    pub(super) fn update(&mut self) {
         let checks: Vec<Check> = self.checks.try_iter().collect();
         for check in checks {
             self.checked(check);
         }
-        ui.ctx().request_repaint_after(CHECK_EVERY);
         if let Some((job, rx)) = &self.working {
             let done = match rx.try_recv() {
                 Ok(done) => Some(done),
@@ -327,66 +234,20 @@ impl Window {
                 self.finished(job, done);
             }
         }
-        // Something missing comes first; once all is granted it moves to the bottom.
-        let all_granted = self
-            .check
-            .is_some_and(|c| c.fast_open() == State::Granted && c.tap() == State::Granted);
-
-        ui.label(RichText::new(tr("Settings")).size(22.0).strong());
-        ui.add_space(6.0);
-        if !all_granted {
-            card(ui, tr("Permissions"), None, |ui| self.permissions(ui));
-        }
-
-        card(ui, tr("Language"), None, |ui| {
-            ui.horizontal(|ui| {
-                for lang in Lang::ALL {
-                    segment(ui, &mut self.settings.language, lang, lang.name());
-                }
-            });
-        });
-
-        card(ui, tr("Trigger key"), Some(tr(TRIGGER_HELP)), |ui| {
-            ui.horizontal(|ui| {
-                for trigger in Trigger::ALL {
-                    segment(ui, &mut self.settings.trigger, trigger, trigger.label());
-                }
-            });
-        });
-
-        card(ui, tr("Start at login"), None, |ui| {
-            if toggle(ui, &mut self.start_at_login).changed() {
-                match settings::set_start_at_login(self.start_at_login) {
-                    Ok(()) => self.note(tr("Saved").to_owned()),
-                    Err(e) => {
-                        self.start_at_login = settings::starts_at_login();
-                        self.note(trf("Couldn't save: {}", &[&e]));
-                    }
-                }
-            }
-        });
-
-        if all_granted {
-            card(ui, tr("Permissions"), None, |ui| self.permissions(ui));
-        }
-
-        if let Some((said, at)) = &self.note {
-            let left = NOTE_FOR.saturating_sub(at.elapsed());
-            if left.is_zero() {
-                self.note = None;
-            } else {
-                ui.add_space(4.0);
-                ui.label(RichText::new(said.as_str()).color(TEXT_MUTED));
-                ui.ctx().request_repaint_after(left);
-            }
-        }
     }
-}
 
-impl Window {
-    fn permissions(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn take_note(&mut self) -> Option<String> {
+        self.note.take()
+    }
+
+    pub(super) fn all_granted(&self) -> bool {
+        self.check
+            .is_some_and(|c| c.fast_open() == State::Granted && c.tap() == State::Granted)
+    }
+
+    pub(super) fn card(&mut self, ui: &mut egui::Ui, trigger: Trigger) {
         let Some(check) = self.check else {
-            ui.label(RichText::new(tr("Checking…")).color(TEXT_MUTED));
+            ui.label(egui::RichText::new(tr("Checking…")).color(TEXT_MUTED));
             return;
         };
         let rows = [
@@ -401,26 +262,32 @@ impl Window {
                 check.tap(),
             ),
         ];
-        if rows.iter().all(|(_, _, state)| *state == State::Granted) {
-            ui.label(RichText::new(tr("Everything is ready")).color(GREEN));
+        if self.all_granted() {
+            ui.label(egui::RichText::new(tr("Everything is ready")).color(GREEN));
         }
         for (title, help, state) in rows {
             ui.add_space(4.0);
-            if let Some(fix) = self.permission(ui, title, help, state) {
+            if let Some(fix) = self.permission(ui, title, help, state, trigger) {
                 self.fix(fix);
             }
         }
         if check.set_up && self.working.is_none() {
             ui.add_space(6.0);
             if ui.small_button(tr("Remove")).clicked() {
-                self.start(Job::Remove);
+                self.start(Job::Remove, trigger);
             }
         }
     }
 
     /// One permission: where it stands, and its buttons. Returns the one clicked.
-    fn permission(&self, ui: &mut egui::Ui, title: &str, help: &str, state: State) -> Option<Fix> {
-        let key = self.settings.trigger.label();
+    fn permission(
+        &mut self,
+        ui: &mut egui::Ui,
+        title: &str,
+        help: &str,
+        state: State,
+        trigger: Trigger,
+    ) -> Option<Fix> {
         // Until a restart this window asked for is over, the app's answers are about to change.
         let restarting = self.restarting() && state != State::Granted;
         let (color, status) = match state {
@@ -434,7 +301,10 @@ impl Window {
                 tr("This desktop can't share Dolphin's selection").to_owned(),
             ),
             State::NotRunning => (TEXT_MUTED, trf("{} isn't running", &[&APP_NAME])),
-            State::KeyTaken => (RED, trf("{} alone is taken by another shortcut", &[&key])),
+            State::KeyTaken => (
+                RED,
+                trf("{} alone is taken by another shortcut", &[&trigger.label()]),
+            ),
         };
         let fixes: &[Fix] = match state {
             State::Granted => &[],
@@ -446,33 +316,45 @@ impl Window {
             State::NotRunning => &[Fix::Start],
             State::KeyTaken => &[Fix::OpenShortcuts, Fix::TryAgain],
         };
-        let mut clicked = None;
-        ui.horizontal(|ui| {
-            let (dot, _) = ui.allocate_exact_size(Vec2::splat(12.0), egui::Sense::hover());
-            ui.painter().circle_filled(dot.center(), 5.0, color);
-            ui.label(RichText::new(title).strong());
+        let labels: Vec<&str> = fixes.iter().map(|fix| tr(fix.label())).collect();
+        let shown = Row {
+            title,
+            help,
+            color,
+            status: &status,
+            buttons: &labels,
+            busy: self.working.is_some() || restarting,
+        };
+        row(ui, &shown).map(|i| fixes[i])
+    }
+
+    fn start(&mut self, job: Job, trigger: Trigger) {
+        self.fresh = false;
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let done = match job {
+                // Both return once KWin has caught up, so the restart in `finished` connects
+                // with the new rights.
+                Job::SetUp => crate::kde::install(),
+                Job::Remove => crate::kde::uninstall(),
+                Job::Rebind => crate::tap::rebind(trigger),
+            };
+            let _ = tx.send(done);
         });
-        ui.indent(title, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new(status).size(12.5).color(color));
-                ui.label(RichText::new(help).size(12.5).color(TEXT_MUTED));
-            });
-            if fixes.is_empty() {
-                return;
+        self.working = Some((job, rx));
+    }
+
+    fn finished(&mut self, job: Job, done: Result<(), String>) {
+        self.note = Some(match done {
+            Ok(()) => {
+                // KWin hands new rights to a new connection.
+                if job != Job::Rebind {
+                    self.restart();
+                }
+                tr("Saved").to_owned()
             }
-            ui.horizontal(|ui| {
-                if self.working.is_some() || restarting {
-                    ui.spinner();
-                    return;
-                }
-                for fix in fixes {
-                    if ui.button(tr(fix.label())).clicked() {
-                        clicked = Some(*fix);
-                    }
-                }
-            });
+            Err(e) => trf("Couldn't save: {}", &[&e]),
         });
-        clicked
     }
 
     fn restart(&mut self) {
@@ -511,9 +393,10 @@ impl Window {
     }
 
     fn fix(&mut self, fix: Fix) {
+        let trigger = Settings::load().trigger;
         match fix {
-            Fix::SetUp => self.start(Job::SetUp),
-            Fix::TryAgain => self.start(Job::Rebind),
+            Fix::SetUp => self.start(Job::SetUp, trigger),
+            Fix::TryAgain => self.start(Job::Rebind, trigger),
             Fix::Restart => self.restart(),
             Fix::Start => detach(
                 crate::settings::own_exe().map(|exe| exe.into_os_string()),
@@ -532,29 +415,6 @@ impl Window {
     }
 }
 
-/// What a permission's button does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Fix {
-    SetUp,
-    Restart,
-    /// Start the app, which isn't running.
-    Start,
-    OpenShortcuts,
-    TryAgain,
-}
-
-impl Fix {
-    fn label(self) -> &'static str {
-        match self {
-            Fix::SetUp => "Set up",
-            Fix::Restart => "Restart",
-            Fix::Start => "Start",
-            Fix::OpenShortcuts => "Open shortcuts",
-            Fix::TryAgain => "Try again",
-        }
-    }
-}
-
 /// Runs `program` with `args` through `sh`, in the background and not as our child, so it
 /// outlives this window.
 fn detach(program: std::io::Result<std::ffi::OsString>, args: &[&str]) {
@@ -568,72 +428,13 @@ fn detach(program: std::io::Result<std::ffi::OsString>, args: &[&str]) {
         .status();
 }
 
-/// A white panel with a heading, an optional line under it, and the controls.
-fn card(ui: &mut egui::Ui, heading: &str, help: Option<&str>, add: impl FnOnce(&mut egui::Ui)) {
-    Frame::new()
-        .fill(CARD)
-        .corner_radius(CornerRadius::same(12))
-        .stroke(Stroke::new(1.0, Color32::from_black_alpha(18)))
-        .inner_margin(Margin::same(14))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.label(RichText::new(heading).size(15.0).strong());
-            if let Some(help) = help {
-                ui.label(RichText::new(help).size(12.5).color(TEXT_MUTED));
-            }
-            ui.add_space(2.0);
-            add(ui);
-        });
-    ui.add_space(4.0);
-}
-
-/// One button of a row where exactly one is on.
-fn segment<T: PartialEq + Copy>(ui: &mut egui::Ui, value: &mut T, this: T, text: &str) {
-    let on = *value == this;
-    let label = RichText::new(text).color(if on { Color32::WHITE } else { TEXT });
-    let button = egui::Button::new(label)
-        .fill(if on { ACCENT } else { BACKGROUND })
-        .min_size(Vec2::new(84.0, 32.0));
-    if ui.add(button).clicked() {
-        *value = this;
-    }
-}
-
-/// An on/off switch.
-fn toggle(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
-    let size = Vec2::new(42.0, 24.0);
-    let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::click());
-    if response.clicked() {
-        *on = !*on;
-        response.mark_changed();
-    }
-    let t = ui.ctx().animate_bool_responsive(response.id, *on);
-    let track = BACKGROUND.lerp_to_gamma(ACCENT, t);
-    let painter = ui.painter();
-    painter.rect(
-        rect,
-        CornerRadius::same(12),
-        track,
-        Stroke::new(1.0, Color32::from_black_alpha(25)),
-        egui::StrokeKind::Inside,
-    );
-    let x = egui::lerp(rect.left() + 12.0..=rect.right() - 12.0, t);
-    painter.circle(
-        egui::pos2(x, rect.center().y),
-        9.0,
-        Color32::WHITE,
-        Stroke::new(1.0, Color32::from_black_alpha(30)),
-    );
-    response
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::i18n::translate;
+    use crate::i18n::{Lang, translate};
 
     #[test]
-    fn everything_the_window_says_has_turkish() {
+    fn everything_the_card_says_has_turkish() {
         let fixes = [
             Fix::SetUp,
             Fix::Restart,
@@ -642,12 +443,7 @@ mod tests {
             Fix::TryAgain,
         ];
         for text in [
-            "Settings",
-            "Language",
-            "Trigger key",
             TRIGGER_HELP,
-            "Start at login",
-            "Permissions",
             "Checking…",
             "Everything is ready",
             "Opens at once under a drag",
@@ -664,9 +460,6 @@ mod tests {
             "{} isn't running",
             "{} alone is taken by another shortcut",
             "Remove",
-            "Saved",
-            "Couldn't save: {}",
-            "{} isn't running; it will use these when it starts.",
         ]
         .into_iter()
         .chain(fixes.map(Fix::label))
@@ -735,7 +528,7 @@ mod tests {
 
     #[test]
     fn a_restart_is_over_once_another_process_answers() {
-        let mut window = Window::new(Settings::default());
+        let mut permissions = Permissions::new();
         let answer = |started| Check {
             set_up: true,
             granted: Some(Granted {
@@ -744,17 +537,17 @@ mod tests {
             }),
             ..Check::default()
         };
-        window.restart = Some(Restart {
+        permissions.restart = Some(Restart {
             asked_at: Instant::now(),
             from: Some(7),
         });
         // The old process still answering, or nobody answering, doesn't end it.
-        window.checked(answer(7));
-        window.checked(Check::default());
-        assert!(window.restarting());
+        permissions.checked(answer(7));
+        permissions.checked(Check::default());
+        assert!(permissions.restarting());
         // The new one does (a restart keeps the PID, so it is told by when it started).
-        window.checked(answer(8));
-        assert!(!window.restarting());
-        assert_eq!(window.check.unwrap().fast_open(), State::Refused);
+        permissions.checked(answer(8));
+        assert!(!permissions.restarting());
+        assert_eq!(permissions.check.unwrap().fast_open(), State::Refused);
     }
 }

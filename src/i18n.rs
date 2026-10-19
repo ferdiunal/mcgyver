@@ -316,6 +316,18 @@ fn turkish(english: &str) -> Option<&'static str> {
         "Start" => "Başlat",
         "Open shortcuts" => "Kısayolları aç",
         "Try again" => "Tekrar dene",
+        "Hold it while dragging files to open the wheel." => {
+            "Dosya sürüklerken basılı tutunca çark açılır."
+        }
+        "Input Monitoring" => "Girdi İzleme",
+        "Only needed if holding the key doesn't open the wheel. Reopen McGyver after allowing \
+         it." => {
+            "Yalnızca tuşu basılı tutmak çarkı açmıyorsa gerekir. İzin verdikten sonra McGyver'ı \
+             yeniden aç."
+        }
+        "Not allowed" => "İzin verilmedi",
+        "Ask" => "İzin iste",
+        "Open System Settings" => "Sistem Ayarları'nı aç",
         "Still not allowed" => "Hâlâ izin verilmedi",
         "This desktop can't share Dolphin's selection" => {
             "Bu masaüstü Dolphin'in seçimini paylaşamıyor"
@@ -327,6 +339,7 @@ fn turkish(english: &str) -> Option<&'static str> {
         "couldn't remove the shortcut: {}" => "kısayol kaldırılamadı: {}",
         "Saved" => "Kaydedildi",
         "Couldn't save: {}" => "Kaydedilemedi: {}",
+        "Move McGyver to Applications first." => "Önce McGyver'ı Uygulamalar klasörüne taşıyın.",
         "{} isn't running; it will use these when it starts." => {
             "{} çalışmıyor; açıldığında bunları kullanacak."
         }

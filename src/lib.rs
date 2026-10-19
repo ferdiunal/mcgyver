@@ -6,7 +6,13 @@ pub mod catalog;
 #[cfg(target_os = "linux")]
 mod clipboard;
 pub mod convert;
+#[cfg(target_os = "linux")]
 mod file_manager;
+#[cfg(not(target_os = "linux"))]
+mod file_manager {
+    /// Selecting the results in the file manager is Dolphin's alone so far.
+    pub fn select_items(_paths: Vec<std::path::PathBuf>) {}
+}
 pub mod glass;
 pub mod i18n;
 mod icon;
@@ -17,7 +23,6 @@ pub mod media;
 pub mod office;
 pub mod overlay;
 pub mod settings;
-#[cfg(target_os = "linux")]
 mod sound;
 pub mod wheel;
 
@@ -25,9 +30,12 @@ pub mod wheel;
 pub mod kde;
 #[cfg(target_os = "linux")]
 pub mod service;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub mod settings_window;
 #[cfg(target_os = "linux")]
 mod tap;
 #[cfg(target_os = "linux")]
 mod tray;
+
+#[cfg(target_os = "macos")]
+pub mod mac;

@@ -355,7 +355,39 @@ fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
+fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    unsafe extern "C" {
+        fn renamex_np(
+            from: *const std::ffi::c_char,
+            to: *const std::ffi::c_char,
+            flags: u32,
+        ) -> i32;
+    }
+
+    let c_from = CString::new(from.as_os_str().as_bytes()).map_err(io::Error::other)?;
+    let c_to = CString::new(to.as_os_str().as_bytes()).map_err(io::Error::other)?;
+    // SAFETY: both paths are valid NUL-terminated strings; RENAME_EXCL fails rather than
+    // replace what is at `to`.
+    if unsafe { renamex_np(c_from.as_ptr(), c_to.as_ptr(), 0x4) } == 0 {
+        return Ok(());
+    }
+    let error = io::Error::last_os_error();
+    // ENOTSUP, EINVAL: a file system without exclusive renames (exFAT, FAT, SMB). Naming is
+    // serialised within the app, so looking first is enough there.
+    if !matches!(error.raw_os_error(), Some(45 | 22)) {
+        return Err(error);
+    }
+    if fs::symlink_metadata(to).is_ok() {
+        return Err(io::ErrorKind::AlreadyExists.into());
+    }
+    fs::rename(from, to)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     // The application targets Linux; other builds retain the platform's native rename behavior.
     fs::rename(from, to)
