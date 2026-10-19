@@ -4,19 +4,39 @@
 use std::fs::{self, File, Metadata};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
 use std::time::SystemTime;
 
-/// How far a job has got, shared with the thread doing it.
+/// How far a job has got, shared with the thread doing it, and whether it was cancelled.
 #[derive(Debug, Default)]
 pub struct Progress {
     done: AtomicU64,
     total: AtomicU64,
     step: AtomicU32,
     steps: AtomicU32,
+    cancelled: AtomicBool,
 }
 
 impl Progress {
+    /// Asks the work to stop: it does at the next [`check`](Self::check), and puts nothing in
+    /// place after that.
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Relaxed);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Relaxed)
+    }
+
+    /// An error once the job was cancelled, for the work to stop on.
+    pub fn check(&self) -> io::Result<()> {
+        if self.is_cancelled() {
+            Err(io::Error::other("cancelled"))
+        } else {
+            Ok(())
+        }
+    }
+
     /// The work happens in `steps` passes of similar weight (unpack, then pack).
     pub fn set_steps(&self, steps: u32) {
         self.steps.store(steps, Relaxed);
@@ -64,6 +84,7 @@ impl<'a, R> Counted<'a, R> {
 
 impl<R: Read> Read for Counted<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.progress.check()?;
         let n = self.inner.read(buf)?;
         self.progress.add(n as u64);
         Ok(n)

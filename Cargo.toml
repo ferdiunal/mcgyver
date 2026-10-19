@@ -75,7 +75,7 @@ zbus = { version = "5", default-features = false, features = ["blocking-api", "a
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSView", "NSWindow"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSString"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSString", "NSURL"] }
 raw-window-handle = "0.6"
 tray-icon = { version = "0.26", default-features = false }
 # eframe's own winit, for its macOS event loop options (a menu bar app that doesn't take focus).

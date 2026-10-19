@@ -83,7 +83,7 @@ use wayland_protocols_plasma::keystate::client::org_kde_kwin_keystate::{self, Or
 
 use crate::catalog::Mode;
 use crate::clipboard::Clipboard;
-use crate::overlay::Overlay;
+use crate::overlay::{CardSpot, Overlay};
 use crate::service::Command;
 use crate::settings::{Settings, Trigger};
 
@@ -226,6 +226,8 @@ pub fn run() -> Result<(), String> {
         pointer: None,
         cursor_shapes: CursorShapeManager::bind(&globals, &qh).ok(),
         cursor: None,
+        pointer_serial: 0,
+        on_card: None,
         effects,
         can_blur: false,
         fake_input,
@@ -260,6 +262,26 @@ pub fn run() -> Result<(), String> {
     if let Some(seat) = app.seat_state.seats().next() {
         app.data_device = Some(app.data_devices.get_data_device(&qh, &seat));
         app.clipboard = Clipboard::bind(&globals, &qh, &seat);
+    }
+    // Copy and Cut on the Actions wheel put files on the clipboard as Dolphin does.
+    if let Some(clipboard) = app.clipboard.clone() {
+        let (conn, qh) = (app.conn.clone(), qh.clone());
+        crate::actions::serve_files_with(crate::actions::FileClipboard {
+            put: Box::new(move |files, cut| {
+                let paths = files
+                    .iter()
+                    .map(|f| f.canonicalize())
+                    .collect::<std::io::Result<Vec<_>>>()?;
+                let uris: Vec<String> = paths.iter().map(|p| crate::actions::file_uri(p)).collect();
+                let texts: Vec<String> = paths
+                    .iter()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .collect();
+                clipboard.offer(&conn, &qh, crate::clipboard::file_types(&uris, &texts, cut));
+                Ok(())
+            }),
+            can_cut: true,
+        });
     }
     granted.tapping.store(tapping, Ordering::Relaxed);
     granted
@@ -585,7 +607,8 @@ struct OverlaySurface {
     scale: i32,
     /// Created once there is something to draw; a bare probe uses a blank shm buffer.
     gl_surface: Option<Surface<WindowSurface>>,
-    input_full: bool,
+    /// The input region last sent: `None` for the whole surface, else the cards' outlines.
+    input: Option<Vec<[i32; 4]>>,
     blur: Option<ExtBackgroundEffectSurfaceV1>,
     /// Blur region last sent, as bands.
     blur_bands: Vec<[i32; 4]>,
@@ -624,6 +647,10 @@ struct App {
     cursor_shapes: Option<CursorShapeManager>,
     /// Sets the arrow over the overlay, which would otherwise keep whatever cursor it had.
     cursor: Option<WpCursorShapeDeviceV1>,
+    /// The pointer's last enter on the overlay, which a cursor change has to quote.
+    pointer_serial: u32,
+    /// What of a card the pointer was last on, to log when that changes.
+    on_card: Option<CardSpot>,
     effects: Option<ExtBackgroundEffectManagerV1>,
     /// The compositor said it can blur behind surfaces.
     can_blur: bool,
@@ -886,7 +913,7 @@ impl App {
             size: (0, 0),
             scale: 1,
             gl_surface: None,
-            input_full: true,
+            input: None,
             blur: None,
             blur_bands: Vec::new(),
         });
@@ -1010,16 +1037,6 @@ impl App {
             return;
         }
 
-        let want_input = self.probing || self.click_files.is_some() || self.overlay.wants_input();
-        if want_input != surface.input_full {
-            if want_input {
-                wl_surface.set_input_region(None);
-            } else if let Ok(region) = Region::new(&self.compositor) {
-                wl_surface.set_input_region(Some(region.wl_region()));
-            }
-            surface.input_full = want_input;
-        }
-
         let now = Instant::now();
         let mut input = egui::RawInput {
             screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(w as f32, h as f32))),
@@ -1035,6 +1052,35 @@ impl App {
         let overlay = &mut self.overlay;
         let mut wants = None;
         let output = self.egui.run_ui(input, |ui| wants = overlay.paint(ui, now));
+        // The whole screen while the key looks for a drag or a wheel is open; otherwise only
+        // the cards, which can be moved and closed, and everything else goes to the windows
+        // below. Committed with the frame, so it matches where the cards are drawn.
+        let want_input = self.probing || self.click_files.is_some() || self.overlay.wants_input();
+        let input_region = (!want_input).then(|| {
+            self.overlay
+                .card_rects()
+                .iter()
+                .map(|r| {
+                    let r = r.expand(1.0);
+                    let (x, y) = (r.min.x.floor() as i32, r.min.y.floor() as i32);
+                    [x, y, r.max.x.ceil() as i32 - x, r.max.y.ceil() as i32 - y]
+                })
+                .collect::<Vec<_>>()
+        });
+        if input_region != surface.input {
+            match &input_region {
+                None => wl_surface.set_input_region(None),
+                Some(rects) => {
+                    if let Ok(region) = Region::new(&self.compositor) {
+                        for [x, y, w, h] in rects {
+                            region.add(*x, *y, *w, *h);
+                        }
+                        wl_surface.set_input_region(Some(region.wl_region()));
+                    }
+                }
+            }
+            surface.input = input_region;
+        }
         if self.overlay.take_click() {
             self.clicker.play();
         }
@@ -1305,9 +1351,13 @@ impl PointerHandler for App {
                 continue;
             }
             let clicking = self.sticky && self.overlay.wants_input();
+            // Only the cards take the pointer: no wheel, nothing being looked for.
+            let on_cards =
+                !self.probing && self.click_files.is_none() && !self.overlay.wants_input();
             let at = pos2(event.position.0 as f32, event.position.1 as f32);
             match event.kind {
                 PointerEventKind::Enter { serial } => {
+                    self.pointer_serial = serial;
                     if let Some(cursor) = &self.cursor {
                         cursor.set_shape(serial, Shape::Default);
                     }
@@ -1319,7 +1369,14 @@ impl PointerHandler for App {
                     } else {
                         // A plain pointer enter means no drag is going on.
                         self.end_probe("pointer entered, no drag");
+                        if on_cards {
+                            self.card_pointer(at);
+                        }
                     }
+                }
+                PointerEventKind::Leave { .. } => {
+                    self.overlay.card_hover(None);
+                    self.repaint_now();
                 }
                 PointerEventKind::Motion { .. } if self.click_files.is_some() => {
                     self.open_click_wheel(at);
@@ -1338,9 +1395,62 @@ impl PointerHandler for App {
                     }
                     self.repaint_now();
                 }
+                PointerEventKind::Motion { .. } if on_cards => self.card_pointer(at),
+                PointerEventKind::Press {
+                    button: BTN_LEFT, ..
+                } if on_cards => {
+                    if self.overlay.card_press(at) {
+                        self.log("card pressed");
+                        self.card_pointer(at);
+                    }
+                }
+                PointerEventKind::Release {
+                    button: BTN_LEFT, ..
+                } if on_cards => {
+                    let moved = self.overlay.holding_card();
+                    self.overlay.card_release(at, Instant::now());
+                    if moved && let Some(close) = self.overlay.close_button_of(at) {
+                        self.log(format!(
+                            "card let go, close button at ({:.0}, {:.0})",
+                            close.x, close.y
+                        ));
+                    }
+                    self.card_pointer(at);
+                }
                 _ => {}
             }
         }
+    }
+}
+
+impl App {
+    /// The pointer over the cards: one being held follows it, and the cursor says what a press
+    /// would do there.
+    fn card_pointer(&mut self, at: Pos2) {
+        self.overlay.card_hover(Some(at));
+        let spot = self.overlay.card_spot(at);
+        if spot != self.on_card {
+            self.on_card = spot;
+            if let Some(close) = self.overlay.close_button_of(at) {
+                self.log(format!(
+                    "pointer on a card ({spot:?}), close button at ({:.0}, {:.0})",
+                    close.x, close.y
+                ));
+            }
+        }
+        let shape = if self.overlay.holding_card() {
+            Shape::Grabbing
+        } else {
+            match self.overlay.card_spot(at) {
+                Some(CardSpot::Close) => Shape::Pointer,
+                Some(CardSpot::Body) => Shape::Grab,
+                None => Shape::Default,
+            }
+        };
+        if let Some(cursor) = &self.cursor {
+            cursor.set_shape(self.pointer_serial, shape);
+        }
+        self.repaint_now();
     }
 }
 

@@ -3,7 +3,6 @@
 
 use std::collections::HashSet;
 use std::io;
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -231,13 +230,5 @@ fn file_uri(path: &Path) -> io::Result<String> {
     } else {
         std::env::current_dir()?.join(path)
     };
-    let mut uri = String::from("file://");
-    for &byte in absolute.as_os_str().as_bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'.' | b'_' | b'~') {
-            uri.push(byte as char);
-        } else {
-            uri.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    Ok(uri)
+    Ok(crate::actions::file_uri(&absolute))
 }

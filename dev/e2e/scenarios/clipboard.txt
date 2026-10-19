@@ -1,0 +1,42 @@
+# Copy and Cut from the Actions wheel put holiday.jpg on the clipboard as Dolphin would: as a
+# URI list, with KDE's cut mark set for Cut. All eight actions are offered here, so from the top
+# clockwise: Zip, Copy (45 degrees), Cut (90 degrees), Copy To, Move To, Copy Path, Terminal,
+# Share. What the clipboard held goes to out/clipboard-*.txt.
+log 1 shift, switch to Actions on the ring, drop on Cut
+move 300 300
+sleep 500
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 598 424 10 20
+sleep 650
+glide 765 400 15 20
+wiggle 300
+shot clipboard-cut-hover
+release
+key 42 0
+sleep 1500
+shell wl-paste --list-types > "$OUT/clipboard-cut-types.txt"; wl-paste --no-newline --type application/x-kde-cutselection > "$OUT/clipboard-cut-mark.txt"; wl-paste --type text/uri-list > "$OUT/clipboard-cut-uris.txt"
+log 2 again, drop on Copy
+move 300 300
+sleep 500
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 598 424 10 20
+sleep 650
+glide 728 312 15 20
+wiggle 300
+release
+key 42 0
+sleep 1500
+shell wl-paste --no-newline --type application/x-kde-cutselection > "$OUT/clipboard-copy-mark.txt"; wl-paste --type text/uri-list > "$OUT/clipboard-copy-uris.txt"
+log done

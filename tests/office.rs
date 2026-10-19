@@ -252,6 +252,24 @@ fn pdf_tools_rotate_split_compress_and_merge() {
 }
 
 #[test]
+fn merging_counts_files_and_a_cancel_leaves_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let (a, b) = (dir.path().join("a.pdf"), dir.path().join("b.pdf"));
+    write_pdf(&a, 1);
+    write_pdf(&b, 2);
+    let progress = Progress::default();
+    let merged = convert::merge_pdfs(&[a.clone(), b.clone()], &progress).unwrap();
+    assert_eq!(progress.fraction(), 1.0);
+    fs::remove_file(merged).unwrap();
+
+    let cancelled = Progress::default();
+    cancelled.cancel();
+    let error = convert::merge_pdfs(&[a, b], &cancelled).unwrap_err();
+    assert_eq!(error.to_string(), "cancelled");
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 2);
+}
+
+#[test]
 fn signed_pdfs_are_left_alone() {
     let dir = tempfile::tempdir().unwrap();
     // A field waiting for a signature is fine to change.

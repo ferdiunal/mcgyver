@@ -27,7 +27,7 @@ use tray_icon::{TrayIcon, TrayIconBuilder};
 
 use crate::catalog::Mode;
 use crate::i18n::tr;
-use crate::overlay::Overlay;
+use crate::overlay::{CardSpot, Overlay};
 use crate::settings::{APP_ID, APP_NAME, Settings, Trigger};
 
 /// The overlay window: the wheel, with room above it for the cards that stack up.
@@ -287,6 +287,36 @@ fn teach_appkit() {
     }
 }
 
+/// Copy on the Actions wheel puts the files on the pasteboard as Finder's Copy does. Finder has
+/// no Cut for files (Option-Command-V moves what was copied), so neither has the wheel.
+fn serve_files() {
+    use objc2::runtime::ProtocolObject;
+    use objc2_app_kit::{NSPasteboard, NSPasteboardWriting};
+    use objc2_foundation::{NSArray, NSString, NSURL};
+    crate::actions::serve_files_with(crate::actions::FileClipboard {
+        put: Box::new(|files, _cut| {
+            let urls = files
+                .iter()
+                .map(|file| {
+                    let path = file.canonicalize()?;
+                    let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
+                    Ok(ProtocolObject::<dyn NSPasteboardWriting>::from_retained(
+                        url,
+                    ))
+                })
+                .collect::<std::io::Result<Vec<_>>>()?;
+            let board = NSPasteboard::generalPasteboard();
+            board.clearContents();
+            if board.writeObjects(&NSArray::from_retained_slice(&urls)) {
+                Ok(())
+            } else {
+                Err(std::io::Error::other("couldn't reach the clipboard"))
+            }
+        }),
+        can_cut: false,
+    });
+}
+
 /// The overlay's NSWindow, from the view eframe draws in.
 fn overlay_window(cc: &eframe::CreationContext) -> Option<Retained<NSWindow>> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -387,9 +417,11 @@ fn settings_changed_at() -> Option<SystemTime> {
 struct Shared {
     input: Input,
     trigger: Option<Trigger>,
-    /// The window is up, or a drag of files may be starting under the key: read the pointer
-    /// often.
+    /// The window is up, or a drag of files may be starting under the key, or a card is under
+    /// the pointer: read the pointer often.
     tracking: bool,
+    /// Cards are up: the pointer coming onto one has to be noticed.
+    cards: bool,
     menu: Vec<MenuId>,
     settings_changed: bool,
 }
@@ -403,9 +435,9 @@ fn watch(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
             let mut settings_at = settings_changed_at();
             let mut looked_at = Instant::now();
             loop {
-                let (trigger, tracking) = {
+                let (trigger, tracking, cards) = {
                     let s = shared.lock().unwrap_or_else(|e| e.into_inner());
-                    (s.trigger.unwrap_or(Trigger::Shift), s.tracking)
+                    (s.trigger.unwrap_or(Trigger::Shift), s.tracking, s.cards)
                 };
                 let input = read_input(trigger);
                 let mut wake = false;
@@ -414,7 +446,7 @@ fn watch(shared: Arc<Mutex<Shared>>, ctx: egui::Context) {
                     let before = s.input;
                     wake |= input.trigger_down != before.trigger_down
                         || input.button_down != before.button_down
-                        || (tracking && input.pointer != before.pointer);
+                        || ((tracking || cards) && input.pointer != before.pointer);
                     s.input = input;
                     while let Ok(event) = MenuEvent::receiver().try_recv() {
                         s.menu.push(event.id);
@@ -525,6 +557,7 @@ pub fn run() -> Result<(), String> {
         Box::new(move |cc| {
             crate::glass::install_fonts(&cc.egui_ctx);
             teach_appkit();
+            serve_files();
             if let (Some(mtm), Some(window)) = (MainThreadMarker::new(), overlay_window(cc)) {
                 float_everywhere(&window);
                 reintroduce_delegates(mtm, &window);
@@ -549,6 +582,7 @@ pub fn run() -> Result<(), String> {
                 origin: None,
                 last: Input::default(),
                 pressed_at: None,
+                on_card: false,
                 frames: 0,
             }))
         }),
@@ -579,6 +613,8 @@ struct App {
     last: Input,
     /// When the key went down during a drag, while files are still looked for.
     pressed_at: Option<Instant>,
+    /// The window takes clicks for a card under the pointer (no drag going on).
+    on_card: bool,
     /// Frames painted, up to the one after eframe showed the window.
     frames: u8,
 }
@@ -601,6 +637,7 @@ impl App {
         }
         ctx.send_viewport_cmd(ViewportCommand::MousePassthrough(false));
         self.active = true;
+        self.on_card = false;
     }
 
     /// Lets clicks and drags through to whatever is below.
@@ -609,6 +646,11 @@ impl App {
             ctx.send_viewport_cmd(ViewportCommand::MousePassthrough(true));
             self.active = false;
         }
+    }
+
+    /// The pointer in the window's points.
+    fn local(&self, pointer: Pos2) -> Pos2 {
+        pointer - self.origin.unwrap_or_default().to_vec2()
     }
 
     /// Whether files are being dragged: the drag pasteboard changed since the button last came
@@ -741,6 +783,16 @@ impl eframe::App for App {
         if self.active && !self.overlay.wants_input() && (!self.held || !input.button_down) {
             self.let_through(ctx);
         }
+        // No drag: the window takes clicks only where a card is, to move or close it.
+        if !self.active {
+            let over = self.origin.is_some()
+                && (self.overlay.holding_card()
+                    || self.overlay.card_spot(self.local(input.pointer)).is_some());
+            if over != self.on_card {
+                ctx.send_viewport_cmd(ViewportCommand::MousePassthrough(!over));
+                self.on_card = over;
+            }
+        }
         self.last = input;
 
         if self.quitting && self.overlay.is_idle() {
@@ -749,7 +801,9 @@ impl eframe::App for App {
         self.shared
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .tracking = self.active || self.pressed_at.is_some();
+            .tracking = self.active || self.pressed_at.is_some() || self.on_card;
+        let cards = !self.overlay.card_rects().is_empty();
+        self.shared.lock().unwrap_or_else(|e| e.into_inner()).cards = cards;
     }
 
     /// The drag, the drop, and the wheel and cards.
@@ -768,7 +822,7 @@ impl eframe::App for App {
                 ctx.request_repaint();
             }
         }
-        let local = self.last.pointer - self.origin.unwrap_or_default().to_vec2();
+        let local = self.local(self.last.pointer);
         let (hovered, dropped) = ui.input(|i| {
             let hovered: Vec<PathBuf> = i
                 .raw
@@ -799,11 +853,46 @@ impl eframe::App for App {
             self.let_through(&ctx);
         }
 
+        if !self.active && !self.overlay.wants_input() {
+            self.cards(ui, local, now);
+        }
+
         if self.overlay.take_click() {
             self.clicker.play();
         }
         if let Some(wait) = self.overlay.paint(ui, now) {
             ctx.request_repaint_after(wait);
         }
+    }
+}
+
+impl App {
+    /// A card under the pointer: holding it moves it, its close button cancels or puts it away.
+    fn cards(&mut self, ui: &egui::Ui, local: Pos2, now: Instant) {
+        self.overlay.card_hover(self.on_card.then_some(local));
+        if !self.on_card {
+            return;
+        }
+        let (pressed, released) =
+            ui.input(|i| (i.pointer.primary_pressed(), i.pointer.primary_released()));
+        if pressed {
+            self.overlay.card_press(local);
+        }
+        if released {
+            self.overlay.card_release(local, now);
+            // The click made this app the active one; give the keyboard back.
+            if let Some(mtm) = MainThreadMarker::new() {
+                NSApplication::sharedApplication(mtm).deactivate();
+            }
+        }
+        ui.ctx().set_cursor_icon(if self.overlay.holding_card() {
+            egui::CursorIcon::Grabbing
+        } else {
+            match self.overlay.card_spot(local) {
+                Some(CardSpot::Close) => egui::CursorIcon::PointingHand,
+                Some(CardSpot::Body) => egui::CursorIcon::Grab,
+                None => egui::CursorIcon::Default,
+            }
+        });
     }
 }

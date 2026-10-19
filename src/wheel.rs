@@ -8,7 +8,7 @@
 
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
-use egui::{Color32, FontId, Id, Mesh, Painter, Pos2, Rect, Shape, Stroke, Ui, Vec2, vec2};
+use egui::{Color32, FontId, Id, Mesh, Painter, Pos2, Rect, Shape, Stroke, Ui, Vec2, pos2, vec2};
 
 use crate::catalog::{Choice, Mode};
 use crate::glass::{self, ACCENT, ACCENT_LIGHT, TEXT, TEXT_MUTED};
@@ -28,6 +28,9 @@ const CORNER: f32 = 14.0;
 const GROW: f32 = 4.0;
 /// Distance between the disc and the caption under it.
 const CAPTION_GAP: f32 = 14.0;
+/// Room kept clear around a wedge's label, and how small a long label may get to fit.
+const LABEL_PAD: f32 = 12.0;
+const MIN_LABEL: f32 = 11.0;
 
 const WEDGE: Color32 = Color32::from_rgb(248, 248, 250);
 const WEDGE_SHADE: Color32 = Color32::from_rgb(236, 236, 240);
@@ -171,10 +174,59 @@ fn paint_wedges(ui: &Ui, center: Pos2, s: f32, v: &View) {
             .gamma_multiply((0.1 + 0.1 * h) * a);
         p.add(Shape::closed_line(outline, Stroke::new(1.0, edge)));
 
-        let dir = Vec2::angled((a0 + a1) / 2.0);
-        let at = center + dir * ((RING_R0 + RING_R1) / 2.0 * s + 2.0 * h);
+        let mid = (a0 + a1) / 2.0;
+        let r_mid = (RING_R0 + RING_R1) / 2.0 * s;
+        let at = center + Vec2::angled(mid) * (r_mid + 2.0 * h);
         let color = TEXT.lerp_to_gamma(Color32::WHITE, h).gamma_multiply(a);
-        glass::text(p, at, tr(choice.label), 15.0 + h, color, true);
+        // Across the wedge where it points up or down, along it where it points sideways.
+        let across = 2.0 * r_mid * ((a1 - a0) / 2.0).sin();
+        let along = (RING_R1 - RING_R0) * s;
+        let room = 1.0 / ((mid.cos() / along).powi(2) + (mid.sin() / across).powi(2)).sqrt();
+        wedge_label(
+            p,
+            at,
+            tr(choice.label),
+            15.0 + h,
+            color,
+            room - LABEL_PAD * s,
+        );
+    }
+}
+
+/// A wedge's label within `room` points: on one line, or on two split at the space nearest
+/// its middle, and only then smaller, down to `MIN_LABEL`.
+fn wedge_label(p: &Painter, at: Pos2, label: &str, size: f32, color: Color32, room: f32) {
+    let width = |s: &str, size: f32| glass::text_width(p, s, size, true);
+    if width(label, size) <= room {
+        glass::text(p, at, label, size, color, true);
+        return;
+    }
+    let middle = label.len() / 2;
+    let split = label
+        .match_indices(' ')
+        .map(|(i, _)| i)
+        .min_by_key(|i| i.abs_diff(middle));
+    let lines: Vec<&str> = match split {
+        Some(i) => vec![&label[..i], &label[i + 1..]],
+        None => vec![label],
+    };
+    let widest = lines.iter().map(|l| width(l, size)).fold(0.0, f32::max);
+    let size = if widest > room {
+        (size * room / widest).max(MIN_LABEL)
+    } else {
+        size
+    };
+    let step = size * 1.1;
+    let top = at.y - step * (lines.len() - 1) as f32 / 2.0;
+    for (k, line) in lines.iter().enumerate() {
+        glass::text(
+            p,
+            pos2(at.x, top + step * k as f32),
+            line,
+            size,
+            color,
+            true,
+        );
     }
 }
 
@@ -224,22 +276,17 @@ fn paint_hub(p: &Painter, center: Pos2, s: f32, v: &View) {
             }
             p.add(strip(&outer, &inner, |_| fill.gamma_multiply(a)));
         }
-        // Labels follow the ring, turned so they read left to right.
-        let mid = (a0 + a1) / 2.0;
-        let at = center + Vec2::angled(mid) * (r0 + r1) / 2.0;
-        let mut turn = mid + FRAC_PI_2;
-        if turn > FRAC_PI_2 && turn < 3.0 * FRAC_PI_2 {
-            turn -= PI;
-        }
+        // Labels bend with the ring and read left to right.
         let color = if current { TEXT } else { TEXT_MUTED };
-        glass::text_turned(
+        glass::text_on_arc(
             p,
-            at,
+            center,
+            (r0 + r1) / 2.0,
+            (a0 + a1) / 2.0,
             tr(mode.title()),
             9.5 * s,
             color.gamma_multiply(a),
             true,
-            turn,
         );
     }
 

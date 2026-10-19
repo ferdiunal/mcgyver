@@ -31,6 +31,11 @@ const CARD_FADE: f32 = 0.3;
 const PROGRESS_TICK: Duration = Duration::from_millis(50);
 /// Vertical distance between cards stacked at the same spot.
 const CARD_STACK: f32 = 60.0;
+/// The close button at a card's right end: drawn radius, and how near counts as on it.
+const CLOSE_R: f32 = 10.0;
+const CLOSE_HIT: f32 = 14.0;
+/// A finished card the pointer was on stays this long after it leaves, before it fades.
+const KEEP_AFTER_HOVER: Duration = Duration::from_millis(800);
 /// Keeps the whole disc on screen when the drag is near an edge.
 const EDGE_MARGIN: f32 = wheel::DISC_R + 16.0;
 
@@ -127,6 +132,37 @@ struct Card {
     title: String,
     shown_at: Instant,
     selection_requested: bool,
+    /// Where it was last drawn, to be held or closed there.
+    rect: Rect,
+    /// Last time the pointer was on it: a finished card waits for it to go before fading.
+    kept_at: Option<Instant>,
+    /// Put away with its close button once done: fades out from then.
+    closed_at: Option<Instant>,
+}
+
+impl Card {
+    fn close_button(&self) -> Pos2 {
+        self.rect.right_center() - vec2(self.rect.height() / 2.0, 0.0)
+    }
+
+    fn spot(&self, pos: Pos2) -> Option<CardSpot> {
+        if (pos - self.close_button()).length() <= CLOSE_HIT {
+            Some(CardSpot::Close)
+        } else if self.rect.contains(pos) {
+            Some(CardSpot::Body)
+        } else {
+            None
+        }
+    }
+}
+
+/// What is under the pointer on a card.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CardSpot {
+    /// The card itself: holding it moves it.
+    Body,
+    /// Its close button: cancels the work, or puts a finished card away.
+    Close,
 }
 
 #[derive(Default)]
@@ -142,6 +178,12 @@ pub struct Overlay {
     /// Something changed that deserves a click: the wheel opened, switched modes, moved onto
     /// another wedge or picked one.
     clicked: bool,
+    /// The pointer over the overlay while no wheel takes it, for the cards.
+    hover: Option<Pos2>,
+    /// The card being moved, and where on it the pointer holds it.
+    holding: Option<(u32, Vec2)>,
+    /// The card whose close button is pressed, until the button comes up.
+    closing: Option<u32>,
     /// Skip time-based egui animations (for screenshots).
     pub still: bool,
 }
@@ -175,6 +217,10 @@ impl Overlay {
         let choices = catalog::choices(&files, mode);
         let previews = choices.iter().map(|c| preview(&files, *c)).collect();
         self.serial += 1;
+        // The wheel takes the pointer now; a card held or pressed is let go.
+        self.hover = None;
+        self.holding = None;
+        self.closing = None;
         self.wheel = Some(Wheel {
             serial: self.serial,
             center,
@@ -288,6 +334,89 @@ impl Overlay {
         }
     }
 
+    /// Where the cards were last drawn. They take the pointer; the rest of the screen lets it
+    /// through while no wheel is open.
+    pub fn card_rects(&self) -> Vec<Rect> {
+        self.cards
+            .iter()
+            .map(|c| c.rect)
+            .filter(|r| r.is_positive())
+            .collect()
+    }
+
+    /// What is under `pos` on the topmost card there.
+    pub fn card_spot(&self, pos: Pos2) -> Option<CardSpot> {
+        self.cards.iter().rev().find_map(|c| c.spot(pos))
+    }
+
+    /// The close button of the card under `pos`.
+    pub fn close_button_of(&self, pos: Pos2) -> Option<Pos2> {
+        self.cards
+            .iter()
+            .rev()
+            .find(|c| c.spot(pos).is_some())
+            .map(Card::close_button)
+    }
+
+    /// Whether a card is being moved.
+    pub fn holding_card(&self) -> bool {
+        self.holding.is_some()
+    }
+
+    /// The pointer moved to `pos` (`None`: it left). A card being held follows it.
+    pub fn card_hover(&mut self, pos: Option<Pos2>) {
+        self.hover = pos;
+        if let (Some(pos), Some((batch, offset))) = (pos, self.holding)
+            && let Some(card) = self.cards.iter_mut().find(|c| c.batch == batch)
+        {
+            card.at = pos - offset;
+        }
+    }
+
+    /// The button went down at `pos`: takes hold of the card there, or presses its close
+    /// button. Returns whether it was on a card.
+    pub fn card_press(&mut self, pos: Pos2) -> bool {
+        self.hover = Some(pos);
+        let Some(card) = self.cards.iter().rev().find(|c| c.spot(pos).is_some()) else {
+            return false;
+        };
+        match card.spot(pos) {
+            Some(CardSpot::Close) => self.closing = Some(card.batch),
+            _ => self.holding = Some((card.batch, pos - card.at)),
+        }
+        true
+    }
+
+    /// The button came up at `pos`: a card being moved stays where it is, and a close button
+    /// still under the pointer closes its card.
+    pub fn card_release(&mut self, pos: Pos2, now: Instant) {
+        self.holding = None;
+        let Some(batch) = self.closing.take() else {
+            return;
+        };
+        let on_it = self
+            .cards
+            .iter()
+            .any(|c| c.batch == batch && c.spot(pos) == Some(CardSpot::Close));
+        if on_it {
+            self.close_card(batch, now);
+        }
+    }
+
+    /// Cancels the card's work, or, once it is done, puts the card away.
+    fn close_card(&mut self, batch: u32, now: Instant) {
+        let mut working = false;
+        for job in self.jobs.iter_mut().filter(|j| j.batch == batch) {
+            if job.finished_at(now).is_none() {
+                job.cancel(now);
+                working = true;
+            }
+        }
+        if !working && let Some(card) = self.cards.iter_mut().find(|c| c.batch == batch) {
+            card.closed_at = Some(now);
+        }
+    }
+
     /// Where the last frame drew glass; the platform blurs the backdrop there.
     pub fn glass(&self) -> &[GlassShape] {
         &self.glass
@@ -330,6 +459,9 @@ impl Overlay {
             title: w.previews[index].clone(),
             shown_at: now + FLASH,
             selection_requested: false,
+            rect: Rect::NOTHING,
+            kept_at: None,
+            closed_at: None,
         });
     }
 
@@ -382,14 +514,27 @@ impl Overlay {
         }
 
         let (jobs, glass) = (&self.jobs, &mut self.glass);
-        self.cards
-            .retain(|card| match paint_card(ui, card, jobs, now, glass) {
+        let (hover, holding) = (self.hover, self.holding.map(|(batch, _)| batch));
+        self.cards.retain_mut(|card| {
+            let touched =
+                holding == Some(card.batch) || hover.is_some_and(|h| card.rect.contains(h));
+            if touched {
+                card.kept_at = Some(now);
+            }
+            match paint_card(ui, card, jobs, now, hover, glass) {
                 Some(wait) => {
                     soon(wait);
                     true
                 }
                 None => false,
-            });
+            }
+        });
+        if self
+            .holding
+            .is_some_and(|(batch, _)| !self.cards.iter().any(|c| c.batch == batch))
+        {
+            self.holding = None;
+        }
         let cards = &self.cards;
         self.jobs
             .retain(|j| cards.iter().any(|c| c.batch == j.batch));
@@ -439,12 +584,14 @@ fn paint_wheel(
     }
 }
 
-/// Progress card. Returns how soon it needs repainting, or `None` once it has faded out.
+/// Progress card, with a close button at its right end. Returns how soon it needs repainting,
+/// or `None` once it has faded out. Records where it was drawn in `card.rect`.
 fn paint_card(
     ui: &Ui,
-    card: &Card,
+    card: &mut Card,
     jobs: &[Job],
     now: Instant,
+    hover: Option<Pos2>,
     shapes: &mut Vec<GlassShape>,
 ) -> Option<Duration> {
     if now < card.shown_at {
@@ -454,14 +601,24 @@ fn paint_card(
     let finished: Vec<Instant> = batch.iter().filter_map(|j| j.finished_at(now)).collect();
     let done_at = (finished.len() == batch.len())
         .then(|| finished.iter().copied().max().unwrap_or(card.shown_at));
+    let cancelled = batch.iter().any(|j| j.is_cancelled());
     let errors: Vec<String> = batch.iter().filter_map(|j| j.error()).collect();
-    let hold = if errors.is_empty() {
+    let hold = if errors.is_empty() || cancelled {
         CARD_HOLD
     } else {
         CARD_HOLD_FAILED
     };
-    let fade = match done_at {
-        Some(at) if now >= at + hold => 1.0 - (now - at - hold).as_secs_f32() / CARD_FADE,
+    // Fades once it has been up long enough and the pointer has left it, or at once if closed.
+    let fade_from = match (card.closed_at, done_at) {
+        (Some(closed), _) => Some(closed),
+        (None, Some(at)) => Some(
+            card.kept_at
+                .map_or(at + hold, |kept| (at + hold).max(kept + KEEP_AFTER_HOVER)),
+        ),
+        (None, None) => None,
+    };
+    let fade = match fade_from {
+        Some(from) if now >= from => 1.0 - (now - from).as_secs_f32() / CARD_FADE,
         _ => 1.0,
     };
     if fade <= 0.0 {
@@ -472,6 +629,7 @@ fn paint_card(
     let alpha = appear * fade;
 
     let subtitle = match done_at {
+        Some(_) if cancelled => tr("Cancelled").to_owned(),
         Some(_) if !errors.is_empty() => {
             let reason = capitalised(&translated_error(&errors[0]));
             if batch.len() > 1 {
@@ -507,8 +665,9 @@ fn paint_card(
         TEXT_MUTED.gamma_multiply(alpha),
     );
     let text_w = title.size().x.max(sub.size().x);
-    let size = vec2(56.0 + text_w + 26.0, 52.0) * (0.85 + 0.15 * appear);
+    let size = vec2(56.0 + text_w + 26.0 + 2.0 * CLOSE_R + 8.0, 52.0) * (0.85 + 0.15 * appear);
     let rect = Rect::from_center_size(card.at, size);
+    card.rect = rect;
     let radius = size.y / 2.0;
     glass::capsule(p, rect, alpha);
     shapes.push(GlassShape::Capsule(rect));
@@ -517,10 +676,12 @@ fn paint_card(
     match done_at {
         Some(at) => {
             let pop = back_out((now.duration_since(at).as_secs_f32() / 0.25).min(1.0));
-            if errors.is_empty() {
+            if cancelled {
+                cross_mark(p, icon, 14.0 * pop, TEXT_MUTED, alpha);
+            } else if errors.is_empty() {
                 check_mark(p, icon, 14.0 * pop, alpha);
             } else {
-                cross_mark(p, icon, 14.0 * pop, alpha);
+                cross_mark(p, icon, 14.0 * pop, RED, alpha);
             }
         }
         None => {
@@ -537,15 +698,32 @@ fn paint_card(
         TEXT,
     );
     p.galley(Pos2::new(text_x, rect.center().y + 2.0), sub, TEXT_MUTED);
+    close_button(
+        p,
+        card.close_button(),
+        hover.is_some_and(|h| card.spot(h) == Some(CardSpot::Close)),
+        alpha,
+    );
 
-    Some(match done_at {
+    Some(match (done_at, fade_from) {
         // Animate the pop, then sit still until the fade.
-        Some(at) if now < at + Duration::from_millis(250) => Duration::ZERO,
-        Some(at) if now < at + hold => at + hold - now,
-        Some(_) => Duration::ZERO,
-        None if batch.iter().any(|j| !j.is_simulated()) => PROGRESS_TICK,
-        None => Duration::ZERO,
+        (Some(at), _) if now < at + Duration::from_millis(250) => Duration::ZERO,
+        (_, Some(from)) if now < from => from - now,
+        (Some(_), _) => Duration::ZERO,
+        (None, _) if batch.iter().any(|j| !j.is_simulated()) => PROGRESS_TICK,
+        (None, _) => Duration::ZERO,
     })
+}
+
+/// The × that cancels or puts a card away; filled in while the pointer is on it.
+fn close_button(p: &Painter, c: Pos2, hovered: bool, alpha: f32) {
+    if hovered {
+        p.circle_filled(c, CLOSE_R, Color32::BLACK.gamma_multiply(0.08 * alpha));
+    }
+    let s = CLOSE_R * 0.38;
+    let stroke = Stroke::new(1.6, TEXT_MUTED.gamma_multiply(alpha));
+    p.line_segment([c + vec2(-s, -s), c + vec2(s, s)], stroke);
+    p.line_segment([c + vec2(-s, s), c + vec2(s, -s)], stroke);
 }
 
 /// An error in the current language: whole, or after the "file name: " a merge puts first.
@@ -595,8 +773,8 @@ fn progress_ring(p: &Painter, c: Pos2, r: f32, progress: f32, alpha: f32) {
     }
 }
 
-fn cross_mark(p: &Painter, c: Pos2, r: f32, alpha: f32) {
-    p.circle_filled(c, r, RED.gamma_multiply(alpha));
+fn cross_mark(p: &Painter, c: Pos2, r: f32, color: Color32, alpha: f32) {
+    p.circle_filled(c, r, color.gamma_multiply(alpha));
     let s = r * 0.38;
     let stroke = Stroke::new(2.4, Color32::WHITE.gamma_multiply(alpha));
     p.line_segment([c + vec2(-s, -s), c + vec2(s, s)], stroke);
@@ -896,6 +1074,68 @@ mod tests {
         assert_eq!(wheel.pointer, Some(center + by));
         assert_eq!(overlay.cards.len(), 1);
         assert_eq!(overlay.cards[0].at, center + by);
+    }
+
+    #[test]
+    fn a_card_can_be_moved_and_closed() {
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1600.0, 1000.0));
+        let center = screen.center();
+        let t0 = Instant::now();
+        let ms = Duration::from_millis;
+        let mut overlay = Overlay::default();
+        overlay.open(
+            vec![PathBuf::from("holiday.jpg")],
+            center,
+            screen,
+            Mode::Convert,
+            t0,
+        );
+        overlay.drag_moved(
+            center + vec2(0.0, -(wheel::RING_R0 + wheel::RING_R1) / 2.0),
+            t0,
+        );
+        assert!(overlay.drop(t0));
+        let ctx = egui::Context::default();
+        let paint = |overlay: &mut Overlay, now: Instant| {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                overlay.paint(ui, now);
+            });
+            output.textures_delta.clear();
+        };
+        let t1 = t0 + FLASH + ms(10);
+        paint(&mut overlay, t1);
+        let rect = overlay.card_rects()[0];
+
+        // Held by its middle, it follows the pointer and stays where it is let go.
+        let grip = rect.left_center() + vec2(40.0, 0.0);
+        assert_eq!(overlay.card_spot(grip), Some(CardSpot::Body));
+        assert!(overlay.card_press(grip));
+        assert!(overlay.holding_card());
+        let by = vec2(-200.0, 150.0);
+        overlay.card_hover(Some(grip + by));
+        overlay.card_release(grip + by, t1);
+        assert!(!overlay.holding_card());
+        paint(&mut overlay, t1);
+        assert!((overlay.card_rects()[0].center() - (rect.center() + by)).length() < 0.5);
+        assert!(!overlay.card_press(grip), "nothing is left where it was");
+
+        // Its close button: let go elsewhere, nothing; let go on it, it closes.
+        let close = overlay.cards[0].close_button();
+        assert_eq!(overlay.card_spot(close), Some(CardSpot::Close));
+        overlay.card_press(close);
+        overlay.card_release(close + vec2(0.0, 80.0), t1);
+        assert!(overlay.cards[0].closed_at.is_none());
+        assert!(!overlay.jobs.iter().any(|j| j.is_cancelled()));
+        overlay.card_press(close);
+        overlay.card_release(close, t1);
+        assert!(
+            overlay.cards[0].closed_at.is_some() || overlay.jobs.iter().all(|j| j.is_cancelled())
+        );
+
+        // Then it goes, once the pointer has left it.
+        overlay.card_hover(None);
+        paint(&mut overlay, t1 + ms(10_000));
+        assert!(overlay.card_rects().is_empty());
     }
 
     #[test]

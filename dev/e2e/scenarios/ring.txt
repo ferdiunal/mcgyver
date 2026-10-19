@@ -15,7 +15,7 @@ sleep 150
 shot ring-dwell
 sleep 500
 shot ring-switched
-log 2 out to Zip (wedge 0 of 6) and drop
+log 2 out to Zip (wedge 0 of 8) and drop
 glide 640 282 15 20
 wiggle 300
 shot ring-zip-hover

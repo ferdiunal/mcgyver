@@ -47,7 +47,7 @@ fn copy_keeps_the_original_and_move_takes_it() {
 
     let said = actions::run(
         std::slice::from_ref(&note),
-        Action::Copy,
+        Action::CopyTo,
         &Progress::default(),
     )
     .unwrap();
@@ -57,7 +57,7 @@ fn copy_keeps_the_original_and_move_takes_it() {
 
     let said = actions::run(
         std::slice::from_ref(&note),
-        Action::Move,
+        Action::MoveTo,
         &Progress::default(),
     )
     .unwrap();
@@ -72,7 +72,7 @@ fn copy_keeps_the_original_and_move_takes_it() {
     assert!(
         actions::run(
             std::slice::from_ref(&other),
-            Action::Move,
+            Action::MoveTo,
             &Progress::default()
         )
         .is_err()

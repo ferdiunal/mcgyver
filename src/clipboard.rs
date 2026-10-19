@@ -1,6 +1,6 @@
 //! The clipboard through `ext-data-control`, which lets a client without focus read and set it.
 //! Used to borrow it for a moment: save what is there, let Dolphin copy its selection, read that,
-//! and put the saved contents back.
+//! and put the saved contents back; and to put files on it, copied or cut, as Dolphin does.
 
 use std::fs::File;
 use std::io::{Read, Write};
@@ -145,22 +145,54 @@ impl Clipboard {
         State: Dispatch<ExtDataControlSourceV1, SourceData> + 'static,
     {
         match saved.0 {
-            Some(types) if !types.is_empty() => {
-                let types = Arc::new(types);
-                let source = self
-                    .manager
-                    .create_data_source(qh, SourceData(types.clone()));
-                for (mime, _) in types.iter() {
-                    source.offer(mime.clone());
-                }
-                self.device.set_selection(Some(&source));
-            }
+            Some(types) if !types.is_empty() => self.offer(conn, qh, types),
             // Unreadable contents can't come back; an empty clipboard stays empty.
             Some(_) => {}
-            None => self.device.set_selection(None),
+            None => {
+                self.device.set_selection(None);
+                let _ = conn.flush();
+            }
         }
+    }
+
+    /// Takes the clipboard with `types` (each a MIME type and its contents), served from this
+    /// process until something else takes it.
+    pub fn offer<State>(
+        &self,
+        conn: &Connection,
+        qh: &QueueHandle<State>,
+        types: Vec<(String, Vec<u8>)>,
+    ) where
+        State: Dispatch<ExtDataControlSourceV1, SourceData> + 'static,
+    {
+        let types = Arc::new(types);
+        let source = self
+            .manager
+            .create_data_source(qh, SourceData(types.clone()));
+        for (mime, _) in types.iter() {
+            source.offer(mime.clone());
+        }
+        self.device.set_selection(Some(&source));
         let _ = conn.flush();
     }
+}
+
+/// Files as Dolphin puts them on the clipboard: their URIs, KDE's mark that they were cut (a
+/// paste then moves them), GNOME's form of both, and their paths as text.
+pub fn file_types(uris: &[String], paths: &[String], cut: bool) -> Vec<(String, Vec<u8>)> {
+    let uri_list: String = uris.iter().map(|u| format!("{u}\r\n")).collect();
+    let gnome = format!("{}\n{}", if cut { "cut" } else { "copy" }, uris.join("\n"));
+    let text = paths.join("\n");
+    vec![
+        ("text/uri-list".into(), uri_list.into_bytes()),
+        (
+            "application/x-kde-cutselection".into(),
+            if cut { b"1".to_vec() } else { b"0".to_vec() },
+        ),
+        ("x-special/gnome-copied-files".into(), gnome.into_bytes()),
+        ("text/plain;charset=utf-8".into(), text.clone().into_bytes()),
+        ("text/plain".into(), text.into_bytes()),
+    ]
 }
 
 fn mimes(offer: &ExtDataControlOfferV1) -> Vec<String> {
@@ -276,5 +308,38 @@ impl<State> Dispatch2<ExtDataControlSourceV1, State> for SourceData {
             ext_data_control_source_v1::Event::Cancelled => source.destroy(),
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn files_go_on_the_clipboard_as_dolphin_puts_them() {
+        let uris = [
+            "file:///home/a/x%20y.jpg".to_owned(),
+            "file:///home/a/z".to_owned(),
+        ];
+        let paths = ["/home/a/x y.jpg".to_owned(), "/home/a/z".to_owned()];
+        let get = |types: &[(String, Vec<u8>)], mime: &str| {
+            let (_, bytes) = types.iter().find(|(m, _)| m == mime).unwrap();
+            String::from_utf8(bytes.clone()).unwrap()
+        };
+        let cut = file_types(&uris, &paths, true);
+        assert_eq!(
+            get(&cut, "text/uri-list"),
+            "file:///home/a/x%20y.jpg\r\nfile:///home/a/z\r\n"
+        );
+        assert_eq!(get(&cut, "application/x-kde-cutselection"), "1");
+        assert_eq!(
+            get(&cut, "x-special/gnome-copied-files"),
+            "cut\nfile:///home/a/x%20y.jpg\nfile:///home/a/z"
+        );
+        assert_eq!(get(&cut, "text/plain"), "/home/a/x y.jpg\n/home/a/z");
+
+        let copy = file_types(&uris, &paths, false);
+        assert_eq!(get(&copy, "application/x-kde-cutselection"), "0");
+        assert!(get(&copy, "x-special/gnome-copied-files").starts_with("copy\n"));
     }
 }

@@ -36,6 +36,18 @@ fn main() {
         let num = |i: usize| w[i].parse::<f64>().unwrap();
         match w.first().copied() {
             Some("move") => { pos = (num(1), num(2)); fi.pointer_motion_absolute(pos.0, pos.1); }
+            // `movefrom NAME`: to the "x y" a `shell` step wrote to $OUT/NAME.
+            Some("movefrom") => {
+                let file = std::path::Path::new(&std::env::var("OUT").unwrap()).join(w[1]);
+                let text = std::fs::read_to_string(&file).unwrap_or_default();
+                let xy: Vec<f64> = text.split_whitespace().filter_map(|n| n.parse().ok()).collect();
+                if let [x, y] = xy[..] {
+                    pos = (x, y);
+                    fi.pointer_motion_absolute(x, y);
+                } else {
+                    println!("[drive] no position in {}", file.display());
+                }
+            }
             Some("glide") => {
                 let (x, y, steps, ms) = (num(1), num(2), num(3) as usize, num(4) as u64);
                 let from = pos;

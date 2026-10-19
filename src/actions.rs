@@ -1,7 +1,8 @@
 //! The Actions wheel: things done with the dropped files as a whole, rather than to each one.
 //! They lean on the desktop's own tools: a folder picker (kdialog or zenity), the clipboard
 //! (wl-copy or Klipper), a terminal, and KDE Connect for sending to a phone. On macOS: AppleScript's
-//! folder picker, pbcopy and Terminal.
+//! folder picker, pbcopy and Terminal. Files go on the clipboard the way the platform hands it
+//! over ([`serve_files_with`]).
 
 use std::fs;
 use std::io::{self, Write};
@@ -17,18 +18,25 @@ use crate::i18n::trf;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Zip,
+    /// To the clipboard, to be pasted as files, as Ctrl+C in a file manager.
     Copy,
-    Move,
+    /// To the clipboard, to be moved where they are pasted.
+    Cut,
+    /// Into a folder picked now.
+    CopyTo,
+    MoveTo,
     CopyPath,
     Terminal,
     Share,
 }
 
 impl Action {
-    pub const ALL: [Action; 6] = [
+    pub const ALL: [Action; 8] = [
         Action::Zip,
         Action::Copy,
-        Action::Move,
+        Action::Cut,
+        Action::CopyTo,
+        Action::MoveTo,
         Action::CopyPath,
         Action::Terminal,
         Action::Share,
@@ -38,7 +46,9 @@ impl Action {
         match self {
             Action::Zip => "Zip",
             Action::Copy => "Copy",
-            Action::Move => "Move",
+            Action::Cut => "Cut",
+            Action::CopyTo => "Copy To",
+            Action::MoveTo => "Move To",
             Action::CopyPath => "Copy Path",
             Action::Terminal => "Terminal",
             Action::Share => "Share",
@@ -48,8 +58,8 @@ impl Action {
     pub fn hint(self) -> &'static str {
         match self {
             Action::Zip => "into one archive",
-            Action::Copy | Action::Move => "to a folder",
-            Action::CopyPath => "to the clipboard",
+            Action::Copy | Action::Cut | Action::CopyPath => "to the clipboard",
+            Action::CopyTo | Action::MoveTo => "to a folder",
             Action::Terminal => "open here",
             Action::Share => "to your phone",
         }
@@ -63,7 +73,10 @@ impl Action {
     pub fn available(self) -> bool {
         match self {
             Action::Zip => true,
-            Action::Copy | Action::Move => picker().is_some(),
+            Action::Copy => FILE_CLIPBOARD.get().is_some() || has("wl-copy"),
+            // Only a clipboard that carries KDE's cut mark can say the files are to be moved.
+            Action::Cut => FILE_CLIPBOARD.get().is_some_and(|c| c.can_cut),
+            Action::CopyTo | Action::MoveTo => picker().is_some(),
             Action::CopyPath => has("wl-copy") || has("dbus-send") || has("pbcopy"),
             Action::Terminal => terminal().is_some(),
             Action::Share => has("kdeconnect-cli"),
@@ -76,8 +89,10 @@ pub fn preview(files: &[PathBuf], action: Action) -> String {
     let subject = subject(files);
     match action {
         Action::Zip => format!("{subject}  ›  {}", zip_name(files)),
-        Action::Copy => trf("Copy {} to…", &[&subject]),
-        Action::Move => trf("Move {} to…", &[&subject]),
+        Action::Copy => trf("Copy {} to the clipboard", &[&subject]),
+        Action::Cut => trf("Cut {}, to paste where it goes", &[&subject]),
+        Action::CopyTo => trf("Copy {} to…", &[&subject]),
+        Action::MoveTo => trf("Move {} to…", &[&subject]),
         Action::CopyPath if files.len() > 1 => trf("Copy {} paths", &[&files.len()]),
         Action::CopyPath => trf("Copy the path of {}", &[&subject]),
         Action::Terminal => trf(
@@ -106,8 +121,18 @@ pub fn run(files: &[PathBuf], action: Action, progress: &Progress) -> io::Result
             let made = part.finish(parent, name.strip_suffix(".zip").unwrap_or(&name), ".zip")?;
             Ok(trf("Saved as {}", &[&catalog::display_name(&made)]))
         }
-        Action::Copy | Action::Move => {
-            let (title, done) = if action == Action::Copy {
+        Action::Copy | Action::Cut => {
+            let cut = action == Action::Cut;
+            files_to_clipboard(files, cut)?;
+            Ok(match (cut, files.len()) {
+                (false, 1) => trf("Copied; paste it anywhere", &[]),
+                (false, n) => trf("{} files copied; paste them anywhere", &[&n]),
+                (true, 1) => trf("Cut; paste it where it goes", &[]),
+                (true, n) => trf("{} files cut; paste them where they go", &[&n]),
+            })
+        }
+        Action::CopyTo | Action::MoveTo => {
+            let (title, done) = if action == Action::CopyTo {
                 ("Copy {} to", "Copied to {}")
             } else {
                 ("Move {} to", "Moved to {}")
@@ -266,12 +291,13 @@ fn pick_folder(title: &str, start: &Path) -> io::Result<PathBuf> {
 
 /// Copies or moves each item into `dest` under a free name, folders whole.
 fn transfer(files: &[PathBuf], dest: &Path, action: Action, progress: &Progress) -> io::Result<()> {
-    let keep = action == Action::Copy;
+    let keep = action == Action::CopyTo;
     let total: u64 = files.iter().map(|f| size_of(f)).sum();
     progress.begin(total);
     // Compared as real paths: /home may be a link to /var/home.
     let real_dest = dest.canonicalize()?;
     for file in files {
+        progress.check()?;
         let name = catalog::display_name(file);
         let (base, ext) = split_name(&name, file.is_dir());
         let real = file.canonicalize()?;
@@ -341,6 +367,7 @@ fn sync(dir: &Path) -> io::Result<()> {
 /// Copies a file, a link or a whole folder, keeping times; links stay links, and pipes or
 /// devices inside a folder are left out (reading one could wait forever).
 fn copy_tree(from: &Path, to: &Path, progress: &Progress) -> io::Result<()> {
+    progress.check()?;
     let meta = fs::symlink_metadata(from)?;
     if meta.file_type().is_symlink() {
         #[cfg(unix)]
@@ -365,6 +392,68 @@ fn copy_tree(from: &Path, to: &Path, progress: &Progress) -> io::Result<()> {
         let _ = filetime::set_file_mtime(to, filetime::FileTime::from_system_time(t));
     }
     Ok(())
+}
+
+/// Puts `files` on the clipboard, and says whether they were cut.
+pub type PutFiles = Box<dyn Fn(&[PathBuf], bool) -> io::Result<()> + Send + Sync>;
+
+/// The platform's way of putting files on the clipboard.
+pub struct FileClipboard {
+    pub put: PutFiles,
+    /// It can mark files as cut, so pasting moves them.
+    pub can_cut: bool,
+}
+
+static FILE_CLIPBOARD: OnceLock<FileClipboard> = OnceLock::new();
+
+/// How this platform puts files on the clipboard; set once, before the wheel offers Copy.
+pub fn serve_files_with(clipboard: FileClipboard) {
+    let _ = FILE_CLIPBOARD.set(clipboard);
+}
+
+/// The files on the clipboard, copied or cut, through the platform's way; wl-copy can copy them
+/// as a URI list otherwise.
+fn files_to_clipboard(files: &[PathBuf], cut: bool) -> io::Result<()> {
+    if let Some(clipboard) = FILE_CLIPBOARD.get() {
+        return (clipboard.put)(files, cut);
+    }
+    if cut || !has("wl-copy") {
+        return Err(io::Error::other("couldn't reach the clipboard"));
+    }
+    let uris: String = files
+        .iter()
+        .map(|f| f.canonicalize().map(|p| format!("{}\r\n", file_uri(&p))))
+        .collect::<io::Result<_>>()?;
+    let mut child = Command::new("wl-copy")
+        .args(["--type", "text/uri-list"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+    child
+        .stdin
+        .take()
+        .expect("piped")
+        .write_all(uris.as_bytes())?;
+    if child.wait()?.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other("couldn't reach the clipboard"))
+    }
+}
+
+/// `path` (absolute) as a `file://` URI, with anything but plain characters escaped.
+pub(crate) fn file_uri(path: &Path) -> String {
+    use std::os::unix::ffi::OsStrExt;
+    let mut uri = String::from("file://");
+    for &byte in path.as_os_str().as_bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'.' | b'_' | b'~') {
+            uri.push(byte as char);
+        } else {
+            uri.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    uri
 }
 
 /// wl-copy where it exists (any Wayland desktop), else KDE's Klipper over D-Bus; pbcopy on macOS.
@@ -456,7 +545,7 @@ mod tests {
         std::os::unix::fs::symlink("inner/pic.jpg", from.join("album/link")).unwrap();
 
         let items = [from.join("note.txt"), from.join("album")];
-        transfer(&items, &to, Action::Copy, &Progress::default()).unwrap();
+        transfer(&items, &to, Action::CopyTo, &Progress::default()).unwrap();
         assert_eq!(
             fs::read_to_string(to.join("note.txt")).unwrap(),
             "already here"
@@ -473,7 +562,7 @@ mod tests {
         );
         assert!(from.join("album").is_dir(), "copying keeps the original");
 
-        transfer(&items, &to, Action::Move, &Progress::default()).unwrap();
+        transfer(&items, &to, Action::MoveTo, &Progress::default()).unwrap();
         assert!(!from.join("album").exists() && !from.join("note.txt").exists());
         assert!(to.join("album 2/inner/pic.jpg").is_file());
         assert_eq!(fs::read_to_string(to.join("note 3.txt")).unwrap(), "n");
@@ -494,7 +583,7 @@ mod tests {
             transfer(
                 std::slice::from_ref(&album),
                 &album.join("sub"),
-                Action::Copy,
+                Action::CopyTo,
                 &Progress::default()
             )
             .is_err()
@@ -509,7 +598,7 @@ mod tests {
         transfer(
             std::slice::from_ref(&note),
             dir.path(),
-            Action::Move,
+            Action::MoveTo,
             &Progress::default(),
         )
         .unwrap();
@@ -519,7 +608,7 @@ mod tests {
         transfer(
             std::slice::from_ref(&note),
             dir.path(),
-            Action::Copy,
+            Action::CopyTo,
             &Progress::default(),
         )
         .unwrap();

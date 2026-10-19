@@ -1,0 +1,48 @@
+# A card can be held and moved, and its close button cancels its work. Run with a long video:
+#   SETUP='ffmpeg -loglevel error -f lavfi -i testsrc=duration=60:size=1280x720:rate=30 -c:v mpeg4 "$OUT/files/clip.mp4"' FILE=clip.mp4 dev/e2e/run.sh card
+# MP4 isn't offered for an MP4, so the wheel has 5 wedges from the top: MOV, MKV, WEBM, GIF,
+# MP3. The drop is on WEBM (144 degrees), a slow VP9 encode. FFmpeg must be gone
+# afterwards and no clip.webm left in files/.
+log 1 drag + shift, drop on WEBM
+move 300 300
+sleep 500
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 713 501 15 20
+wiggle 300
+release
+key 42 0
+sleep 800
+shot card-1-working
+shell pgrep -a ffmpeg > "$OUT/ffmpeg-during.txt"
+log 2 hold the card by its middle and move it down
+move 640 400
+sleep 300
+press
+sleep 100
+glide 640 620 20 15
+release
+sleep 300
+shot card-2-moved
+log 3 its close button cancels it
+move 640 620
+sleep 300
+shell grep -o 'close button at ([0-9]*, [0-9]*)' "$OUT/app.log" | tail -n 1 | tr -dc '0-9 ' > "$OUT/close.txt"
+movefrom close.txt
+sleep 300
+shot card-3-close
+press
+sleep 50
+release
+sleep 500
+shot card-4-cancelled
+shell sleep 1; pgrep -a ffmpeg > "$OUT/ffmpeg-after.txt"; ls -A "$OUT/files" > "$OUT/files-after.txt"
+move 300 300
+sleep 3000
+shot card-5-gone
+log done

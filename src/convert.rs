@@ -3,12 +3,14 @@
 //! Actions wheel is in `actions`.
 //!
 //! Results land next to the original under a free name ("photos 2.zip"). Work happens in
-//! hidden scratch files and folders beside it, which are moved into place only once complete.
+//! hidden scratch files and folders beside it, which are moved into place only once complete,
+//! and not at all once the job is cancelled.
 
+use std::cell::RefCell;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use crate::archive::{self, Format, Progress};
 use crate::catalog::{self, Choice, Kind, Mode};
@@ -105,13 +107,11 @@ pub fn merge_pdfs(files: &[PathBuf], progress: &Progress) -> io::Result<PathBuf>
         .first()
         .ok_or_else(|| io::Error::other("nothing to merge"))?;
     progress.set_steps(1);
-    progress.begin(1);
     let parent = parent_of(first);
-    let bytes = crate::office::merge(files)?;
+    let bytes = crate::office::merge(files, progress)?;
     let temp = Scratch::dir(parent)?;
     let output = temp.path().join("output.pdf");
     fs::write(&output, bytes)?;
-    progress.add(1);
     let stem = format!("{} (merged)", catalog::stem_of(first));
     move_to_free_name(&output, parent, &stem, ".pdf")
 }
@@ -169,7 +169,7 @@ pub fn run(file: &Path, task: Task, progress: &Progress) -> io::Result<PathBuf> 
         progress.begin(1);
         let temp = Scratch::dir(parent)?;
         let output = temp.path().join(format!("output.{}", target.extension()));
-        crate::media::convert(file, target, &output)?;
+        crate::media::convert(file, target, &output, progress)?;
         progress.add(1);
         return move_to_free_name(
             &output,
@@ -305,6 +305,21 @@ pub(crate) fn split_name(name: &str, is_dir: bool) -> (&str, &str) {
     }
 }
 
+thread_local! {
+    /// The progress of the job running on this thread (see [`as_job`]).
+    static JOB: RefCell<Option<Arc<Progress>>> = const { RefCell::new(None) };
+}
+
+/// Runs `work` as the job `progress` tracks. Once it is cancelled, [`move_to_free_name`], the
+/// one way a result gets into place, refuses: nothing appears after a cancel, however far the
+/// work had got.
+pub(crate) fn as_job<T>(progress: Arc<Progress>, work: impl FnOnce() -> T) -> T {
+    JOB.set(Some(progress));
+    let result = work();
+    JOB.set(None);
+    result
+}
+
 /// Moves `from` to a free name in `dir`, choosing each name with an atomic no-replace rename.
 pub(crate) fn move_to_free_name(
     from: &Path,
@@ -314,6 +329,7 @@ pub(crate) fn move_to_free_name(
 ) -> io::Result<PathBuf> {
     static NAMING: Mutex<()> = Mutex::new(());
     let _naming = NAMING.lock().unwrap_or_else(|e| e.into_inner());
+    JOB.with_borrow(|job| job.as_ref().map_or(Ok(()), |progress| progress.check()))?;
     let base = if base.is_empty() { "Archive" } else { base };
     for n in 1u64.. {
         let to = match n {
@@ -498,6 +514,25 @@ fn writable(dir: &Path, e: io::Error) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nothing_is_put_in_place_once_the_job_is_cancelled() {
+        let dir = tempfile::tempdir().unwrap();
+        let made = dir.path().join(".mcgyver-made");
+        fs::write(&made, "x").unwrap();
+        let cancelled = Arc::new(Progress::default());
+        cancelled.cancel();
+        let refused = as_job(cancelled, || {
+            move_to_free_name(&made, dir.path(), "out", ".txt")
+        });
+        assert!(refused.is_err());
+        assert!(made.exists() && !dir.path().join("out.txt").exists());
+
+        let moved = as_job(Arc::new(Progress::default()), || {
+            move_to_free_name(&made, dir.path(), "out", ".txt")
+        });
+        assert_eq!(moved.unwrap(), dir.path().join("out.txt"));
+    }
 
     #[test]
     fn names_count_up_when_taken() {

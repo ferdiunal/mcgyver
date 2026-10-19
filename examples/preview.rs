@@ -21,6 +21,12 @@ fn main() -> eframe::Result {
     {
         mcgyver::i18n::set(lang);
     }
+    // The wheel offers Copy and Cut where the platform can put files on the clipboard; here,
+    // nothing is put anywhere.
+    mcgyver::actions::serve_files_with(mcgyver::actions::FileClipboard {
+        put: Box::new(|_, _| Ok(())),
+        can_cut: true,
+    });
     #[cfg(target_os = "linux")]
     if scene == "settings" {
         return mcgyver::settings_window::run().map_err(|e| eframe::Error::AppCreation(e.into()));

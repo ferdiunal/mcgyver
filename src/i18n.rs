@@ -178,7 +178,9 @@ fn turkish(english: &str) -> Option<&'static str> {
         // Actions.
         "into one archive" => "tek arşive",
         "Copy" => "Kopyala",
-        "Move" => "Taşı",
+        "Cut" => "Kes",
+        "Copy To" => "Şuraya kopyala",
+        "Move To" => "Şuraya taşı",
         "to a folder" => "bir klasöre",
         "Copy Path" => "Yolu kopyala",
         "to the clipboard" => "panoya",
@@ -201,7 +203,16 @@ fn turkish(english: &str) -> Option<&'static str> {
         "Opened {}" => "{} açıldı",
         "Sent to {}" => "{} cihazına gönderildi",
         "copied" => "kopyalandı",
+        "cut" => "kesildi",
         "moved" => "taşındı",
+        "Copy {} to the clipboard" => "{} panoya kopyalanacak",
+        "Cut {}, to paste where it goes" => "{} kesilecek, taşınacağı yere yapıştırın",
+        "Copied; paste it anywhere" => "Kopyalandı; istediğiniz yere yapıştırın",
+        "{} files copied; paste them anywhere" => {
+            "{} dosya kopyalandı; istediğiniz yere yapıştırın"
+        }
+        "Cut; paste it where it goes" => "Kesildi; taşınacağı yere yapıştırın",
+        "{} files cut; paste them where they go" => "{} dosya kesildi; taşınacağı yere yapıştırın",
         "path copied" => "yol kopyalandı",
         "terminal opened" => "terminal açıldı",
         "shared" => "paylaşıldı",
@@ -221,6 +232,7 @@ fn turkish(english: &str) -> Option<&'static str> {
         "the disk is full" => "disk dolu",
         "the file looks damaged" => "dosya bozuk görünüyor",
         "cancelled" => "vazgeçildi",
+        "Cancelled" => "İptal edildi",
         "nothing to merge" => "birleştirilecek bir şey yok",
         "nothing to work on" => "üzerinde çalışılacak bir şey yok",
         "no terminal found" => "terminal bulunamadı",
@@ -379,6 +391,14 @@ mod tests {
                 }
                 if turkish(mode.title()).is_none() {
                     missing.push(mode.title());
+                }
+            }
+        }
+        // Actions the test machine may lack the tools for.
+        for action in crate::actions::Action::ALL {
+            for text in [action.label(), action.hint()] {
+                if turkish(text).is_none() {
+                    missing.push(text);
                 }
             }
         }

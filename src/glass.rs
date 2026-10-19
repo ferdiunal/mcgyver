@@ -4,7 +4,7 @@
 //! Painting only covers what we draw; the blur behind it comes from the platform, which reads
 //! the [`GlassShape`]s the overlay collected while painting.
 
-use std::f32::consts::TAU;
+use std::f32::consts::{FRAC_PI_2, TAU};
 use std::sync::Arc;
 
 use egui::epaint::TextShape;
@@ -162,21 +162,51 @@ pub fn text(p: &Painter, pos: Pos2, s: &str, size: f32, color: Color32, bold: bo
     p.text(pos, Align2::CENTER_CENTER, s, font(size, bold), color);
 }
 
-/// Centred text turned `angle` radians clockwise about its centre, to follow a curve.
-pub fn text_turned(
+/// Text bent along a circle of `radius` about `center`, centred on the angle `mid` (radians,
+/// clockwise from three o'clock). Above the centre it runs clockwise and below it the other way,
+/// so it reads left to right with its letters upright. Letters are spaced by their advances
+/// (kerning included) rather than the laid-out positions, which are rounded to whole pixels:
+/// at this size that rounding shows once the letters are turned.
+#[allow(clippy::too_many_arguments)]
+pub fn text_on_arc(
     p: &Painter,
-    pos: Pos2,
+    center: Pos2,
+    radius: f32,
+    mid: f32,
     s: &str,
     size: f32,
     color: Color32,
     bold: bool,
-    angle: f32,
 ) {
-    let galley = p.layout_no_wrap(s.to_owned(), font(size, bold), color);
-    let top_left = pos - galley.size() / 2.0;
-    p.add(
-        TextShape::new(top_left, galley, color).with_angle_and_anchor(angle, Align2::CENTER_CENTER),
-    );
+    let font = font(size, bold);
+    let galley = p.layout_no_wrap(s.to_owned(), font.clone(), color);
+    let Some(row) = galley.rows.first() else {
+        return;
+    };
+    let width: f32 = row.row.glyphs.iter().map(|g| g.advance_width).sum();
+    let below = mid.sin() > 0.0;
+    let mut x = 0.0;
+    for glyph in &row.row.glyphs {
+        let left = x;
+        x += glyph.advance_width;
+        if glyph.chr.is_whitespace() {
+            continue;
+        }
+        let letter = p.layout_no_wrap(glyph.chr.to_string(), font.clone(), color);
+        let along = left + letter.size().x / 2.0 - width / 2.0;
+        let (angle, turn) = if below {
+            let angle = mid - along / radius;
+            (angle, angle - FRAC_PI_2)
+        } else {
+            let angle = mid + along / radius;
+            (angle, angle + FRAC_PI_2)
+        };
+        let top_left = center + Vec2::angled(angle) * radius - letter.size() / 2.0;
+        p.add(
+            TextShape::new(top_left, letter, color)
+                .with_angle_and_anchor(turn, Align2::CENTER_CENTER),
+        );
+    }
 }
 
 /// How wide `s` is set at `size`.

@@ -8,6 +8,8 @@ use std::sync::Arc;
 
 use pdfcraft_cos::Document;
 
+use crate::archive::Progress;
+
 /// Every engine reads the whole file into memory; larger files are refused up front.
 const MAX_INPUT: u64 = 512 << 20;
 
@@ -168,10 +170,14 @@ pub fn split(
 
 /// The pages of `inputs`, in order, in one PDF, with a bookmark for each file. They are read one
 /// at a time, but the result is held whole, so together they may be no bigger than one input.
-pub fn merge(inputs: &[PathBuf]) -> io::Result<Vec<u8>> {
+/// `progress` counts the files; a cancel stops the merge between two of them.
+pub fn merge(inputs: &[PathBuf], progress: &Progress) -> io::Result<Vec<u8>> {
     let mut total = 0;
     let mut combiner = pdfcraft_organize::Combiner::new();
+    // Each file, then writing the whole.
+    progress.begin(inputs.len() as u64 + 1);
     for input in inputs {
+        progress.check()?;
         // With several files, say which one failed.
         let named = |e: io::Error| {
             let name = crate::catalog::display_name(input);
@@ -186,8 +192,12 @@ pub fn merge(inputs: &[PathBuf]) -> io::Result<Vec<u8>> {
         refuse_protected(&doc).map_err(named)?;
         let title = crate::catalog::stem_of(input);
         combiner.add(&title, &doc, None).map_err(failed)?;
+        progress.add(1);
     }
-    save_pdf(&combiner.finish().map_err(failed)?)
+    progress.check()?;
+    let bytes = save_pdf(&combiner.finish().map_err(failed)?)?;
+    progress.add(1);
+    Ok(bytes)
 }
 
 fn check_size(input: &Path) -> io::Result<()> {

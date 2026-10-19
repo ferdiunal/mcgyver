@@ -1,9 +1,15 @@
 //! Audio and video conversions through the user's FFmpeg installation.
 
-use std::io;
+use std::io::{self, Read};
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::OnceLock;
+use std::time::Duration;
+
+use crate::archive::Progress;
+
+/// How often a running FFmpeg is checked on, to stop it once the job is cancelled.
+const CHECK_EVERY: Duration = Duration::from_millis(100);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
@@ -63,8 +69,9 @@ pub fn available() -> bool {
     *AVAILABLE.get_or_init(|| command_on_path("ffmpeg"))
 }
 
-/// Converts one supported input to `output`, which must end in the target extension.
-pub fn convert(input: &Path, target: Target, output: &Path) -> io::Result<()> {
+/// Converts one supported input to `output`, which must end in the target extension. FFmpeg is
+/// stopped if the job is cancelled.
+pub fn convert(input: &Path, target: Target, output: &Path, progress: &Progress) -> io::Result<()> {
     let mut command = Command::new("ffmpeg");
     command
         .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i"])
@@ -122,10 +129,34 @@ pub fn convert(input: &Path, target: Target, output: &Path) -> io::Result<()> {
         }
     }
 
-    let output_result = command.arg(output).output()?;
-    if !output_result.status.success() {
+    let mut child = command
+        .arg(output)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    // Read as it comes, so a chatty FFmpeg never waits on a full pipe.
+    let mut stderr = child.stderr.take().expect("piped");
+    let said = std::thread::spawn(move || {
+        let mut text = Vec::new();
+        let _ = stderr.read_to_end(&mut text);
+        text
+    });
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if progress.is_cancelled() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return progress.check();
+        }
+        std::thread::sleep(CHECK_EVERY);
+    };
+    let said = said.join().unwrap_or_default();
+    if !status.success() {
         return Err(io::Error::other(command_error(
-            &output_result.stderr,
+            &said,
             "FFmpeg could not convert this file",
         )));
     }
@@ -150,4 +181,45 @@ fn command_error(stderr: &[u8], fallback: &str) -> String {
         .filter(|line| !line.is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| fallback.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_cancelled_conversion_stops_ffmpeg() {
+        if !available() {
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        // A second of silence: 16-bit mono at 8 kHz.
+        let samples = 8000u32;
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + samples * 2).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        wav.extend_from_slice(&16u32.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes());
+        wav.extend_from_slice(&8000u32.to_le_bytes());
+        wav.extend_from_slice(&16000u32.to_le_bytes());
+        wav.extend_from_slice(&2u16.to_le_bytes());
+        wav.extend_from_slice(&16u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(samples * 2).to_le_bytes());
+        wav.resize(wav.len() + samples as usize * 2, 0);
+        let input = dir.path().join("quiet.wav");
+        std::fs::write(&input, wav).unwrap();
+
+        let progress = Progress::default();
+        let output = dir.path().join("quiet.flac");
+        convert(&input, Target::Flac, &output, &progress).unwrap();
+        assert!(output.is_file());
+
+        progress.cancel();
+        let again = dir.path().join("again.flac");
+        let error = convert(&input, Target::Flac, &again, &progress).unwrap_err();
+        assert_eq!(error.to_string(), "cancelled");
+    }
 }

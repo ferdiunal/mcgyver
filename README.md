@@ -130,17 +130,23 @@ switches between the three modes:
 |------|-------|
 | Convert | To another format; Unzip first for archives |
 | Tools | Compress, trim, rotate, split, merge… |
-| Actions | Zip, copy, move, copy path, terminal, share |
+| Actions | Zip, copy, cut, copy to, move to, copy path, terminal, share |
 
 - **The mode ring:** the hub is a ring of three slices around a white centre: Convert at the top,
-  Tools at the lower right, Actions at the lower left. The current mode is raised white. Stop on
+  Tools at the lower right, Actions at the lower left, each named along its curve. The current
+  mode is raised white. Stop on
   another slice, or move along the ring into it, and the wheel switches to that mode at once, so
   you can start with Shift on a picture and still zip it. Passing over a slice on the way out to
   a wedge (or back in) doesn't switch. After a switch, move a little before dropping.
+- **Long names** on a wedge break onto two lines ("Şuraya / kopyala") rather than spill over.
 - **Drop on an option wedge:** the wedge flashes and the wheel folds into a small card where you dropped.
   The card shows progress, then a check mark and the new file's name (or a red mark and the
-  reason it failed), then fades. Simulated work says "simulated". A drop made while an earlier
-  card is still up pushes that card upward; both stay.
+  reason it failed), then fades; not while the pointer is on it. Simulated work says
+  "simulated". A drop made while an earlier card is still up pushes that card upward; both stay.
+- **The card:** hold it to move it out of the way. Its × cancels the work: FFmpeg is stopped,
+  a merge stops between two files, and nothing is put in place after a cancel (files already
+  finished in that batch stay). On a finished card the × puts it away. Only the cards take the
+  pointer; the rest of the screen stays clickable. A merge counts its files on the progress ring.
 - **Finished outputs:** real conversion and tool jobs ask the active Dolphin window, or the window
   already showing an output folder, to select the files they made. A batch sends one request for all
   successful outputs; simulated and failed jobs are skipped. If needed, Dolphin opens their folders
@@ -255,7 +261,8 @@ folders alike:
 | Action | What it does |
 |--------|--------------|
 | Zip | Packs everything into one ZIP next to it: `name.zip` for one item, `Archive.zip` for several |
-| Copy, Move | Asks for a folder (kdialog or zenity) and copies or moves there. Names that are taken get a number. Copying into the same folder duplicates; moving there changes nothing. A move to another disk copies, syncs to disk, then removes the original |
+| Copy, Cut | Puts the files on the clipboard as Dolphin's Ctrl+C and Ctrl+X do (a URI list, KDE's cut mark, GNOME's form, and the paths as text), through ext-data-control; paste them in a file manager. Cut files are moved where they are pasted. Without ext-data-control, Copy goes through wl-copy as a URI list and Cut isn't offered. On macOS, Copy is Finder's Copy and there is no Cut (Option-Command-V moves what was copied) |
+| Copy To, Move To | Asks for a folder (kdialog or zenity) and copies or moves there. Names that are taken get a number. Copying into the same folder duplicates; moving there changes nothing. A move to another disk copies, syncs to disk, then removes the original |
 | Copy Path | Puts the full paths on the clipboard, one per line (wl-copy, or Klipper) |
 | Terminal | Opens Konsole (or the first terminal found) in the folder |
 | Share | Sends the files to the first phone KDE Connect can reach |
@@ -400,7 +407,12 @@ for screenshots, or the window opens on the desktop rather than under xvfb.
    `dev/e2e/scenarios/full.txt` (or another scenario: `run.sh still` presses Shift with the mouse
    held still, `FILE=photos.zip run.sh archive` converts and unpacks a real ZIP, and
    `run.sh real` turns a JPEG into a PNG, zips it, copies its path and opens Konsole,
-   `run.sh ring` switches from Convert to Actions on the mode ring and zips the file, and
+   `run.sh ring` switches from Convert to Actions on the mode ring and zips the file,
+   `run.sh clipboard` cuts and then copies the file from the Actions wheel and saves what the
+   clipboard held in `out/clipboard-*.txt` (the cut mark should read 1, then 0),
+   `SETUP=… FILE=clip.mp4 run.sh card` (the command is in `scenarios/card.txt`) moves a card
+   and cancels its slow conversion with the card's ×, after which FFmpeg is gone and no
+   `clip.webm` is left, and
    `SOURCE=dolphin run.sh tap` selects a file in Dolphin, taps Shift, clicks PNG and saves the
    clipboard afterwards in `out/clipboard.txt`, which should read "before the tap", and
    `run.sh settings` starts the app a second time (its settings open instead), switches the
