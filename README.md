@@ -191,6 +191,10 @@ switches between the three modes:
   another slice, or move along the ring into it, and the wheel switches to that mode at once, so
   you can start with Shift on a picture and still zip it. Passing over a slice on the way out to
   a wedge (or back in) doesn't switch. After a switch, move a little before dropping.
+- **Motion:** everything moves on springs, running a little past where it goes and settling
+  back. The wheel pops open, its wedges unfold out of the centre one after another (again after
+  a mode switch), the wedge you aim at swells outward with the frame bulging around it, and the
+  centre's text slides over to the format you would get (`src/motion.rs`).
 - **Long names** on a wedge break onto two lines ("Şuraya / kopyala") rather than spill over.
 - **Drop on an option wedge:** the wedge flashes and the wheel folds into a small card where you dropped.
   The card shows progress, then a check mark and the new file's name (or a red mark and the
@@ -499,6 +503,7 @@ the context was first made current without a surface, which left the draw buffer
 | `src/file_manager.rs` | Dolphin over D-Bus: select finished files, find and copy the active window's selection |
 | `src/overlay.rs` | What the overlay shows: wheel state, drop handling, progress card |
 | `src/wheel.rs` | Wheel geometry, hit testing, painting |
+| `src/motion.rs` | Springs: the wheel's pop, unfold and swell, worked out from the time |
 | `src/glass.rs` | Colours, fonts, the frosted frame and capsules, blur-region geometry |
 | `src/catalog.rs` | What each file kind offers (formats, tools, actions) |
 | `src/jobs.rs` | Runs the work: real jobs on a background thread, the rest simulated |

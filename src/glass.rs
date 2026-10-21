@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use egui::epaint::TextShape;
 use egui::{
-    Align2, Color32, FontData, FontDefinitions, FontFamily, FontId, Painter, Pos2, Rect, Stroke,
-    StrokeKind, Vec2, vec2,
+    Align2, Color32, FontData, FontDefinitions, FontFamily, FontId, Mesh, Painter, Pos2, Rect,
+    Shape, Stroke, StrokeKind, Vec2, vec2,
 };
 
 pub const TEXT: Color32 = Color32::from_rgb(29, 29, 31);
@@ -119,19 +119,67 @@ pub fn frame(p: &Painter, c: Pos2, r: f32, alpha: f32) {
         r,
         Stroke::new(1.0, Color32::BLACK.gamma_multiply(0.10 * alpha)),
     );
-    rim(p, c, r - 1.5, 1.5, 0.8 * alpha);
+    rim(p, c, |_| r - 1.5, 1.5, 0.8 * alpha);
 }
 
-/// A white highlight along the edge, strongest where it faces the light.
-fn rim(p: &Painter, c: Pos2, r: f32, width: f32, alpha: f32) {
-    let steps = ((r * TAU / 5.0) as usize).clamp(24, 160);
+/// The frame with its edge at `radius(angle)` instead of round, as where it swells toward the
+/// pointer (angles as `Vec2::angled` takes them).
+pub fn frame_shaped(p: &Painter, c: Pos2, radius: impl Fn(f32) -> f32, alpha: f32) {
+    const STEPS: usize = 180;
+    let edge = |grow: f32| -> Vec<Pos2> {
+        (0..STEPS)
+            .map(|i| {
+                let a = i as f32 / STEPS as f32 * TAU;
+                c + Vec2::angled(a) * (radius(a) + grow)
+            })
+            .collect()
+    };
+    let drop = vec2(0.0, 10.0);
+    for i in 0..8 {
+        let t = i as f32 / 7.0;
+        let shadow: Vec<Pos2> = edge(2.0 + 22.0 * t).iter().map(|p| *p + drop).collect();
+        p.add(fan(
+            c + drop,
+            &shadow,
+            Color32::BLACK.gamma_multiply(0.018 * alpha),
+        ));
+    }
+    let outline = edge(0.0);
+    p.add(fan(c, &outline, FRAME.gamma_multiply(FRAME_ALPHA * alpha)));
+    p.add(Shape::closed_line(
+        outline,
+        Stroke::new(1.0, Color32::BLACK.gamma_multiply(0.10 * alpha)),
+    ));
+    rim(p, c, |a| radius(a) - 1.5, 1.5, 0.8 * alpha);
+}
+
+/// A filled shape that every point of `ring` sees `center` from (as a swollen disc does).
+fn fan(center: Pos2, ring: &[Pos2], color: Color32) -> Shape {
+    let mut mesh = Mesh::default();
+    mesh.colored_vertex(center, color);
+    for p in ring {
+        mesh.colored_vertex(*p, color);
+    }
+    let n = ring.len() as u32;
+    for i in 0..n {
+        mesh.add_triangle(0, 1 + i, 1 + (i + 1) % n);
+    }
+    Shape::mesh(mesh)
+}
+
+/// A white highlight along the edge at `radius(angle)`, strongest where it faces the light.
+fn rim(p: &Painter, c: Pos2, radius: impl Fn(f32) -> f32, width: f32, alpha: f32) {
+    let steps = ((radius(0.0) * TAU / 5.0) as usize).clamp(24, 160);
     for i in 0..steps {
         let a0 = i as f32 / steps as f32 * TAU;
         let a1 = (i + 1) as f32 / steps as f32 * TAU;
         let facing = (((a0 + a1) / 2.0 - LIGHT).cos() + 1.0) / 2.0;
         let strength = 0.1 + 0.9 * facing.powi(2);
         p.line_segment(
-            [c + Vec2::angled(a0) * r, c + Vec2::angled(a1) * r],
+            [
+                c + Vec2::angled(a0) * radius(a0),
+                c + Vec2::angled(a1) * radius(a1),
+            ],
             Stroke::new(width, Color32::WHITE.gamma_multiply(alpha * strength)),
         );
     }

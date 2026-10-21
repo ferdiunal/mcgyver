@@ -1144,7 +1144,7 @@ impl App {
     /// Accept the drop only while it points at a wedge, so the cursor tells the truth and
     /// releasing anywhere else cancels the drag.
     fn update_accept(&mut self) {
-        let want = self.overlay.would_accept(Instant::now());
+        let want = self.overlay.would_accept();
         if want == self.accepting {
             return;
         }

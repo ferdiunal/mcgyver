@@ -20,6 +20,7 @@ pub mod images;
 pub mod jobs;
 mod markdown;
 pub mod media;
+pub mod motion;
 pub mod office;
 pub mod overlay;
 pub mod settings;

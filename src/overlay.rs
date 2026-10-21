@@ -11,10 +11,16 @@ use crate::catalog::{self, Choice, Mode};
 use crate::glass::{self, ACCENT, GREEN, GlassShape, RED, TEXT, TEXT_MUTED};
 use crate::i18n::{tr, trf};
 use crate::jobs::{self, Job};
+use crate::motion::{self, Spring};
 use crate::wheel::{self, Hit};
 
 const OPEN_TIME: f32 = 0.16;
-const SWAP_TIME: f32 = 0.12;
+/// The wedges unfold one after another, clockwise from the top, each this much after the
+/// last, all of them within `UNFOLD_SPREAD`.
+const UNFOLD_STAGGER: f32 = 0.03;
+const UNFOLD_SPREAD: f32 = 0.18;
+/// How long the hub's text takes to slide over to the new one.
+const HUB_CHANGE: f32 = 0.2;
 /// How long the picked wedge stays lit before the wheel folds into the card.
 const FLASH: Duration = Duration::from_millis(140);
 /// How far a drag has to move after the wheel opens before it can pick anything.
@@ -36,11 +42,10 @@ const CLOSE_R: f32 = 10.0;
 const CLOSE_HIT: f32 = 14.0;
 /// A finished card the pointer was on stays this long after it leaves, before it fades.
 const KEEP_AFTER_HOVER: Duration = Duration::from_millis(800);
-/// Keeps the whole disc on screen when the drag is near an edge.
-const EDGE_MARGIN: f32 = wheel::DISC_R + 16.0;
+/// Keeps the whole disc on screen when the drag is near an edge, a swelling lobe too.
+const EDGE_MARGIN: f32 = wheel::DISC_R + wheel::FRAME_SWELL * 1.25 + 4.0;
 
 struct Wheel {
-    serial: u32,
     center: Pos2,
     files: Vec<PathBuf>,
     summary: String,
@@ -59,11 +64,81 @@ struct Wheel {
     armed: bool,
     /// Another mode's slice under the drag, and when the drag last moved.
     passing: Option<(Mode, Instant)>,
-    epoch: u32,
-    swapped_at: Option<Instant>,
+    /// When the wedges began to unfold: as the wheel opened, or the mode switched.
+    unfolded_at: Instant,
     opened_at: Instant,
+    /// How far each wedge swells toward the pointer.
+    swell: Vec<Spring>,
+    hub: HubText,
     chosen: Option<usize>,
     closing_at: Option<Instant>,
+}
+
+/// A spring per wedge, none of them swelling.
+fn calm(wedges: usize, now: Instant) -> Vec<Spring> {
+    vec![Spring::new(motion::SWELL, 0.0, now); wedges]
+}
+
+/// What the hub says (see `wheel::Hub`), the text it replaced and how visible that was when it
+/// began to go, and since when.
+struct HubText {
+    text: String,
+    bold: bool,
+    before: Option<(String, bool, f32)>,
+    since: Instant,
+}
+
+impl HubText {
+    fn showing(text: String, now: Instant) -> HubText {
+        HubText {
+            text,
+            bold: false,
+            before: None,
+            since: now,
+        }
+    }
+
+    /// How far the change is (0 → 1).
+    fn t(&self, now: Instant) -> f32 {
+        (now.saturating_duration_since(self.since).as_secs_f32() / HUB_CHANGE).min(1.0)
+    }
+
+    /// Changes to `text`. Changed again before the last change is over, whichever of the two
+    /// texts shows more is the one that goes, from as visible as it is, so nothing flashes up.
+    fn set(&mut self, text: String, bold: bool, now: Instant) {
+        if text == self.text && bold == self.bold {
+            return;
+        }
+        let Some((before, before_bold, was)) = self.before.take() else {
+            self.before = Some((std::mem::replace(&mut self.text, text), self.bold, 1.0));
+            self.bold = bold;
+            self.since = now;
+            return;
+        };
+        let (going, coming) = wheel::hub_fade(self.t(now));
+        let (going, coming) = (was * going, coming);
+        if text == before && bold == before_bold {
+            // Back to what it said: it never quite left.
+            self.text = text;
+            self.bold = bold;
+            self.before = None;
+        } else if coming <= 0.0 {
+            // The new text hadn't shown yet: the old one keeps going, the newest comes instead.
+            self.before = Some((before, before_bold, was));
+            self.text = text;
+            self.bold = bold;
+        } else if going >= coming {
+            self.before = Some((before, before_bold, going));
+            self.text = text;
+            self.bold = bold;
+            self.since = now;
+        } else {
+            let shown = std::mem::replace(&mut self.text, text);
+            self.before = Some((shown, self.bold, coming));
+            self.bold = bold;
+            self.since = now;
+        }
+    }
 }
 
 impl Wheel {
@@ -80,37 +155,88 @@ impl Wheel {
             .iter()
             .map(|c| preview(&self.files, *c))
             .collect();
-        self.epoch += 1;
-        self.swapped_at = Some(now);
+        self.swell = calm(self.choices.len(), now);
+        self.unfolded_at = now;
         self.origin = self.pointer.unwrap_or(self.origin);
         self.armed = false;
+        self.follow(now);
         true
     }
 
     /// Notes another mode's slice under the drag; the wheel switches once the drag stops there.
     fn update_ring(&mut self, now: Instant) {
-        self.passing = match self.aim(now) {
+        self.passing = match self.aim() {
             Some(Hit::Mode(m)) if m != self.mode && self.modes.contains(&m) => Some((m, now)),
             _ => None,
         };
     }
 
-    fn swap_t(&self, now: Instant) -> f32 {
-        self.swapped_at.map_or(1.0, |t| {
-            (now.saturating_duration_since(t).as_secs_f32() / SWAP_TIME).min(1.0)
-        })
-    }
-
-    fn aim(&self, now: Instant) -> Option<Hit> {
+    /// What the drag points at; the wedge swollen out keeps it out to the end of its lobe.
+    fn aim(&self) -> Option<Hit> {
         let pos = self.pointer.filter(|_| self.armed)?;
-        let rotation = wheel::rotation(self.swap_t(now));
-        Some(wheel::hit_rotated(
+        let swollen = self.swell.iter().position(|s| s.target() == 1.0);
+        Some(wheel::hit_swollen(
             self.center,
             pos,
             &self.modes,
             self.choices.len(),
-            rotation,
+            swollen,
         ))
+    }
+
+    /// The wedge picked, or else the one aimed at.
+    fn named(&self) -> Option<usize> {
+        let aimed = match self.chosen.is_none().then(|| self.aim()).flatten() {
+            Some(Hit::Choice(i)) => Some(i),
+            _ => None,
+        };
+        self.chosen.or(aimed).filter(|&i| i < self.choices.len())
+    }
+
+    /// Swells the wedge aimed at (or picked) and lets the others settle back, and has the hub
+    /// name it.
+    fn follow(&mut self, now: Instant) {
+        let named = self.named();
+        for (i, swell) in self.swell.iter_mut().enumerate() {
+            swell.set(if named == Some(i) { 1.0 } else { 0.0 }, now);
+        }
+        let (text, bold) = match named {
+            Some(i) => (tr(self.choices[i].label).to_owned(), true),
+            None => (self.info.clone(), false),
+        };
+        self.hub.set(text, bold, now);
+    }
+
+    /// How far each wedge has unfolded.
+    fn unfold(&self, now: Instant) -> Vec<f32> {
+        let t = now.saturating_duration_since(self.unfolded_at).as_secs_f32();
+        let n = self.choices.len();
+        let stagger = UNFOLD_STAGGER.min(UNFOLD_SPREAD / n.max(1) as f32);
+        (0..n)
+            .map(|i| motion::POP.step(t - i as f32 * stagger))
+            .collect()
+    }
+
+    /// Its size: popping a little past full as it opens, shrinking as it closes (from wherever
+    /// the pop was).
+    fn scale(&self, now: Instant) -> f32 {
+        let t = now.saturating_duration_since(self.opened_at).as_secs_f32();
+        let pop = 0.6 + 0.4 * motion::POP.step(t);
+        match self.closing_at {
+            Some(_) => pop * wheel::scale(self.open_t(now)),
+            None => pop,
+        }
+    }
+
+    /// Whether anything on it still moves.
+    fn moving(&self, now: Instant) -> bool {
+        let since = |t: Instant| now.saturating_duration_since(t).as_secs_f32();
+        self.open_t(now) < 1.0
+            || self.closing_at.is_some()
+            || since(self.opened_at) < motion::POP.settle()
+            || since(self.unfolded_at) < UNFOLD_SPREAD + motion::POP.settle()
+            || (self.hub.before.is_some() && self.hub.t(now) < 1.0)
+            || self.swell.iter().any(|s| s.moving(now))
     }
 
     fn open_t(&self, now: Instant) -> f32 {
@@ -172,7 +298,6 @@ pub struct Overlay {
     cards: Vec<Card>,
     jobs: Vec<Job>,
     batch: u32,
-    serial: u32,
     /// Glass painted in the last frame, for the platform's backdrop blur.
     glass: Vec<GlassShape>,
     /// Something changed that deserves a click: the wheel opened, switched modes, moved onto
@@ -184,8 +309,6 @@ pub struct Overlay {
     holding: Option<(u32, Vec2)>,
     /// The card whose close button is pressed, until the button comes up.
     closing: Option<u32>,
-    /// Skip time-based egui animations (for screenshots).
-    pub still: bool,
 }
 
 impl Overlay {
@@ -216,16 +339,17 @@ impl Overlay {
         };
         let choices = catalog::choices(&files, mode);
         let previews = choices.iter().map(|c| preview(&files, *c)).collect();
-        self.serial += 1;
         // The wheel takes the pointer now; a card held or pressed is let go.
         self.hover = None;
         self.holding = None;
         self.closing = None;
+        let info = files_info(&files);
         self.wheel = Some(Wheel {
-            serial: self.serial,
             center,
             summary: catalog::describe(&files),
-            info: files_info(&files),
+            swell: calm(choices.len(), now),
+            hub: HubText::showing(info.clone(), now),
+            info,
             modes,
             previews,
             files,
@@ -235,8 +359,7 @@ impl Overlay {
             origin: pointer,
             armed: false,
             passing: None,
-            epoch: 0,
-            swapped_at: None,
+            unfolded_at: now,
             opened_at: now,
             chosen: None,
             closing_at: None,
@@ -253,11 +376,12 @@ impl Overlay {
         if w.pointer == Some(pos) {
             return;
         }
-        let before = w.aim(now);
+        let before = w.aim();
         w.pointer = Some(pos);
         w.armed |= (pos - w.origin).length() > ARM_DISTANCE;
         w.update_ring(now);
-        let after = w.aim(now);
+        w.follow(now);
+        let after = w.aim();
         self.clicked |= matches!(after, Some(Hit::Choice(_))) && after != before;
     }
 
@@ -267,17 +391,17 @@ impl Overlay {
     }
 
     /// Whether a drop right now would pick something.
-    pub fn would_accept(&self, now: Instant) -> bool {
+    pub fn would_accept(&self) -> bool {
         self.wheel
             .as_ref()
             .filter(|w| w.chosen.is_none() && w.closing_at.is_none())
-            .is_some_and(|w| matches!(w.aim(now), Some(Hit::Choice(_))))
+            .is_some_and(|w| matches!(w.aim(), Some(Hit::Choice(_))))
     }
 
     /// The drag was released over the overlay. Returns whether it picked something.
     pub fn drop(&mut self, now: Instant) -> bool {
         let pick = match self.active_wheel() {
-            Some(w) => match w.aim(now) {
+            Some(w) => match w.aim() {
                 Some(Hit::Choice(i)) => Some(i),
                 _ => None,
             },
@@ -299,7 +423,7 @@ impl Overlay {
     /// mode ring switches to that mode at once.
     pub fn click(&mut self, now: Instant) -> bool {
         if let Some(w) = self.active_wheel()
-            && let Some(Hit::Mode(mode)) = w.aim(now)
+            && let Some(Hit::Mode(mode)) = w.aim()
         {
             self.clicked |= w.set_mode(mode, now);
             return false;
@@ -314,6 +438,7 @@ impl Overlay {
             w.armed = false;
             w.passing = None;
             w.closing_at = Some(now);
+            w.follow(now);
         }
     }
 
@@ -446,6 +571,7 @@ impl Overlay {
         };
         w.chosen = Some(index);
         w.closing_at = Some(now + FLASH);
+        w.follow(now);
         self.clicked = true;
         self.batch += 1;
         self.jobs
@@ -489,15 +615,10 @@ impl Overlay {
             }
         }
         if let Some(w) = &self.wheel {
-            let open_t = w.open_t(now);
-            let animating = open_t < 1.0
-                || w.closing_at.is_some()
-                || w.swapped_at
-                    .is_some_and(|t| now < t + Duration::from_secs_f32(SWAP_TIME));
-            if animating {
+            if w.moving(now) {
                 soon(Duration::ZERO);
             }
-            paint_wheel(ui, w, open_t, now, !self.still, &mut self.glass);
+            paint_wheel(ui, w, now, &mut self.glass);
         }
 
         for card in &mut self.cards {
@@ -547,43 +668,46 @@ impl Overlay {
     }
 }
 
-fn paint_wheel(
-    ui: &Ui,
-    w: &Wheel,
-    open_t: f32,
-    now: Instant,
-    animate: bool,
-    shapes: &mut Vec<GlassShape>,
-) {
-    let hovered = if w.chosen.is_some() { None } else { w.aim(now) };
-    let swap_t = w.swap_t(now);
+fn paint_wheel(ui: &Ui, w: &Wheel, now: Instant, shapes: &mut Vec<GlassShape>) {
+    let hovered = if w.chosen.is_some() { None } else { w.aim() };
+    let open_t = w.open_t(now);
+    let s = w.scale(now);
+    let unfold = w.unfold(now);
+    let swell: Vec<f32> = w.swell.iter().map(|spring| spring.value(now)).collect();
     let view = wheel::View {
         choices: &w.choices,
         modes: &w.modes,
         mode: w.mode,
         hovered,
         chosen: w.chosen,
-        info: &w.info,
         open_t,
-        swap_t,
-        epoch: w.epoch,
-        serial: w.serial,
-        animate,
+        scale: s,
+        unfold: &unfold,
+        swell: &swell,
+        hub: wheel::Hub {
+            text: &w.hub.text,
+            bold: w.hub.bold,
+            before: w.hub.before.as_ref().map(|(t, b, was)| (t.as_str(), *b, *was)),
+            t: w.hub.t(now),
+        },
     };
-    wheel::paint(ui, w.center, &view);
-    let s = wheel::scale(open_t);
+    wheel::paint(ui.painter(), w.center, &view);
     if open_t > 0.02 {
         shapes.push(GlassShape::Circle {
             center: w.center,
             radius: wheel::DISC_R * s,
         });
+        for (center, radius) in wheel::bulges(w.center, s, &swell) {
+            shapes.push(GlassShape::Circle { center, radius });
+        }
     }
 
-    let caption = match hovered {
-        Some(Hit::Choice(i)) if i < w.previews.len() => &w.previews[i],
+    let caption = match w.named() {
+        Some(i) if i < w.previews.len() => &w.previews[i],
         _ => &w.summary,
     };
-    let rect = wheel::caption(ui.painter(), w.center, s, caption, open_t);
+    let drop = wheel::bulge_at(FRAC_PI_2, &swell);
+    let rect = wheel::caption(ui.painter(), w.center, s, caption, open_t, drop);
     if open_t > 0.02 {
         shapes.push(GlassShape::Capsule(rect));
     }
@@ -920,7 +1044,7 @@ mod tests {
         assert_eq!(mode(&overlay), Mode::Actions);
         let w = overlay.wheel.as_ref().unwrap();
         assert!(w.choices.iter().all(|c| c.mode == Mode::Actions));
-        assert!(!overlay.would_accept(t0 + ms(1200)));
+        assert!(!overlay.would_accept());
 
         // Moving along the ring through the Tools slice doesn't switch either, until it stops.
         let mut t = t0 + ms(1300);
@@ -1023,7 +1147,7 @@ mod tests {
         // With one mode there is no ring: the band belongs to the centre.
         overlay.drag_moved(ring_point(center, Mode::Convert), t0);
         let w = overlay.wheel.as_ref().unwrap();
-        assert_eq!(w.aim(t0), Some(Hit::Hub));
+        assert_eq!(w.aim(), Some(Hit::Hub));
         assert!(w.passing.is_none());
     }
 
@@ -1041,7 +1165,7 @@ mod tests {
             now,
         );
         overlay.drag_moved(ring_point(center, Mode::Tools), now);
-        assert!(!overlay.would_accept(now));
+        assert!(!overlay.would_accept());
         assert!(!overlay.drop(now));
     }
 
@@ -1180,5 +1304,70 @@ mod tests {
         assert_eq!(human_size(512), "512 B");
         assert_eq!(human_size(2_400_000), "2.4 MB");
         assert_eq!(human_size(48_000_000), "48 MB");
+    }
+
+    /// A wheel open on a picture at the middle of a big screen, armed and aiming at nothing.
+    fn wheel_on_a_picture(t0: Instant) -> (Overlay, Pos2) {
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1600.0, 1000.0));
+        let center = screen.center();
+        let mut overlay = Overlay::default();
+        overlay.open(
+            vec![PathBuf::from("holiday.jpg")],
+            center,
+            screen,
+            Mode::Convert,
+            t0,
+        );
+        (overlay, center)
+    }
+
+    fn wedge(center: Pos2, i: usize, n: usize) -> Pos2 {
+        center + Vec2::angled(-FRAC_PI_2 + i as f32 * TAU / n as f32) * 118.0
+    }
+
+    #[test]
+    fn the_hub_keeps_the_name_of_the_wedge_picked() {
+        let t0 = Instant::now();
+        let ms = |n: u64| Duration::from_millis(n);
+        let (mut overlay, center) = wheel_on_a_picture(t0);
+        let n = overlay.wheel.as_ref().unwrap().choices.len();
+        overlay.drag_moved(wedge(center, 0, n), t0 + ms(300));
+        let label = tr(overlay.wheel.as_ref().unwrap().choices[0].label).to_owned();
+        assert_eq!(overlay.wheel.as_ref().unwrap().hub.text, label);
+        assert!(overlay.drop(t0 + ms(600)));
+        let w = overlay.wheel.as_ref().unwrap();
+        assert_eq!(w.hub.text, label);
+        assert_eq!(w.swell[0].target(), 1.0);
+    }
+
+    #[test]
+    fn a_wedge_crossed_in_passing_doesnt_flash_its_name() {
+        let t0 = Instant::now();
+        let ms = |n: u64| Duration::from_millis(n);
+        let (mut overlay, center) = wheel_on_a_picture(t0);
+        let n = overlay.wheel.as_ref().unwrap().choices.len();
+        overlay.drag_moved(wedge(center, 0, n), t0 + ms(300));
+        // Settled on wedge 0, then across wedge 1 to wedge 2 within a frame or two.
+        overlay.drag_moved(wedge(center, 1, n), t0 + ms(1000));
+        overlay.drag_moved(wedge(center, 2, n), t0 + ms(1016));
+        let w = overlay.wheel.as_ref().unwrap();
+        let first = tr(w.choices[0].label);
+        // Wedge 0's name is the one going, from fully shown; wedge 1's never showed.
+        assert_eq!(w.hub.text, tr(w.choices[2].label));
+        let (going, _, was) = w.hub.before.as_ref().unwrap();
+        assert_eq!((going.as_str(), *was), (first, 1.0));
+    }
+
+    #[test]
+    fn once_everything_settles_it_stops_asking_to_be_drawn() {
+        let t0 = Instant::now();
+        let ms = |n: u64| Duration::from_millis(n);
+        let (mut overlay, center) = wheel_on_a_picture(t0);
+        let n = overlay.wheel.as_ref().unwrap().choices.len();
+        overlay.drag_moved(wedge(center, 3, n), t0 + ms(500));
+        overlay.drag_moved(center + vec2(0.0, 10.0), t0 + ms(800));
+        let w = overlay.wheel.as_ref().unwrap();
+        assert!(w.moving(t0 + ms(810)));
+        assert!(!w.moving(t0 + ms(2000)));
     }
 }

@@ -1,9 +1,11 @@
 //! Renders the overlay in an ordinary window, for working on the UI without dragging files.
 //!
-//!     cargo run --example preview -- [wheel|hover|tools|actions|mixed|json|document|card|cards|archive|folder|failed]
+//!     cargo run --example preview -- [wheel|hover|swap|tools|actions|mixed|json|document|card|cards|archive|folder|failed]
 //!
 //! With `EFRAME_SCREENSHOT_TO=out.png` it saves the second frame and exits; `MCGYVER_LANG=tr` shows
-//! it in Turkish. The `settings` scene opens the settings window instead.
+//! it in Turkish. The `settings` scene opens the settings window instead. `MCGYVER_AT=0.1` stops
+//! the clock that many seconds after the scene's last step (the wheel opening, the wedge aimed
+//! at, the mode switched), to see a frame of the motion.
 
 use std::f32::consts::FRAC_PI_2;
 use std::path::PathBuf;
@@ -44,6 +46,7 @@ fn main() -> eframe::Result {
             Ok(Box::new(Preview {
                 scene,
                 overlay: None,
+                frozen: None,
             }))
         }),
     )
@@ -52,6 +55,8 @@ fn main() -> eframe::Result {
 struct Preview {
     scene: String,
     overlay: Option<Overlay>,
+    /// With `MCGYVER_AT`: the moment every frame shows.
+    frozen: Option<Instant>,
 }
 
 impl eframe::App for Preview {
@@ -59,10 +64,22 @@ impl eframe::App for Preview {
         let screen = ui.max_rect();
         backdrop(ui.painter(), screen);
         // Setting up a scene may wait for a job, so read the clock after it.
-        let overlay = self
-            .overlay
-            .get_or_insert_with(|| scene(&self.scene, screen, Instant::now()));
-        if let Some(wait) = overlay.paint(ui, Instant::now()) {
+        let overlay = self.overlay.get_or_insert_with(|| {
+            let at = std::env::var("MCGYVER_AT")
+                .ok()
+                .and_then(|s| s.parse::<f32>().ok())
+                .filter(|at| at.is_finite() && *at >= 0.0);
+            let now = Instant::now();
+            // The scene's last step two seconds ago, everything settled; or at the frozen time.
+            let then = now - Duration::from_secs(2);
+            self.frozen = at.map(|at| then + Duration::from_secs_f32(at));
+            scene(&self.scene, screen, then)
+        });
+        let now = self.frozen.unwrap_or_else(Instant::now);
+        // A frozen clock shows the same frame for good: no need to draw it again.
+        if let Some(wait) = overlay.paint(ui, now)
+            && self.frozen.is_none()
+        {
             ui.ctx().request_repaint_after(wait);
         }
     }
@@ -94,12 +111,13 @@ fn backdrop(p: &egui::Painter, screen: Rect) {
     p.add(egui::Shape::mesh(mesh));
 }
 
-/// Sets up the overlay as if a drag had arrived two seconds ago.
-fn scene(name: &str, screen: Rect, now: Instant) -> Overlay {
-    let then = now - Duration::from_secs(2);
+/// Sets up the overlay as a drag would have: the scene's last step (the wheel opening, the drag
+/// aiming at a wedge, the mode switching) at `then`, the steps before it a second earlier.
+fn scene(name: &str, screen: Rect, then: Instant) -> Overlay {
     let center = screen.center();
     let (files, mode, aim): (&[&str], Mode, Option<f32>) = match name {
         "hover" => (&["holiday.jpg"], Mode::Convert, Some(60.0)),
+        "swap" => (&["holiday.jpg"], Mode::Convert, None),
         "tools" => (&["trip.mov"], Mode::Tools, Some(0.0)),
         "actions" => (&["report.pdf"], Mode::Actions, Some(120.0)),
         "mixed" => (
@@ -124,14 +142,26 @@ fn scene(name: &str, screen: Rect, now: Instant) -> Overlay {
         _ => (&["holiday.jpg"], Mode::Convert, None),
     };
     let mut overlay = Overlay::default();
-    overlay.still = true;
+    let opened = if aim.is_some() || name == "swap" {
+        then - Duration::from_secs(1)
+    } else {
+        then
+    };
     overlay.open(
         files.iter().map(PathBuf::from).collect(),
         center,
         screen,
         mode,
-        then,
+        opened,
     );
+    if name == "swap" {
+        // Onto the Tools slice of the ring, lower right, and switched there.
+        overlay.drag_moved(
+            center + Vec2::angled(FRAC_PI_2 / 3.0) * 48.0,
+            then - Duration::from_millis(100),
+        );
+        overlay.click(then);
+    }
     if let Some(degrees) = aim {
         overlay.drag_moved(
             center + Vec2::angled(degrees.to_radians() - FRAC_PI_2) * 118.0,
