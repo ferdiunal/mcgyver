@@ -6,6 +6,7 @@
 #   FILE=photos.zip dev/e2e/run.sh archive   drags another file from out/files (real conversion)
 #   SOURCE=dolphin dev/e2e/run.sh tap   taps Shift with a file selected in Dolphin, no drag
 #   PERMISSIONS=1 SETUP=… dev/e2e/run.sh permissions   KWin checks permissions; set up from the settings
+#   dev/e2e/run.sh desk   holds Shift with no drag: the wheel without files (player, layouts)
 # Needs kwin_wayland, spectacle, dbus-run-session, python3-gobject (GTK 3), ImageMagick and
 # wl-clipboard (and Dolphin for the tap scenario).
 set -euo pipefail
@@ -50,6 +51,10 @@ if [ "${PERMISSIONS:-}" = 1 ]; then
 else
     CHECKS=KWIN_WAYLAND_NO_PERMISSION_CHECKS=1
 fi
+# The desk scenario switches between keyboard layouts, which KWin serves.
+if [ "${1:-full}" = desk ]; then
+    printf '[Layout]\nDisplayNames=,,\nLayoutList=us,tr,de\nUse=true\nVariantList=,,\n' > "$OUT/config/kxkbrc"
+fi
 env $CHECKS kwin_wayland --no-lockscreen --virtual \
     --width 1280 --height 800 --socket "$SOCKET" > "$OUT/kwin.log" 2>&1 &
 PIDS=($!)
@@ -73,8 +78,15 @@ export WAYLAND_DISPLAY=$SOCKET OUT ROOT
 if [ "${PERMISSIONS:-}" != 1 ]; then
     "$ROOT/target/release/mcgyver" --install > "$OUT/install.log" 2>&1 || true
 fi
-# MCGYVER_SOUND=0: the clicks would play on the real speakers.
-MCGYVER_DEBUG=1 MCGYVER_SOUND=0 "$ROOT/target/release/mcgyver" > "$OUT/app.log" 2>&1 &
+# The desk scenario's player.
+if [ "${1:-full}" = desk ]; then
+    python3 -I "$HERE/desk_services.py" > "$OUT/desk-services.log" 2>&1 &
+    PIDS+=($!)
+fi
+# MCGYVER_SOUND=0: the clicks would play on the real speakers. PipeWire and PulseAudio are
+# pointed at nothing, so the desk can't change the real volume either.
+MCGYVER_DEBUG=1 MCGYVER_SOUND=0 PIPEWIRE_REMOTE=mcgyver-e2e-none PULSE_SERVER=unix:/nonexistent \
+    "$ROOT/target/release/mcgyver" > "$OUT/app.log" 2>&1 &
 PIDS+=($!)
 if [ "${SOURCE:-gtk}" = dolphin ]; then
     QT_QPA_PLATFORM=wayland dolphin --new-window "$OUT/files" > "$OUT/source.log" 2>&1 &

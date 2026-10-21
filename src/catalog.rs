@@ -12,16 +12,28 @@ pub enum Mode {
     Convert,
     Tools,
     Actions,
+    /// The wheel without files (see `desk`): the player,
+    Media,
+    /// the keyboard layout, volume and brightness,
+    Everyday,
+    /// and the quick apps.
+    Apps,
 }
 
 impl Mode {
+    /// The modes of a wheel of files.
     pub const ALL: [Mode; 3] = [Mode::Convert, Mode::Tools, Mode::Actions];
+    /// The modes of the wheel without files.
+    pub const DESK: [Mode; 3] = [Mode::Media, Mode::Everyday, Mode::Apps];
 
     pub fn title(self) -> &'static str {
         match self {
             Mode::Convert => "CONVERT",
             Mode::Tools => "TOOLS",
             Mode::Actions => "ACTIONS",
+            Mode::Media => "MEDIA",
+            Mode::Everyday => "EVERYDAY",
+            Mode::Apps => "APPS",
         }
     }
 }
@@ -327,6 +339,7 @@ pub fn choices(files: &[PathBuf], mode: Mode) -> Vec<Choice> {
                 .map(|&(label, hint)| Choice { mode, label, hint })
                 .collect()
         }
+        Mode::Media | Mode::Everyday | Mode::Apps => Vec::new(),
     }
 }
 

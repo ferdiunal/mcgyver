@@ -104,6 +104,38 @@ fn turkish(english: &str) -> Option<&'static str> {
         "TOOLS" => "ARAÇLAR",
         "ACTIONS" => "EYLEMLER",
         "Nothing to do with these" => "Bunlarla yapılacak bir şey yok",
+        "MEDIA" => "MEDYA",
+        "EVERYDAY" => "GÜNLÜK",
+        "APPS" => "UYGULAMALAR",
+
+        // The wheel without files.
+        "Playing" => "Çalıyor",
+        "Play" => "Oynat",
+        "Next" => "Sonraki",
+        "Next track" => "Sonraki parça",
+        "Previous" => "Önceki",
+        "Previous track" => "Önceki parça",
+        "Repeat" => "Tekrarla",
+        "Repeat is off" => "Tekrar kapalı",
+        "Repeating all" => "Tümü tekrarlanıyor",
+        "Repeating this track" => "Bu parça tekrarlanıyor",
+        "Shuffle" => "Karıştır",
+        "Shuffle is on" => "Karıştırma açık",
+        "Shuffle is off" => "Karıştırma kapalı",
+        "Open {}" => "{} açılacak",
+        "Keyboard" => "Klavye",
+        "Volume" => "Ses",
+        "Volume {}" => "Ses {}",
+        "Unmute" => "Sesi aç",
+        "Muted" => "Ses kapalı",
+        "Turn the sound off" => "Sesi kapat",
+        "Turn the sound back on" => "Sesi yeniden aç",
+        "Brightness" => "Parlaklık",
+        "Brightness {}" => "Parlaklık {}",
+        "Apps" => "Uygulamalar",
+        "Quick Apps" => "Hızlı Uygulamalar",
+        "Choose apps…" => "Uygulama seç…",
+        "Pick quick apps in the settings" => "Hızlı uygulamaları ayarlardan seçin",
 
         // Kinds of file.
         "Image" => "Resim",
@@ -193,6 +225,11 @@ fn turkish(english: &str) -> Option<&'static str> {
         "Copy the path of {}" => "Yolu kopyala: {}",
         "Terminal in {}" => "{} içinde terminal",
         "Send {} to your phone" => "{} telefona gönderilecek",
+        "to a chat" => "bir sohbete",
+        "Send {} with {}" => "{} {} ile gönderilecek",
+        "Pick a chat in Telegram" => "Telegram'da bir sohbet seçin",
+        "Copied: paste in {}" => "Kopyalandı: {} içine yapıştırın",
+        "{} isn't installed" => "{} yüklü değil",
         "Copy {} to" => "{} nereye kopyalansın",
         "Move {} to" => "{} nereye taşınsın",
         "Saved as {}" => "{} olarak kaydedildi",
@@ -309,6 +346,19 @@ fn turkish(english: &str) -> Option<&'static str> {
              dosyalar için açılır."
         }
         "Start at login" => "Oturum açılınca başlat",
+        "Without files" => "Dosyasız",
+        "Hold {} for a moment without dragging files: the wheel opens with what is playing, \
+         the keyboard layout, the volume, the brightness and your quick apps." => {
+            "Dosya sürüklemeden {} tuşunu biraz basılı tutun: çark çalan medya, klavye dili, ses, \
+             parlaklık ve hızlı uygulamalarınızla açılır."
+        }
+        "On the wheel's Apps, in this order." => "Çarkın Uygulamalar kısmında, bu sırayla.",
+        "Move up" => "Yukarı taşı",
+        "Move down" => "Aşağı taşı",
+        "The wheel holds {} apps." => "Çarka en çok {} uygulama sığar.",
+        "Looking for apps…" => "Uygulamalar aranıyor…",
+        "Add an app…" => "Uygulama ekle…",
+        "No app has that name" => "Bu adda uygulama yok",
         "Set up" => "Kur",
         "Remove" => "Kaldır",
         "On" => "Açık",
@@ -408,6 +458,17 @@ mod tests {
                 }
             }
         }
+        // The wheel without files, with everything there is to show.
+        for mode in Mode::DESK {
+            if turkish(mode.title()).is_none() {
+                missing.push(mode.title());
+            }
+        }
+        for text in DESK_WORDS {
+            if turkish(text).is_none() {
+                missing.push(text);
+            }
+        }
         // Actions the test machine may lack the tools for.
         for action in crate::actions::Action::ALL {
             for text in [action.label(), action.hint()] {
@@ -435,10 +496,64 @@ mod tests {
                 "Zip",
                 "Terminal",
                 "90°",
+                "Telegram",
+                "WhatsApp",
+                "Teams",
+                "Slack",
             ]
             .contains(t)
         });
         assert!(missing.is_empty(), "no Turkish for {missing:?}");
+    }
+
+    /// What `desk` shows, in English: it is translated as the wheel is built, so it can't be
+    /// read back from there.
+    const DESK_WORDS: &[&str] = &[
+        "Choose apps…",
+        "Pick quick apps in the settings",
+        "Open {}",
+        "Playing",
+        "Paused",
+        "Apps",
+        "Quick Apps",
+        "Brightness {}",
+        "Keyboard",
+        "Unmute",
+        "Mute",
+        "Turn the sound back on",
+        "Turn the sound off",
+        "Volume {}",
+        "Volume",
+        "Brightness",
+        "Muted",
+        "Pause",
+        "Play",
+        "Next",
+        "Next track",
+        "Repeat",
+        "Repeat is off",
+        "Repeating all",
+        "Repeating this track",
+        "Shuffle",
+        "Shuffle is on",
+        "Shuffle is off",
+        "Previous",
+        "Previous track",
+        "{} isn't installed",
+        "Pick a chat in Telegram",
+        "Copied: paste in {}",
+    ];
+
+    #[test]
+    fn every_word_the_desk_shows_is_one_it_uses() {
+        let source = include_str!("desk/mod.rs");
+        assert!(include_str!("actions.rs").contains("\"Send {} with {}\""));
+        for word in DESK_WORDS {
+            assert!(
+                source.contains(&format!("\"{word}\"")),
+                "desk doesn't say {word:?}"
+            );
+        }
     }
 
     #[test]

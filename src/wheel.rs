@@ -9,13 +9,14 @@
 //! It moves on springs (see `motion`): it pops open a little past its size, its wedges unfold
 //! out of the hub one after another (again when the mode switches), the wedge aimed at moves
 //! out and reaches into a lobe the frame swells into around it, and the hub's text slides over
-//! to the new one.
+//! to the new one. A wedge with options (a keyboard layout, a volume level) pops them out past
+//! its lobe as bubbles while it is aimed at.
 
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
 use egui::{Color32, FontId, Mesh, Painter, Pos2, Rect, Shape, Stroke, Vec2, pos2, vec2};
 
-use crate::catalog::{Choice, Mode};
+use crate::catalog::Mode;
 use crate::glass::{self, ACCENT, ACCENT_LIGHT, TEXT, TEXT_MUTED};
 use crate::i18n::tr;
 
@@ -42,10 +43,15 @@ const WEDGE_SWELL: f32 = DISC_R - RING_R1 + FRAME_SWELL - LOBE_MARGIN;
 const LABEL_SWELL: f32 = (WEDGE_LIFT + WEDGE_SWELL) / 2.0;
 /// A wedge unfolds from this fraction of its size.
 const UNFOLD_FROM: f32 = 0.6;
+/// The bubbles a wedge's options pop out as: their radius, the room between two, and how far
+/// out from the centre they sit, just past the lobe.
+pub const BUBBLE_R: f32 = 21.0;
+const BUBBLE_GAP: f32 = 7.0;
+pub const BUBBLE_AT: f32 = DISC_R + FRAME_SWELL + 6.0 + BUBBLE_R;
 /// How far the hub's text slides as it changes.
 const HUB_SLIDE: f32 = 6.0;
 /// Distance between the disc and the caption under it.
-const CAPTION_GAP: f32 = 14.0;
+pub const CAPTION_GAP: f32 = 14.0;
 /// Room kept clear around a wedge's label, and how small a long label may get to fit.
 const LABEL_PAD: f32 = 12.0;
 const MIN_LABEL: f32 = 11.0;
@@ -62,6 +68,8 @@ pub enum Hit {
     /// A mode slice around the centre.
     Mode(Mode),
     Choice(usize),
+    /// One of the options popped out of the wedge aimed at.
+    Sub(usize),
     /// On the frame between hub and wedges, or the wheel has no choices.
     Disc,
     Outside,
@@ -86,27 +94,65 @@ pub fn hit(center: Pos2, pos: Pos2, modes: &[Mode], choices: usize) -> Hit {
 }
 
 /// Like `hit`, but the wedge swollen out (`swollen`) keeps the pointer out to the end of its
-/// lobe, where it is drawn.
+/// lobe, where it is drawn, and on past it to its `bubbles` and between them.
 pub fn hit_swollen(
     center: Pos2,
     pos: Pos2,
     modes: &[Mode],
     choices: usize,
     swollen: Option<usize>,
+    bubbles: usize,
 ) -> Hit {
     let hit = hit(center, pos, modes, choices);
-    let d = pos - center;
-    match swollen {
-        Some(i)
-            if hit == Hit::Outside
-                && i < choices
-                && d.length() <= DISC_R + FRAME_SWELL + 10.0
-                && sector_at(d, choices) == i =>
-        {
-            Hit::Choice(i)
-        }
-        _ => hit,
+    let Some(i) = swollen.filter(|&i| i < choices) else {
+        return hit;
+    };
+    let spots = bubble_spots(center, i, choices, bubbles);
+    if let Some(k) = spots
+        .iter()
+        .position(|s| (pos - *s).length() <= BUBBLE_R + 3.0)
+    {
+        return Hit::Sub(k);
     }
+    if hit != Hit::Outside {
+        return hit;
+    }
+    let d = pos - center;
+    let r = d.length();
+    let in_lobe = r <= DISC_R + FRAME_SWELL + 10.0 && sector_at(d, choices) == i;
+    let angles = bubble_angles(i, choices, bubbles);
+    let margin = (BUBBLE_R + 6.0) / BUBBLE_AT;
+    let by_bubbles = match (angles.first(), angles.last()) {
+        (Some(&first), Some(&last)) => {
+            r <= BUBBLE_AT + BUBBLE_R + 10.0
+                && (d.angle() - (first - margin)).rem_euclid(TAU) <= last - first + 2.0 * margin
+        }
+        _ => false,
+    };
+    if in_lobe || by_bubbles {
+        Hit::Choice(i)
+    } else {
+        hit
+    }
+}
+
+/// The directions of wedge `i`'s `count` bubbles (of `n` wedges), side by side around its
+/// middle, clockwise.
+pub fn bubble_angles(i: usize, n: usize, count: usize) -> Vec<f32> {
+    let (a0, a1) = sector_angles(i, n);
+    let mid = (a0 + a1) / 2.0;
+    let step = (2.0 * BUBBLE_R + BUBBLE_GAP) / BUBBLE_AT;
+    (0..count)
+        .map(|k| mid + (k as f32 - (count as f32 - 1.0) / 2.0) * step)
+        .collect()
+}
+
+/// Where wedge `i`'s `count` bubbles sit once out.
+pub fn bubble_spots(center: Pos2, i: usize, n: usize, count: usize) -> Vec<Pos2> {
+    bubble_angles(i, n, count)
+        .into_iter()
+        .map(|a| center + Vec2::angled(a) * BUBBLE_AT)
+        .collect()
 }
 
 fn sector_at(d: Vec2, n: usize) -> usize {
@@ -122,7 +168,8 @@ fn sector_angles(i: usize, n: usize) -> (f32, f32) {
 }
 
 pub struct View<'a> {
-    pub choices: &'a [Choice],
+    /// The wedges' labels, as shown.
+    pub labels: &'a [String],
     /// Modes on the ring, which shows only when there are two or more.
     pub modes: &'a [Mode],
     pub mode: Mode,
@@ -154,7 +201,10 @@ pub struct Hub<'a> {
 /// going is gone halfway, the one coming comes in over the rest, so they hardly overlap.
 pub fn hub_fade(t: f32) -> (f32, f32) {
     let t = ease_out(t.clamp(0.0, 1.0));
-    ((1.0 - 2.0 * t).max(0.0), ((t - 0.25) / 0.75).clamp(0.0, 1.0))
+    (
+        (1.0 - 2.0 * t).max(0.0),
+        ((t - 0.25) / 0.75).clamp(0.0, 1.0),
+    )
 }
 
 pub fn ease_out(t: f32) -> f32 {
@@ -208,10 +258,7 @@ fn lobe(d: f32, half: f32) -> f32 {
 
 /// A wedge's inner and outer radius as it swells (before scaling).
 fn wedge_radii(swell: f32) -> (f32, f32) {
-    (
-        RING_R0 + WEDGE_LIFT * swell,
-        RING_R1 + WEDGE_SWELL * swell,
-    )
+    (RING_R0 + WEDGE_LIFT * swell, RING_R1 + WEDGE_SWELL * swell)
 }
 
 /// Where the frame swells out, as circles inside it along each lobe, for the backdrop blur.
@@ -241,15 +288,15 @@ pub fn bulges(center: Pos2, scale: f32, swell: &[f32]) -> Vec<(Pos2, f32)> {
 
 fn paint_wedges(p: &Painter, center: Pos2, s: f32, v: &View) {
     let a = v.open_t;
-    if v.choices.is_empty() {
+    if v.labels.is_empty() {
         let at = center + vec2(0.0, -(RING_R0 + RING_R1) / 2.0 * s);
         let hint = tr("Nothing to do with these");
         glass::text(p, at, hint, 13.0, TEXT_MUTED.gamma_multiply(a), false);
         return;
     }
 
-    let n = v.choices.len();
-    for (i, choice) in v.choices.iter().enumerate() {
+    let n = v.labels.len();
+    for (i, label) in v.labels.iter().enumerate() {
         let (a0, a1) = sector_angles(i, n);
         let chosen = v.chosen == Some(i);
         // `swell` runs past 1 and below 0 on the way; colours stop at the ends.
@@ -291,18 +338,15 @@ fn paint_wedges(p: &Painter, center: Pos2, s: f32, v: &View) {
         let color = TEXT.lerp_to_gamma(Color32::WHITE, h).gamma_multiply(a);
         // Laid out at full size, so it keeps its lines as the wedge unfolds: across the wedge
         // where it points up or down, along it where it points sideways.
-        let across = 2.0 * r_mid * s * ((a1 - a0) / 2.0).sin();
+        // One wedge goes all the way round: nothing beside it to keep clear of.
+        let across = if n == 1 {
+            2.0 * r_mid * s
+        } else {
+            2.0 * r_mid * s * ((a1 - a0) / 2.0).sin()
+        };
         let along = (RING_R1 - RING_R0) * s;
         let room = 1.0 / ((mid.cos() / along).powi(2) + (mid.sin() / across).powi(2)).sqrt();
-        wedge_label(
-            p,
-            at,
-            tr(choice.label),
-            15.0 + h,
-            color,
-            room - LABEL_PAD * s,
-            k / s,
-        );
+        wedge_label(p, at, label, 15.0 + h, color, room - LABEL_PAD * s, k / s);
     }
 }
 
@@ -443,6 +487,93 @@ fn paint_hub(p: &Painter, center: Pos2, s: f32, v: &View) {
     }
 }
 
+/// One option popping out of the wedge aimed at.
+pub struct Bubble<'a> {
+    pub label: &'a str,
+    /// A speaker instead of the label, crossed out if `true`: what the sound will be.
+    pub speaker: Option<bool>,
+    /// What is in use now: the layout, the level nearest.
+    pub on: bool,
+    pub hovered: bool,
+    /// 0 → 1 as it pops out of the lobe (a little past on the way), and back as it goes.
+    pub pop: f32,
+}
+
+/// Paints wedge `i`'s bubbles (of `n` wedges), out of the lobe toward where they sit; returns
+/// where each was drawn, for the backdrop blur.
+pub fn paint_bubbles(
+    p: &Painter,
+    center: Pos2,
+    s: f32,
+    i: usize,
+    n: usize,
+    bubbles: &[Bubble],
+    alpha: f32,
+) -> Vec<(Pos2, f32)> {
+    let from = DISC_R + FRAME_SWELL / 2.0;
+    let mut drawn = Vec::new();
+    for (b, angle) in bubbles.iter().zip(bubble_angles(i, n, bubbles.len())) {
+        if b.pop <= 0.02 {
+            continue;
+        }
+        let at = center + Vec2::angled(angle) * (from + (BUBBLE_AT - from) * b.pop) * s;
+        let r = BUBBLE_R * b.pop * s;
+        let a = alpha * b.pop.clamp(0.0, 1.0);
+        glass::capsule(p, Rect::from_center_size(at, Vec2::splat(2.0 * r)), a);
+        if b.hovered {
+            p.circle_filled(at, r - 2.5 * s, ACCENT_LIGHT.gamma_multiply(a));
+        } else if b.on {
+            p.circle_stroke(
+                at,
+                r - 3.0 * s,
+                Stroke::new(1.8 * s, ACCENT.gamma_multiply(a)),
+            );
+        }
+        let color = if b.hovered { Color32::WHITE } else { TEXT };
+        match b.speaker {
+            Some(muted) => speaker(p, at, r * 0.36, muted, color.gamma_multiply(a)),
+            None => {
+                let room = 2.0 * r - 9.0 * s;
+                let size = 12.0 * b.pop.max(0.0) * s;
+                let size = size * (room / glass::text_width(p, b.label, size, true)).min(1.0);
+                glass::text(p, at, b.label, size, color.gamma_multiply(a), true);
+            }
+        }
+        drawn.push((at, r));
+    }
+    drawn
+}
+
+/// A speaker `u` points tall either side of `c`, with sound coming out or crossed out.
+fn speaker(p: &Painter, c: Pos2, u: f32, muted: bool, color: Color32) {
+    let c = c - vec2(0.25 * u, 0.0);
+    let at = |x: f32, y: f32| c + vec2(x, y) * u;
+    p.add(Shape::convex_polygon(
+        vec![
+            at(-1.0, -0.42),
+            at(-0.4, -0.42),
+            at(0.25, -1.0),
+            at(0.25, 1.0),
+            at(-0.4, 0.42),
+            at(-1.0, 0.42),
+        ],
+        color,
+        Stroke::NONE,
+    ));
+    let stroke = Stroke::new(0.17 * u, color);
+    if muted {
+        p.line_segment([at(0.6, -0.4), at(1.3, 0.4)], stroke);
+        p.line_segment([at(0.6, 0.4), at(1.3, -0.4)], stroke);
+    } else {
+        for reach in [0.55, 0.95] {
+            let points = (0..=8)
+                .map(|k| at(0.3, 0.0) + Vec2::angled(-0.8 + 1.6 * k as f32 / 8.0) * reach * u)
+                .collect();
+            p.add(Shape::line(points, stroke));
+        }
+    }
+}
+
 /// Boundary of an annular sector between angles `a0..a1` and radii `r0..r1`, with straight
 /// sides `gap / 2` inside the sector's radial edges and every corner rounded by `corner`.
 /// Returns the outer chain and the inner chain, both running from the `a0` side to `a1`.
@@ -557,11 +688,27 @@ fn resample(points: &[Pos2], n: usize) -> Vec<Pos2> {
 
 /// Pill under the wheel naming the files, or previewing the aimed-at choice.
 /// Returns where it was drawn, for the backdrop blur.
-/// The caption under the disc, `drop` further down while the frame swells out at the bottom.
-pub fn caption(p: &Painter, center: Pos2, s: f32, text: &str, alpha: f32, drop: f32) -> Rect {
+/// The caption under the disc, `drop` further down while the frame swells out at the bottom;
+/// with no room below `bottom`, over the disc instead, `rise` further up.
+#[allow(clippy::too_many_arguments)]
+pub fn caption(
+    p: &Painter,
+    center: Pos2,
+    s: f32,
+    text: &str,
+    alpha: f32,
+    drop: f32,
+    rise: f32,
+    bottom: f32,
+) -> Rect {
     let galley = p.layout_no_wrap(text.to_owned(), FontId::proportional(12.5), TEXT);
     let size = galley.size() + vec2(28.0, 14.0);
-    let top = center.y + (DISC_R + CAPTION_GAP + drop) * s;
+    let below = center.y + (DISC_R + CAPTION_GAP + drop) * s;
+    let top = if below + size.y <= bottom {
+        below
+    } else {
+        center.y - (DISC_R + CAPTION_GAP + rise) * s - size.y
+    };
     let rect = Rect::from_min_size(Pos2::new(center.x - size.x / 2.0, top), size);
     glass::capsule(p, rect, alpha);
     glass::text(
@@ -644,7 +791,10 @@ mod tests {
                     for k in 0..64 {
                         let p = at + Vec2::angled(k as f32 / 64.0 * TAU) * r;
                         let past = p.to_vec2().length() - frame(p, &swell);
-                        assert!(past < 0.5, "{n} wedges, swell {h}: blur {past} past the edge");
+                        assert!(
+                            past < 0.5,
+                            "{n} wedges, swell {h}: blur {past} past the edge"
+                        );
                     }
                 }
             }
@@ -657,8 +807,43 @@ mod tests {
         let modes = [Mode::Convert];
         let tip = c + Vec2::angled(-FRAC_PI_2) * (DISC_R + FRAME_SWELL);
         assert_eq!(hit(c, tip, &modes, 8), Hit::Outside);
-        assert_eq!(hit_swollen(c, tip, &modes, 8, Some(0)), Hit::Choice(0));
+        assert_eq!(hit_swollen(c, tip, &modes, 8, Some(0), 0), Hit::Choice(0));
         // Only its own wedge: beside it, out there is outside.
-        assert_eq!(hit_swollen(c, tip, &modes, 8, Some(1)), Hit::Outside);
+        assert_eq!(hit_swollen(c, tip, &modes, 8, Some(1), 0), Hit::Outside);
+    }
+
+    #[test]
+    fn bubbles_sit_past_the_lobe_and_keep_the_wedge_open_on_the_way() {
+        let c = Pos2::ZERO;
+        let modes = [Mode::Everyday];
+        // Three wedges; the one at the bottom right (1) has five options out.
+        let spots = bubble_spots(c, 1, 3, 5);
+        for (k, spot) in spots.iter().enumerate() {
+            assert_eq!(hit_swollen(c, *spot, &modes, 3, Some(1), 5), Hit::Sub(k));
+            assert!(spot.to_vec2().length() - BUBBLE_R > DISC_R + FRAME_SWELL);
+        }
+        for pair in spots.windows(2) {
+            assert!((pair[1] - pair[0]).length() >= 2.0 * BUBBLE_R + BUBBLE_GAP - 0.5);
+            // Between two of them, and from the lobe out to one, the wedge stays aimed at.
+            let between = c + ((pair[0] - c) + (pair[1] - c)) / 2.0;
+            assert_eq!(
+                hit_swollen(c, between, &modes, 3, Some(1), 5),
+                Hit::Choice(1)
+            );
+        }
+        let way_out = c + (spots[2] - c) * ((DISC_R + FRAME_SWELL + 1.0) / BUBBLE_AT);
+        assert_eq!(
+            hit_swollen(c, way_out, &modes, 3, Some(1), 5),
+            Hit::Choice(1)
+        );
+        // Far past them, it is outside; and another wedge has no bubbles there.
+        assert_eq!(
+            hit_swollen(c, c + (spots[2] - c) * 1.4, &modes, 3, Some(1), 5),
+            Hit::Outside
+        );
+        assert_eq!(
+            hit_swollen(c, spots[2], &modes, 3, Some(0), 5),
+            Hit::Outside
+        );
     }
 }

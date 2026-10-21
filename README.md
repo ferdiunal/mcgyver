@@ -22,7 +22,9 @@ merged, zipped, shared. Drop them on a wedge and it's done, without opening anot
   Markdown (MD), with
   [anydoc](https://github.com/firecrawl/anydoc): pure Rust, nothing leaves the machine; a scanned
   PDF says it has no text, since OCR would mean a cloud service
-- every [action](#actions)
+- every [action](#actions), sending to Telegram, WhatsApp, Teams and Slack too
+- [the wheel without files](#the-wheel-without-files): hold Shift on its own for what is playing,
+  the keyboard layout, the volume, the brightness and your quick apps
 
 Media editing, PDF conversions other than to Markdown, document and spreadsheet Merge, and
 presentation Compress are still simulated. It runs on **KDE Plasma 6 (Wayland)**, and on
@@ -150,6 +152,10 @@ The settings window saves each change at once, to
 - **Trigger key:** Shift (the default), Ctrl or Alt: held during a drag it opens the wheel, tapped
   on its own it opens the wheel for Dolphin's selection. Changing it also moves the KDE shortcut
   for the tap. Meta isn't offered: Plasma opens its launcher when Meta is tapped.
+- **Without files:** holding the trigger key on its own opens the
+  [wheel without files](#the-wheel-without-files); on by default.
+- **Quick Apps:** the apps on that wheel's Apps, up to eight: ↑ and ↓ change the order, ✕
+  takes one off, and the list under them (narrowed as you type) adds one.
 - **Start at login:** writes `~/.config/autostart/mcgyver.desktop`.
 - **Permissions:** what KWin and KDE actually granted the running app, checked every second,
   each with the button that fixes it. "Opens at once under a drag" is KWin's fake input;
@@ -183,7 +189,7 @@ switches between the three modes:
 |------|-------|
 | Convert | To another format; Unzip first for archives |
 | Tools | Compress, trim, rotate, split, merge… |
-| Actions | Zip, copy, cut, copy to, move to, copy path, terminal, share |
+| Actions | Zip, copy, cut, copy to, move to, copy path, terminal, share, messaging apps |
 
 - **The mode ring:** the hub is a ring of three slices around a white centre: Convert at the top,
   Tools at the lower right, Actions at the lower left, each named along its curve. The current
@@ -228,6 +234,42 @@ switches between the three modes:
   in between). The wheel opens at the pointer for those files; click an option, or click a ring
   slice to switch modes. A click anywhere else, a right click or another Shift tap closes it.
   Typing capitals and Shift-clicking don't count as taps.
+
+## The wheel without files
+
+Hold Shift on its own a moment, with no drag (half a second on KDE, 0.4 s on macOS and
+Windows): the wheel opens around the pointer for the desktop rather than for files.
+
+| Mode | Wheel |
+|------|-------|
+| Media | Only while a player plays or is paused: Play or Pause on top, then Next, Repeat, the player itself (brings it forward), Shuffle, Previous. The caption is the track |
+| Everyday | Keyboard (with two layouts or more), Volume and Brightness, whichever the system lets change |
+| Apps | Your quick apps, in the order the settings keep them; with none yet, "Choose apps…" opens the settings |
+
+- **Options as bubbles:** aiming at Keyboard, Volume or Brightness pops their options out past the
+  wedge, one after another: the layouts (EN, TR, DE…), a speaker that mutes or unmutes and 25 to
+  100 %, or 10 to 100 %. The one in use is ringed.
+- **While Shift is held**, a click does what the wedge or bubble under it does and the wheel
+  stays; it reads the system again, so Play turns into Pause and the ring moves to the new
+  level. Opening an app (or the player) closes it. A right click closes it.
+- **Letting go of Shift** does what is aimed at, unless a click already did something; on
+  nothing, it just closes.
+- **On KDE** players come over MPRIS, the layouts from KWin (`org.kde.keyboard`), the volume
+  from PipeWire's `wpctl` (or PulseAudio's `pactl`), the brightness from Plasma's screen
+  brightness service (or PowerDevil's older one), and apps from their desktop files (started
+  with `gio launch`, `kioclient` or `gtk-launch`). Plasma lets no app see the other keys and the
+  clicks, so holding Shift that long for a Shift-click, Shift and the arrows, or a run of
+  capitals opens it too; Shift with another modifier (Ctrl+Shift…) doesn't. The settings' **Without
+  files** turns it off. Holding Shift and then starting a drag gets the files' wheel.
+- **On macOS** Spotify and Music are driven with AppleScript (macOS asks once whether McGyver may
+  control each), the volume too; the layouts are
+  the keyboard input sources; there is no Brightness, as macOS has no public way to set it; apps
+  come from the Applications folders and open with `open`. Another key or a click while Shift
+  is held is a shortcut or a Shift-click, and nothing opens.
+- **On Windows** the player is whichever the media controls show (the ones above the volume
+  flyout), the volume the default speakers', the layouts the input languages, the brightness a
+  built-in screen's (through WMI, read once ahead and then kept up to date behind the scenes),
+  and apps the Start menu's, Store apps included. Another key or a click cancels it, as on macOS.
 
 ## Pictures
 
@@ -324,6 +366,7 @@ folders alike:
 | Copy Path | Puts the full paths on the clipboard, one per line (wl-copy, or Klipper; pbcopy on macOS) |
 | Terminal | Opens Konsole (or the first terminal found; Terminal on macOS, Windows Terminal or Command Prompt on Windows) in the folder |
 | Share | Sends the files to the first phone KDE Connect can reach |
+| Telegram, WhatsApp, Teams, Slack | Telegram opens its own "share with" window for the files, where you pick the chat (`-sendpath`; as a flatpak with the files forwarded in). The others take no files from outside, so the files go on the clipboard as a copy and the app comes up to paste them into a chat. Each shows up only when installed: found by its desktop file, its app bundle, or on Windows Telegram's own folder and the `whatsapp:`, `msteams:` and `slack:` links |
 
 An action only shows up if its tool is installed. Pinning a preview above other windows isn't
 done yet.
@@ -449,6 +492,7 @@ The overlay UI (`src/overlay.rs`, `src/wheel.rs`) doesn't depend on the platform
 
 ```sh
 cargo run --example preview -- hover     # wheel|hover|tools|actions|mixed|dwell|card|cards|archive|folder|failed|settings
+cargo run --example preview -- desk      # the wheel without files: desk|desk-volume|desk-keyboard|desk-apps|desk-empty
 EFRAME_SCREENSHOT_TO=out.png MCGYVER_LANG=tr WAYLAND_DISPLAY= xvfb-run -a cargo run --example preview -- card
 ```
 
@@ -478,7 +522,12 @@ for screenshots, or the window opens on the desktop rather than under xvfb.
    Ctrl does, pauses from the tray menu and quits with `--quit`, and
    `PERMISSIONS=1 run.sh permissions` keeps KWin's permission checks on, as on a real desktop
    (the other runs switch them off), and sets up and removes the KDE integration from the
-   settings' Permissions card).
+   settings' Permissions card, and
+   `run.sh desk` holds Shift with no drag, with a stand-in player on the nested bus
+   (`dev/e2e/desk_services.py`, its calls in `out/desk.log`) and three keyboard layouts in the
+   nested KWin: it clicks Next, switches the layout to DE (`out/layout.txt` should read 2), lets
+   go on Pause, and checks that a short press opens nothing. PipeWire is pointed at nothing in
+   every run, so the volume is never touched).
 4. spectacle takes screenshots.
 
 Logs, screenshots and the files the app made go to `dev/e2e/out/`. This test caught a bug that only showed on NVIDIA:
@@ -489,7 +538,7 @@ the context was first made current without a surface, which left the draw buffer
 
 | File | What |
 |------|------|
-| `src/kde.rs` | KDE Wayland backend: keystate, layer-shell overlay, drag and drop, clicks after a Shift tap, EGL rendering |
+| `src/kde.rs` | KDE Wayland backend: keystate, layer-shell overlay, drag and drop, clicks after a Shift tap or on the wheel without files, EGL rendering |
 | `src/tap.rs` | The trigger-key tap global shortcut (KGlobalAccel over D-Bus) |
 | `src/tray.rs` | The tray icon and its menu (StatusNotifierItem, through ksni) |
 | `src/service.rs` | The app's session-bus name: one instance, and what the settings window and `--quit` ask it |
@@ -512,7 +561,8 @@ the context was first made current without a surface, which left the draw buffer
 | `src/media.rs` | Audio and video conversion through FFmpeg |
 | `src/office.rs` | Office documents and PDF tools through the WordCraft, GridCraft, DeckCraft and PdfCraft engines |
 | `src/markdown.rs` | Documents, spreadsheets, presentations and PDFs to Markdown through anydoc |
-| `src/actions.rs` | The Actions wheel: zip, copy, move, copy path, terminal, share |
+| `src/actions.rs` | The Actions wheel: zip, copy, move, copy path, terminal, share, messaging apps |
+| `src/desk/` | The wheel without files: what it offers (`mod.rs`), and the player, layouts, volume, brightness, apps and messaging apps each system has (`linux.rs`, `mac.rs`, `windows.rs`) |
 | `src/archive/` | Reading and writing archives (`zip_io`, `sevenz_io`, `tar_io`, `rar_io`), codecs, safe unpacking |
 | `tests/archives.rs` | Every format round trip, plus checks against tar, zip/unzip, 7z and zstd |
 | `tests/images.rs` | Every picture target, orientation, profiles, Exif, crafted files; checks against ImageMagick; the Zip action |

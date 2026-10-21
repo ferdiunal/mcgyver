@@ -1,6 +1,7 @@
 //! Renders the overlay in an ordinary window, for working on the UI without dragging files.
 //!
 //!     cargo run --example preview -- [wheel|hover|swap|tools|actions|mixed|json|document|card|cards|archive|folder|failed]
+//!     cargo run --example preview -- [desk|desk-volume|desk-keyboard|desk-apps|desk-empty]
 //!
 //! With `EFRAME_SCREENSHOT_TO=out.png` it saves the second frame and exits; `MCGYVER_LANG=tr` shows
 //! it in Turkish. The `settings` scene opens the settings window instead. `MCGYVER_AT=0.1` stops
@@ -13,6 +14,7 @@ use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Rect, Vec2};
 use mcgyver::catalog::Mode;
+use mcgyver::desk::{self, Menu};
 use mcgyver::overlay::Overlay;
 
 fn main() -> eframe::Result {
@@ -33,8 +35,14 @@ fn main() -> eframe::Result {
     if scene == "settings" {
         return mcgyver::settings_window::run().map_err(|e| eframe::Error::AppCreation(e.into()));
     }
+    // The desk's bubbles reach further out.
+    let size = if scene.starts_with("desk") {
+        620.0
+    } else {
+        520.0
+    };
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([520.0, 520.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([size, size]),
         multisampling: 4,
         ..Default::default()
     };
@@ -111,9 +119,93 @@ fn backdrop(p: &egui::Painter, screen: Rect) {
     p.add(egui::Shape::mesh(mesh));
 }
 
+/// What a desktop might have, for the desk scenes.
+fn menu(name: &str) -> Menu {
+    let layout = |id: &str, short: &str, name: &str| desk::Layout {
+        id: id.into(),
+        short: short.into(),
+        name: name.into(),
+    };
+    let app = |name: &str| desk::App {
+        id: format!("{}.desktop", name.to_lowercase()),
+        name: name.into(),
+    };
+    Menu {
+        player: (name == "desk").then(|| desk::Player {
+            id: "org.mpris.MediaPlayer2.spotify".into(),
+            name: "Spotify".into(),
+            title: "Teardrop".into(),
+            artist: "Massive Attack".into(),
+            playing: true,
+            can_next: true,
+            can_previous: true,
+            shuffle: Some(false),
+            repeat: Some(desk::Repeat::Off),
+        }),
+        layouts: vec![
+            layout("0", "EN", "English (US)"),
+            layout("1", "TR", "Turkish"),
+            layout("2", "DE", "German"),
+            layout("3", "JA", "Japanese"),
+        ],
+        layout: Some(1),
+        volume: Some(desk::Volume {
+            level: 0.45,
+            muted: false,
+        }),
+        brightness: Some(0.8),
+        apps: if name == "desk-empty" {
+            Vec::new()
+        } else {
+            ["Firefox", "Dolphin", "Konsole", "Telegram", "Kate"]
+                .map(app)
+                .to_vec()
+        },
+    }
+}
+
+/// The desk, opened at `then` less a second, with a wedge aimed at (and one of its bubbles)
+/// at `then`.
+fn desk_scene(name: &str, screen: Rect, then: Instant) -> Overlay {
+    let center = screen.center();
+    let mut overlay = Overlay::default();
+    overlay.open_desk(menu(name), center, screen, then - Duration::from_secs(1));
+    // The mode slice to switch to, and the wedge aimed at (of how many) with which bubble (of
+    // how many).
+    type Aim = Option<(usize, usize, Option<(usize, usize)>)>;
+    let (mode_at, wedge): (Option<f32>, Aim) = match name {
+        // Volume, lower right, and its 50 % bubble.
+        "desk-volume" => (None, Some((1, 3, Some((2, 5))))),
+        // The keyboard on top, and its third bubble.
+        "desk-keyboard" => (None, Some((0, 3, Some((2, 4))))),
+        // To Apps, lower left on the ring.
+        "desk-apps" => (Some(150.0), Some((0, 5, None))),
+        "desk-empty" => (Some(150.0), None),
+        _ => (None, None),
+    };
+    if let Some(degrees) = mode_at {
+        overlay.drag_moved(
+            center + Vec2::angled(degrees.to_radians()) * 48.0,
+            then - Duration::from_millis(900),
+        );
+        overlay.click(then - Duration::from_millis(900));
+    }
+    if let Some((i, n, bubble)) = wedge {
+        let toward = Vec2::angled(-FRAC_PI_2 + i as f32 * std::f32::consts::TAU / n as f32);
+        overlay.drag_moved(center + toward * 118.0, then - Duration::from_millis(600));
+        if let Some((k, count)) = bubble {
+            overlay.drag_moved(mcgyver::wheel::bubble_spots(center, i, n, count)[k], then);
+        }
+    }
+    overlay
+}
+
 /// Sets up the overlay as a drag would have: the scene's last step (the wheel opening, the drag
 /// aiming at a wedge, the mode switching) at `then`, the steps before it a second earlier.
 fn scene(name: &str, screen: Rect, then: Instant) -> Overlay {
+    if name.starts_with("desk") {
+        return desk_scene(name, screen, then);
+    }
     let center = screen.center();
     let (files, mode, aim): (&[&str], Mode, Option<f32>) = match name {
         "hover" => (&["holiday.jpg"], Mode::Convert, Some(60.0)),

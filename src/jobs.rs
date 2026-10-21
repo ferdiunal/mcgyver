@@ -144,6 +144,7 @@ impl Job {
 pub fn applies(file: &Path, choice: Choice) -> bool {
     match choice.mode {
         Mode::Actions => true,
+        Mode::Media | Mode::Everyday | Mode::Apps => false,
         Mode::Tools => catalog::kind_of(file).is_some(),
         Mode::Convert => {
             catalog::kind_of(file).is_some() && catalog::ext_of(file).to_uppercase() != choice.label
@@ -332,10 +333,11 @@ pub fn outcome(file: &Path, choice: Choice) -> String {
             "Move To" => "moved",
             "Copy Path" => "path copied",
             "Terminal" => "terminal opened",
-            "Share" => "shared",
+            "Share" | "Telegram" | "WhatsApp" | "Teams" | "Slack" => "shared",
             _ => "floating",
         })
         .into(),
+        Mode::Media | Mode::Everyday | Mode::Apps => String::new(),
     }
 }
 

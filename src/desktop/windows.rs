@@ -39,9 +39,10 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GWL_EXSTYLE, GetCursorPos, GetMessageW, GetSystemMetrics, GetWindowLongPtrW,
     GetWindowRect, HC_ACTION, HWND_TOPMOST, KBDLLHOOKSTRUCT, LWA_ALPHA, MSG, MSLLHOOKSTRUCT,
     SM_SWAPBUTTON, SWP_NOACTIVATE, SWP_NOSIZE, SetLayeredWindowAttributes, SetWindowLongPtrW,
-    SetWindowPos, SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL,
-    WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_SYSKEYDOWN,
-    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+    SetWindowPos, SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MOUSEHWHEEL, WM_MOUSEWHEEL, WM_RBUTTONDOWN,
+    WM_SYSKEYDOWN, WM_XBUTTONDOWN, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_EX_TRANSPARENT,
 };
 
 use super::{Input, Shared, WHEEL_AT, WINDOW};
@@ -98,7 +99,22 @@ pub(super) fn read_input(trigger: Trigger) -> Input {
         trigger_down: keys(trigger).into_iter().any(down),
         button_down: down(button),
         pointer,
+        // Only the hooks hear the other keys.
+        keys: 0,
     }
+}
+
+/// The other keys' count, as the hooks keep it.
+pub(super) fn keys_now(input: &Input) -> u32 {
+    input.keys
+}
+
+/// Whether a modifier other than the trigger is held.
+pub(super) fn other_modifiers(trigger: Trigger) -> bool {
+    [Trigger::Shift, Trigger::Ctrl, Trigger::Alt, Trigger::Cmd]
+        .into_iter()
+        .filter(|&t| t != trigger)
+        .any(|t| keys(t).into_iter().any(down))
 }
 
 /// What the hooks hand what they hear to; set once, when they are.
@@ -195,7 +211,8 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
     unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) }
 }
 
-/// A key went down or up; wakes the window if it was the trigger.
+/// A key went down or up; wakes the window if it was the trigger, or another key went down
+/// while it is held.
 fn heard_key(key: u32, pressed: bool) {
     let Some(hooks) = HOOKS.get() else {
         return;
@@ -211,6 +228,9 @@ fn heard_key(key: u32, pressed: bool) {
         } else if key == either {
             None
         } else {
+            if pressed {
+                input.keys = input.keys.wrapping_add(1);
+            }
             return;
         };
         input.trigger_down = pressed || other.is_some_and(|k| down(k as VIRTUAL_KEY));
@@ -229,6 +249,10 @@ fn heard_mouse(message: u32, at: POINT) {
         match message {
             WM_LBUTTONDOWN => input.button_down = true,
             WM_LBUTTONUP => input.button_down = false,
+            // Shift with another button or the wheel is a click or a scroll, not a hold.
+            WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN | WM_MOUSEWHEEL | WM_MOUSEHWHEEL => {
+                input.keys = input.keys.wrapping_add(1);
+            }
             _ => {}
         }
     });
@@ -323,7 +347,14 @@ impl NativeWindow {
             let screen = (GetMonitorInfoW(monitor, &mut info) != 0).then_some(info.rcMonitor);
             let (mut dpi, mut dpi_y) = (0, 0);
             let found = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi, &mut dpi_y) == 0;
-            (screen, if found && dpi > 0 { dpi as f32 / 96.0 } else { 1.0 })
+            (
+                screen,
+                if found && dpi > 0 {
+                    dpi as f32 / 96.0
+                } else {
+                    1.0
+                },
+            )
         };
         let mut origin = pointer - WHEEL_AT * scale;
         if let Some(r) = screen {
@@ -468,7 +499,11 @@ fn file_drop(files: &[PathBuf]) -> io::Result<Vec<u8>> {
 
 fn put_files(files: &[PathBuf], cut: bool) -> io::Result<()> {
     let drop = file_drop(files)?;
-    let effect = if cut { DROPEFFECT_MOVE } else { DROPEFFECT_COPY };
+    let effect = if cut {
+        DROPEFFECT_MOVE
+    } else {
+        DROPEFFECT_COPY
+    };
     let name = wide("Preferred DropEffect".as_ref());
     // SAFETY: a NUL-terminated name.
     let preferred = unsafe { RegisterClipboardFormatW(name.as_ptr()) };
@@ -494,7 +529,9 @@ pub(crate) fn put_text(text: &str) -> io::Result<()> {
 /// Opens the clipboard, empties it and has `put` fill it. Another app may hold it for a moment.
 fn on_clipboard(put: impl FnOnce() -> io::Result<()>) -> io::Result<()> {
     // The overlay owns what is put there (without an owner, Windows may refuse it).
-    let owner = OVERLAY.get().map_or(std::ptr::null_mut(), |&hwnd| hwnd as HWND);
+    let owner = OVERLAY
+        .get()
+        .map_or(std::ptr::null_mut(), |&hwnd| hwnd as HWND);
     let mut tries = 0;
     // SAFETY: the overlay's window, or none; the clipboard is closed again below.
     while unsafe { OpenClipboard(owner) } == 0 {
@@ -566,9 +603,7 @@ impl raw_window_handle::HasDisplayHandle for Owner {
 
 /// Asks for a folder; `Err` if none is picked.
 pub(crate) fn pick_folder(title: &str, start: &Path) -> io::Result<PathBuf> {
-    let mut dialog = rfd::FileDialog::new()
-        .set_title(title)
-        .set_directory(start);
+    let mut dialog = rfd::FileDialog::new().set_title(title).set_directory(start);
     if let Some(&hwnd) = OVERLAY.get() {
         dialog = dialog.set_parent(&Owner(hwnd));
     }
@@ -583,7 +618,10 @@ mod tests {
 
     #[test]
     fn files_go_on_the_clipboard_as_explorer_puts_them() {
-        let files = [PathBuf::from(r"C:\Users\me\a.txt"), PathBuf::from(r"D:\ş b")];
+        let files = [
+            PathBuf::from(r"C:\Users\me\a.txt"),
+            PathBuf::from(r"D:\ş b"),
+        ];
         let drop = file_drop(&files).unwrap();
         let word = |at: usize| u32::from_le_bytes(drop[at..at + 4].try_into().unwrap());
         // pFiles, the point (x, y), fNC, fWide.

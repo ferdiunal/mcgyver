@@ -1,5 +1,7 @@
 //! What the fullscreen overlay shows, independent of the platform that feeds it events:
-//! the wheel while a drag is over it, then a small progress card where it was dropped.
+//! the wheel while a drag is over it, then a small progress card where it was dropped. Opened
+//! without files (the trigger key held on its own), the wheel is the desk (see `desk`): its
+//! wedges do things at once, a click while the key is held or letting the key go.
 
 use std::f32::consts::{FRAC_PI_2, TAU};
 use std::path::PathBuf;
@@ -8,6 +10,7 @@ use std::time::{Duration, Instant};
 use egui::{Color32, FontId, Painter, Pos2, Rect, Shape, Stroke, Ui, Vec2, vec2};
 
 use crate::catalog::{self, Choice, Mode};
+use crate::desk::{self, Command, Menu};
 use crate::glass::{self, ACCENT, GREEN, GlassShape, RED, TEXT, TEXT_MUTED};
 use crate::i18n::{tr, trf};
 use crate::jobs::{self, Job};
@@ -44,6 +47,11 @@ const CLOSE_HIT: f32 = 14.0;
 const KEEP_AFTER_HOVER: Duration = Duration::from_millis(800);
 /// Keeps the whole disc on screen when the drag is near an edge, a swelling lobe too.
 const EDGE_MARGIN: f32 = wheel::DISC_R + wheel::FRAME_SWELL * 1.25 + 4.0;
+/// The desk's wedges pop bubbles out past their lobes: those stay on screen too.
+const DESK_MARGIN: f32 = wheel::BUBBLE_AT + wheel::BUBBLE_R * 1.1 + 4.0;
+/// A wedge's bubbles pop out one after another, this long apart, once it starts to swell.
+const BUBBLE_DELAY: f32 = 0.04;
+const BUBBLE_STAGGER: f32 = 0.035;
 
 struct Wheel {
     center: Pos2,
@@ -54,8 +62,13 @@ struct Wheel {
     /// Modes with something to offer; the ring shows only these.
     modes: Vec<Mode>,
     mode: Mode,
+    /// The mode's choices for the files (none on the desk).
     choices: Vec<Choice>,
-    /// Caption per choice, computed once: building it stats the files.
+    /// Opened without files: what the system has, and what the mode's wedges do.
+    desk: Option<Desk>,
+    /// Per wedge, its label as shown,
+    labels: Vec<String>,
+    /// and its caption, computed once: building it stats the files.
     previews: Vec<String>,
     pointer: Option<Pos2>,
     origin: Pos2,
@@ -67,11 +80,22 @@ struct Wheel {
     /// When the wedges began to unfold: as the wheel opened, or the mode switched.
     unfolded_at: Instant,
     opened_at: Instant,
-    /// How far each wedge swells toward the pointer.
+    /// How far each wedge swells toward the pointer,
     swell: Vec<Spring>,
+    /// and when it last began to, for its bubbles to pop out after.
+    lit_at: Vec<Instant>,
     hub: HubText,
     chosen: Option<usize>,
+    /// What a click on the desk ran, lit for a moment.
+    pressed: Option<(Hit, Instant)>,
     closing_at: Option<Instant>,
+}
+
+struct Desk {
+    menu: Menu,
+    items: Vec<desk::Item>,
+    /// A click ran something during this hold: letting go of the key then only closes.
+    used: bool,
 }
 
 /// A spring per wedge, none of them swelling.
@@ -142,6 +166,45 @@ impl HubText {
 }
 
 impl Wheel {
+    /// Fills in the wedges of the mode, and on the desk what the hub and caption say.
+    fn fill(&mut self) {
+        match &mut self.desk {
+            None => {
+                self.choices = catalog::choices(&self.files, self.mode);
+                self.labels = self
+                    .choices
+                    .iter()
+                    .map(|c| tr(c.label).to_owned())
+                    .collect();
+                self.previews = self
+                    .choices
+                    .iter()
+                    .map(|c| preview(&self.files, *c))
+                    .collect();
+            }
+            Some(desk) => {
+                desk.items = desk.menu.items(self.mode);
+                self.labels = desk.items.iter().map(|i| i.label.clone()).collect();
+                self.previews = desk.items.iter().map(|i| i.caption.clone()).collect();
+                self.info = desk.menu.info(self.mode);
+                self.summary = desk.menu.summary(self.mode);
+            }
+        }
+    }
+
+    /// Wedge `i`'s options, popping out as bubbles while it is aimed at.
+    fn subs(&self, i: usize) -> &[desk::Sub] {
+        self.desk
+            .as_ref()
+            .and_then(|d| d.items.get(i))
+            .map_or(&[], |item| &item.subs)
+    }
+
+    /// The wedge swollen out, if any.
+    fn swollen(&self) -> Option<usize> {
+        self.swell.iter().position(|s| s.target() == 1.0)
+    }
+
     /// Returns whether the mode changed.
     fn set_mode(&mut self, mode: Mode, now: Instant) -> bool {
         self.passing = None;
@@ -149,13 +212,9 @@ impl Wheel {
             return false;
         }
         self.mode = mode;
-        self.choices = catalog::choices(&self.files, mode);
-        self.previews = self
-            .choices
-            .iter()
-            .map(|c| preview(&self.files, *c))
-            .collect();
-        self.swell = calm(self.choices.len(), now);
+        self.fill();
+        self.swell = calm(self.labels.len(), now);
+        self.lit_at = vec![now; self.labels.len()];
         self.unfolded_at = now;
         self.origin = self.pointer.unwrap_or(self.origin);
         self.armed = false;
@@ -171,26 +230,38 @@ impl Wheel {
         };
     }
 
-    /// What the drag points at; the wedge swollen out keeps it out to the end of its lobe.
+    /// What the drag points at; the wedge swollen out keeps it out to the end of its lobe, and
+    /// on to its bubbles.
     fn aim(&self) -> Option<Hit> {
         let pos = self.pointer.filter(|_| self.armed)?;
-        let swollen = self.swell.iter().position(|s| s.target() == 1.0);
+        let swollen = self.swollen();
+        let bubbles = swollen.map_or(0, |i| self.subs(i).len());
         Some(wheel::hit_swollen(
             self.center,
             pos,
             &self.modes,
-            self.choices.len(),
+            self.labels.len(),
             swollen,
+            bubbles,
         ))
     }
 
-    /// The wedge picked, or else the one aimed at.
+    /// The wedge picked, or else the one aimed at (its bubbles too).
     fn named(&self) -> Option<usize> {
         let aimed = match self.chosen.is_none().then(|| self.aim()).flatten() {
             Some(Hit::Choice(i)) => Some(i),
+            Some(Hit::Sub(_)) => self.swollen(),
             _ => None,
         };
-        self.chosen.or(aimed).filter(|&i| i < self.choices.len())
+        self.chosen.or(aimed).filter(|&i| i < self.labels.len())
+    }
+
+    /// The bubble aimed at, if any.
+    fn aimed_sub(&self) -> Option<usize> {
+        match self.chosen.is_none().then(|| self.aim()).flatten() {
+            Some(Hit::Sub(k)) => Some(k),
+            _ => None,
+        }
     }
 
     /// Swells the wedge aimed at (or picked) and lets the others settle back, and has the hub
@@ -198,19 +269,40 @@ impl Wheel {
     fn follow(&mut self, now: Instant) {
         let named = self.named();
         for (i, swell) in self.swell.iter_mut().enumerate() {
-            swell.set(if named == Some(i) { 1.0 } else { 0.0 }, now);
+            let to = if named == Some(i) { 1.0 } else { 0.0 };
+            if to == 1.0 && swell.target() != 1.0 {
+                self.lit_at[i] = now;
+            }
+            swell.set(to, now);
         }
         let (text, bold) = match named {
-            Some(i) => (tr(self.choices[i].label).to_owned(), true),
+            Some(i) => (self.labels[i].clone(), true),
             None => (self.info.clone(), false),
         };
         self.hub.set(text, bold, now);
     }
 
+    /// How far each of wedge `i`'s bubbles has popped out: one after another once it began to
+    /// swell, all going back as it settles.
+    fn pops(&self, i: usize, now: Instant) -> Vec<f32> {
+        let t = now.saturating_duration_since(self.lit_at[i]).as_secs_f32();
+        let swell = self.swell[i].value(now).clamp(0.0, 1.0);
+        let shown = if self.swell[i].target() == 1.0 {
+            1.0
+        } else {
+            swell
+        };
+        (0..self.subs(i).len())
+            .map(|k| motion::POP.step(t - BUBBLE_DELAY - k as f32 * BUBBLE_STAGGER) * shown)
+            .collect()
+    }
+
     /// How far each wedge has unfolded.
     fn unfold(&self, now: Instant) -> Vec<f32> {
-        let t = now.saturating_duration_since(self.unfolded_at).as_secs_f32();
-        let n = self.choices.len();
+        let t = now
+            .saturating_duration_since(self.unfolded_at)
+            .as_secs_f32();
+        let n = self.labels.len();
         let stagger = UNFOLD_STAGGER.min(UNFOLD_SPREAD / n.max(1) as f32);
         (0..n)
             .map(|i| motion::POP.step(t - i as f32 * stagger))
@@ -237,6 +329,11 @@ impl Wheel {
             || since(self.unfolded_at) < UNFOLD_SPREAD + motion::POP.settle()
             || (self.hub.before.is_some() && self.hub.t(now) < 1.0)
             || self.swell.iter().any(|s| s.moving(now))
+            || self.lit_at.iter().enumerate().any(|(i, &at)| {
+                let subs = self.subs(i).len() as f32;
+                since(at) < BUBBLE_DELAY + subs * BUBBLE_STAGGER + motion::POP.settle()
+            })
+            || self.pressed.is_some_and(|(_, at)| now < at + FLASH)
     }
 
     fn open_t(&self, now: Instant) -> f32 {
@@ -309,6 +406,8 @@ pub struct Overlay {
     holding: Option<(u32, Vec2)>,
     /// The card whose close button is pressed, until the button comes up.
     closing: Option<u32>,
+    /// What the desk was asked to do, for the platform to run (see `take_commands`).
+    commands: Vec<Command>,
 }
 
 impl Overlay {
@@ -337,24 +436,73 @@ impl Overlay {
             Some(first) if !modes.contains(&mode) => *first,
             _ => mode,
         };
-        let choices = catalog::choices(&files, mode);
-        let previews = choices.iter().map(|c| preview(&files, *c)).collect();
+        let info = files_info(&files);
+        let summary = catalog::describe(&files);
+        self.show(
+            center, files, None, summary, info, modes, mode, pointer, now,
+        );
+    }
+
+    /// The trigger key was held on its own: opens the desk around `pointer`, on the player if
+    /// something plays.
+    pub fn open_desk(&mut self, menu: Menu, pointer: Pos2, screen: Rect, now: Instant) {
+        let fit = screen.shrink(DESK_MARGIN);
+        let center = if fit.is_positive() {
+            pointer.clamp(fit.min, fit.max)
+        } else {
+            screen.center()
+        };
+        let modes = menu.modes();
+        let desk = Desk {
+            menu,
+            items: Vec::new(),
+            used: false,
+        };
+        let mode = modes[0];
+        self.show(
+            center,
+            Vec::new(),
+            Some(desk),
+            String::new(),
+            String::new(),
+            modes,
+            mode,
+            pointer,
+            now,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn show(
+        &mut self,
+        center: Pos2,
+        files: Vec<PathBuf>,
+        desk: Option<Desk>,
+        summary: String,
+        info: String,
+        modes: Vec<Mode>,
+        mode: Mode,
+        pointer: Pos2,
+        now: Instant,
+    ) {
         // The wheel takes the pointer now; a card held or pressed is let go.
         self.hover = None;
         self.holding = None;
         self.closing = None;
-        let info = files_info(&files);
-        self.wheel = Some(Wheel {
+        let mut wheel = Wheel {
             center,
-            summary: catalog::describe(&files),
-            swell: calm(choices.len(), now),
-            hub: HubText::showing(info.clone(), now),
+            summary,
+            swell: Vec::new(),
+            lit_at: Vec::new(),
+            hub: HubText::showing(String::new(), now),
             info,
             modes,
-            previews,
+            labels: Vec::new(),
+            previews: Vec::new(),
             files,
+            desk,
             mode,
-            choices,
+            choices: Vec::new(),
             pointer: Some(pointer),
             origin: pointer,
             armed: false,
@@ -362,9 +510,131 @@ impl Overlay {
             unfolded_at: now,
             opened_at: now,
             chosen: None,
+            pressed: None,
             closing_at: None,
-        });
+        };
+        wheel.fill();
+        wheel.swell = calm(wheel.labels.len(), now);
+        wheel.lit_at = vec![now; wheel.labels.len()];
+        wheel.hub = HubText::showing(wheel.info.clone(), now);
+        self.wheel = Some(wheel);
         self.clicked = true;
+    }
+
+    /// Whether the desk is open and taking clicks.
+    pub fn desk_open(&self) -> bool {
+        self.wheel
+            .as_ref()
+            .is_some_and(|w| w.desk.is_some() && w.chosen.is_none() && w.closing_at.is_none())
+    }
+
+    /// What the system has now, read again after a command: the wedges and bubbles follow,
+    /// and the player's mode goes when nothing plays any more.
+    pub fn refresh_desk(&mut self, menu: Menu, now: Instant) {
+        let Some(w) = self.active_wheel() else {
+            return;
+        };
+        let Some(desk) = &mut w.desk else {
+            return;
+        };
+        if desk.menu == menu {
+            return;
+        }
+        desk.menu = menu;
+        w.modes = desk.menu.modes();
+        let wedges = w.labels.len();
+        if !w.modes.contains(&w.mode) {
+            w.mode = w.modes[0];
+            w.unfolded_at = now;
+        }
+        w.fill();
+        if w.labels.len() != wedges {
+            w.swell = calm(w.labels.len(), now);
+            w.lit_at = vec![now; w.labels.len()];
+        }
+        w.follow(now);
+    }
+
+    /// What the desk was asked to do since the last call, for the platform to run (then to
+    /// read the system again and `refresh_desk`).
+    pub fn take_commands(&mut self) -> Vec<Command> {
+        std::mem::take(&mut self.commands)
+    }
+
+    /// The trigger key came up while the desk was open: does what it aims at, unless a click
+    /// already did something while the key was held, and closes. Returns whether it did
+    /// something.
+    pub fn release(&mut self, now: Instant) -> bool {
+        if !self.desk_open() {
+            return false;
+        }
+        let used = self
+            .wheel
+            .as_ref()
+            .and_then(|w| w.desk.as_ref())
+            .is_some_and(|d| d.used);
+        if !used && self.press(now, true) {
+            return true;
+        }
+        self.cancel(now);
+        false
+    }
+
+    /// Does what the desk aims at: a wedge or one of its bubbles. The wheel stays for more,
+    /// unless the key came up (`last`) or it opens something.
+    fn press(&mut self, now: Instant, last: bool) -> bool {
+        let Some(w) = self.active_wheel() else {
+            return false;
+        };
+        let Some(desk) = &w.desk else {
+            return false;
+        };
+        let aim = w.aim();
+        let command = match aim {
+            Some(Hit::Choice(i)) => desk.items.get(i).and_then(|item| item.command.clone()),
+            Some(Hit::Sub(k)) => w
+                .swollen()
+                .and_then(|i| desk.items.get(i))
+                .and_then(|item| item.subs.get(k))
+                .map(|sub| sub.command.clone()),
+            _ => None,
+        };
+        let (Some(command), Some(aim)) = (command, aim) else {
+            return false;
+        };
+        let leaves = last
+            || matches!(
+                command,
+                Command::Launch(_)
+                    | Command::Settings
+                    | Command::Media {
+                        key: desk::MediaKey::Raise,
+                        ..
+                    }
+            );
+        if let Some(desk) = &mut w.desk {
+            desk.used = true;
+            // Shown at once; the system is read again after.
+            if !leaves {
+                desk.menu.apply(&command);
+            }
+        }
+        w.pressed = Some((aim, now));
+        if leaves {
+            w.chosen = w.named();
+            w.closing_at = Some(now + FLASH);
+        } else {
+            let wedges = w.labels.len();
+            w.fill();
+            if w.labels.len() != wedges {
+                w.swell = calm(w.labels.len(), now);
+                w.lit_at = vec![now; w.labels.len()];
+            }
+        }
+        w.follow(now);
+        self.commands.push(command);
+        self.clicked = true;
+        true
     }
 
     /// The drag moved to `pos`. Told the same place again, nothing moved: the pointer resting on
@@ -382,7 +652,7 @@ impl Overlay {
         w.update_ring(now);
         w.follow(now);
         let after = w.aim();
-        self.clicked |= matches!(after, Some(Hit::Choice(_))) && after != before;
+        self.clicked |= matches!(after, Some(Hit::Choice(_) | Hit::Sub(_))) && after != before;
     }
 
     /// Whether something clicked since the last call.
@@ -394,13 +664,13 @@ impl Overlay {
     pub fn would_accept(&self) -> bool {
         self.wheel
             .as_ref()
-            .filter(|w| w.chosen.is_none() && w.closing_at.is_none())
+            .filter(|w| w.desk.is_none() && w.chosen.is_none() && w.closing_at.is_none())
             .is_some_and(|w| matches!(w.aim(), Some(Hit::Choice(_))))
     }
 
     /// The drag was released over the overlay. Returns whether it picked something.
     pub fn drop(&mut self, now: Instant) -> bool {
-        let pick = match self.active_wheel() {
+        let pick = match self.active_wheel().filter(|w| w.desk.is_none()) {
             Some(w) => match w.aim() {
                 Some(Hit::Choice(i)) => Some(i),
                 _ => None,
@@ -420,13 +690,17 @@ impl Overlay {
     }
 
     /// A click on a wheel opened without a drag: picks like a drop would, and a click on the
-    /// mode ring switches to that mode at once.
+    /// mode ring switches to that mode at once. On the desk it does what the wedge or bubble
+    /// does, and the wheel stays.
     pub fn click(&mut self, now: Instant) -> bool {
         if let Some(w) = self.active_wheel()
             && let Some(Hit::Mode(mode)) = w.aim()
         {
             self.clicked |= w.set_mode(mode, now);
             return false;
+        }
+        if self.desk_open() {
+            return self.press(now, false);
         }
         self.drop(now)
     }
@@ -674,12 +948,20 @@ fn paint_wheel(ui: &Ui, w: &Wheel, now: Instant, shapes: &mut Vec<GlassShape>) {
     let s = w.scale(now);
     let unfold = w.unfold(now);
     let swell: Vec<f32> = w.swell.iter().map(|spring| spring.value(now)).collect();
+    let pressed = w
+        .pressed
+        .filter(|(_, at)| now < *at + FLASH)
+        .map(|(hit, _)| hit);
+    let lit = match pressed {
+        Some(Hit::Choice(i)) => Some(i),
+        _ => w.chosen,
+    };
     let view = wheel::View {
-        choices: &w.choices,
+        labels: &w.labels,
         modes: &w.modes,
         mode: w.mode,
         hovered,
-        chosen: w.chosen,
+        chosen: lit,
         open_t,
         scale: s,
         unfold: &unfold,
@@ -687,7 +969,11 @@ fn paint_wheel(ui: &Ui, w: &Wheel, now: Instant, shapes: &mut Vec<GlassShape>) {
         hub: wheel::Hub {
             text: &w.hub.text,
             bold: w.hub.bold,
-            before: w.hub.before.as_ref().map(|(t, b, was)| (t.as_str(), *b, *was)),
+            before: w
+                .hub
+                .before
+                .as_ref()
+                .map(|(t, b, was)| (t.as_str(), *b, *was)),
             t: w.hub.t(now),
         },
     };
@@ -702,12 +988,78 @@ fn paint_wheel(ui: &Ui, w: &Wheel, now: Instant, shapes: &mut Vec<GlassShape>) {
         }
     }
 
-    let caption = match w.named() {
-        Some(i) if i < w.previews.len() => &w.previews[i],
+    // The bubbles of a wedge swelling or settling back, over everything.
+    let aimed_sub = w.aimed_sub();
+    let mut lowest = None::<f32>;
+    for (i, &shown) in swell.iter().enumerate() {
+        let subs = w.subs(i);
+        if subs.is_empty() || shown <= 0.01 && w.swell[i].target() != 1.0 {
+            continue;
+        }
+        let pops = w.pops(i, now);
+        let swollen = w.swell[i].target() == 1.0;
+        let bubbles: Vec<wheel::Bubble> = subs
+            .iter()
+            .zip(&pops)
+            .enumerate()
+            .map(|(k, (sub, &pop))| wheel::Bubble {
+                label: &sub.label,
+                speaker: match sub.command {
+                    Command::Mute(muted) => Some(muted),
+                    _ => None,
+                },
+                on: sub.on,
+                hovered: swollen && (aimed_sub == Some(k) || pressed == Some(Hit::Sub(k))),
+                pop,
+            })
+            .collect();
+        let drawn = wheel::paint_bubbles(
+            ui.painter(),
+            w.center,
+            s,
+            i,
+            w.labels.len(),
+            &bubbles,
+            open_t,
+        );
+        for (center, radius) in drawn {
+            if open_t > 0.02 {
+                shapes.push(GlassShape::Circle { center, radius });
+            }
+            // The caption keeps clear of bubbles below the wheel.
+            if (center.x - w.center.x).abs() < 130.0 * s + radius {
+                let bottom = center.y + radius;
+                lowest = Some(lowest.map_or(bottom, |l: f32| l.max(bottom)));
+            }
+        }
+    }
+
+    let sub_caption = aimed_sub
+        .zip(w.named())
+        .and_then(|(k, i)| w.subs(i).get(k))
+        .map(|sub| &sub.caption);
+    let caption = match (sub_caption, w.named()) {
+        (Some(caption), _) => caption,
+        (None, Some(i)) if i < w.previews.len() => &w.previews[i],
         _ => &w.summary,
     };
-    let drop = wheel::bulge_at(FRAC_PI_2, &swell);
-    let rect = wheel::caption(ui.painter(), w.center, s, caption, open_t, drop);
+    let mut drop = wheel::bulge_at(FRAC_PI_2, &swell);
+    if let Some(bottom) = lowest {
+        let clear = (bottom + 6.0 - w.center.y) / s - wheel::DISC_R - wheel::CAPTION_GAP;
+        drop = drop.max(clear);
+    }
+    let rise = wheel::bulge_at(-FRAC_PI_2, &swell);
+    let bottom = ui.max_rect().bottom();
+    let rect = wheel::caption(
+        ui.painter(),
+        w.center,
+        s,
+        caption,
+        open_t,
+        drop,
+        rise,
+        bottom,
+    );
     if open_t > 0.02 {
         shapes.push(GlassShape::Capsule(rect));
     }
@@ -985,6 +1337,7 @@ fn back_out(t: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use egui::pos2;
 
     /// A point on the mode ring, `degrees` clockwise from three o'clock.
     fn on_ring(center: Pos2, degrees: f32) -> Pos2 {
@@ -993,9 +1346,9 @@ mod tests {
 
     fn ring_point(center: Pos2, mode: Mode) -> Pos2 {
         let degrees = match mode {
-            Mode::Convert => -90.0,
-            Mode::Tools => 30.0,
-            Mode::Actions => 150.0,
+            Mode::Convert | Mode::Media => -90.0,
+            Mode::Tools | Mode::Everyday => 30.0,
+            Mode::Actions | Mode::Apps => 150.0,
         };
         on_ring(center, degrees)
     }
@@ -1356,6 +1709,200 @@ mod tests {
         assert_eq!(w.hub.text, tr(w.choices[2].label));
         let (going, _, was) = w.hub.before.as_ref().unwrap();
         assert_eq!((going.as_str(), *was), (first, 1.0));
+    }
+
+    fn playing() -> desk::Player {
+        desk::Player {
+            id: "org.mpris.MediaPlayer2.test".into(),
+            name: "Test".into(),
+            title: "Song".into(),
+            artist: "Band".into(),
+            playing: true,
+            can_next: true,
+            can_previous: true,
+            shuffle: None,
+            repeat: None,
+        }
+    }
+
+    fn levels() -> Menu {
+        Menu {
+            volume: Some(desk::Volume {
+                level: 0.3,
+                muted: false,
+            }),
+            brightness: Some(0.6),
+            ..Menu::default()
+        }
+    }
+
+    /// The desk open at the middle of a big screen.
+    fn desk_with(menu: Menu, t0: Instant) -> (Overlay, Pos2) {
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1600.0, 1000.0));
+        let center = screen.center();
+        let mut overlay = Overlay::default();
+        overlay.open_desk(menu, center, screen, t0);
+        (overlay, center)
+    }
+
+    #[test]
+    fn a_click_on_the_desk_does_it_and_the_wheel_stays() {
+        let t0 = Instant::now();
+        let (mut overlay, center) = desk_with(
+            Menu {
+                player: Some(playing()),
+                ..levels()
+            },
+            t0,
+        );
+        let w = overlay.wheel.as_ref().unwrap();
+        assert_eq!(w.mode, Mode::Media);
+        assert_eq!(w.modes, [Mode::Media, Mode::Everyday, Mode::Apps]);
+        assert_eq!(w.hub.text, "Playing");
+        assert_eq!(w.summary, "Song — Band");
+
+        let n = w.labels.len();
+        overlay.drag_moved(wedge(center, 0, n), t0);
+        assert!(overlay.click(t0));
+        let play_pause = desk::Command::Media {
+            player: "org.mpris.MediaPlayer2.test".into(),
+            key: desk::MediaKey::PlayPause,
+        };
+        assert_eq!(overlay.take_commands(), [play_pause]);
+        assert!(overlay.desk_open());
+
+        // Letting go of the key after a click only closes.
+        assert!(!overlay.release(t0));
+        assert!(overlay.take_commands().is_empty());
+        assert!(!overlay.desk_open());
+    }
+
+    #[test]
+    fn letting_go_of_the_key_does_what_is_aimed_at() {
+        let t0 = Instant::now();
+        let (mut overlay, center) = desk_with(
+            Menu {
+                player: Some(playing()),
+                ..Menu::default()
+            },
+            t0,
+        );
+        let n = overlay.wheel.as_ref().unwrap().labels.len();
+        overlay.drag_moved(wedge(center, 1, n), t0);
+        assert_eq!(overlay.wheel.as_ref().unwrap().hub.text, "Next");
+        assert!(overlay.release(t0));
+        let next = desk::Command::Media {
+            player: "org.mpris.MediaPlayer2.test".into(),
+            key: desk::MediaKey::Next,
+        };
+        assert_eq!(overlay.take_commands(), [next]);
+        assert!(!overlay.desk_open());
+
+        // Let go on nothing, it just closes.
+        let (mut overlay, _) = desk_with(levels(), t0);
+        assert!(!overlay.release(t0));
+        assert!(overlay.take_commands().is_empty());
+        assert!(!overlay.wants_input());
+    }
+
+    #[test]
+    fn a_wedges_options_pop_out_and_take_clicks() {
+        let t0 = Instant::now();
+        let ms = |n: u64| Duration::from_millis(n);
+        let (mut overlay, center) = desk_with(levels(), t0);
+        let w = overlay.wheel.as_ref().unwrap();
+        assert_eq!(w.mode, Mode::Everyday);
+        assert_eq!(w.labels, ["Volume", "Brightness"]);
+
+        overlay.drag_moved(wedge(center, 0, 2), t0);
+        let spots = wheel::bubble_spots(center, 0, 2, 5);
+        let w = overlay.wheel.as_ref().unwrap();
+        // They pop out one after another, and are all out soon after.
+        let pops = w.pops(0, t0 + ms(60));
+        assert!(pops[0] > pops[4], "{pops:?}");
+        assert!(
+            w.pops(0, t0 + ms(800))
+                .iter()
+                .all(|p| (p - 1.0).abs() < 0.02)
+        );
+
+        overlay.drag_moved(spots[2], t0 + ms(400));
+        let w = overlay.wheel.as_ref().unwrap();
+        assert_eq!(w.aimed_sub(), Some(2));
+        assert_eq!(w.hub.text, "Volume", "the wedge stays named");
+        assert_eq!(w.swollen(), Some(0));
+        assert!(overlay.click(t0 + ms(400)));
+        assert_eq!(overlay.take_commands(), [desk::Command::Volume(0.5)]);
+
+        // Across to the next bubble, the wedge stays out, and the click there sets that level.
+        let between = center + ((spots[2] - center) + (spots[3] - center)) / 2.0;
+        overlay.drag_moved(between, t0 + ms(500));
+        assert_eq!(overlay.wheel.as_ref().unwrap().swollen(), Some(0));
+        overlay.drag_moved(spots[3], t0 + ms(520));
+        assert!(overlay.click(t0 + ms(520)));
+        assert_eq!(overlay.take_commands(), [desk::Command::Volume(0.75)]);
+
+        // Brightness has no command of its own: a click on it does nothing.
+        overlay.drag_moved(wedge(center, 1, 2), t0 + ms(700));
+        assert!(!overlay.click(t0 + ms(700)));
+        assert!(overlay.take_commands().is_empty());
+    }
+
+    #[test]
+    fn opening_an_app_closes_the_desk() {
+        let t0 = Instant::now();
+        let (mut overlay, center) = desk_with(
+            Menu {
+                apps: vec![desk::App {
+                    id: "firefox.desktop".into(),
+                    name: "Firefox".into(),
+                }],
+                ..Menu::default()
+            },
+            t0,
+        );
+        assert_eq!(overlay.wheel.as_ref().unwrap().mode, Mode::Apps);
+        overlay.drag_moved(wedge(center, 0, 1), t0);
+        assert!(overlay.click(t0));
+        assert!(matches!(
+            overlay.take_commands()[..],
+            [desk::Command::Launch(_)]
+        ));
+        assert!(!overlay.desk_open());
+    }
+
+    #[test]
+    fn when_the_player_goes_its_mode_goes_too() {
+        let t0 = Instant::now();
+        let (mut overlay, center) = desk_with(
+            Menu {
+                player: Some(playing()),
+                ..levels()
+            },
+            t0,
+        );
+        overlay.drag_moved(center + vec2(0.0, 20.0), t0);
+        overlay.refresh_desk(levels(), t0);
+        let w = overlay.wheel.as_ref().unwrap();
+        assert_eq!(w.modes, [Mode::Everyday, Mode::Apps]);
+        assert_eq!(w.mode, Mode::Everyday);
+        assert_eq!(w.labels, ["Volume", "Brightness"]);
+        assert_eq!(w.swell.len(), 2);
+        assert_eq!(w.hub.text, "30%");
+    }
+
+    #[test]
+    fn the_desk_keeps_its_bubbles_on_screen() {
+        let t0 = Instant::now();
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1600.0, 1000.0));
+        let mut overlay = Overlay::default();
+        overlay.open_desk(levels(), pos2(5.0, 990.0), screen, t0);
+        let center = overlay.wheel.as_ref().unwrap().center;
+        for i in 0..2 {
+            for spot in wheel::bubble_spots(center, i, 2, 5) {
+                assert!(screen.shrink(wheel::BUBBLE_R).contains(spot), "{spot:?}");
+            }
+        }
     }
 
     #[test]

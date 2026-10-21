@@ -6,6 +6,7 @@ pub mod catalog;
 #[cfg(target_os = "linux")]
 mod clipboard;
 pub mod convert;
+pub mod desk;
 #[cfg(target_os = "linux")]
 mod file_manager;
 #[cfg(not(target_os = "linux"))]

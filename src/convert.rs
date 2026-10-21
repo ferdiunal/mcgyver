@@ -97,7 +97,7 @@ pub fn task(file: &Path, choice: Choice) -> Option<Task> {
             (fits && to.can_write()).then_some(Task::Convert(to))
         }
         Mode::Tools => None,
-        Mode::Actions => None,
+        Mode::Actions | Mode::Media | Mode::Everyday | Mode::Apps => None,
     }
 }
 
@@ -411,8 +411,7 @@ fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     // Past MAX_PATH only the \\?\ form of a full path works (std does the same for its calls).
     let wide = |path: &Path| -> io::Result<Vec<u16>> {
         let mut text = std::ffi::OsString::new();
-        if path.as_os_str().len() >= 248 && !path.as_os_str().to_string_lossy().starts_with(r"\\")
-        {
+        if path.as_os_str().len() >= 248 && !path.as_os_str().to_string_lossy().starts_with(r"\\") {
             text.push(r"\\?\");
             text.push(std::path::absolute(path)?);
         } else {

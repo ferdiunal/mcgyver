@@ -75,10 +75,14 @@ impl Trigger {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
     pub language: Lang,
     pub trigger: Trigger,
+    /// Holding the trigger key without files opens the desk (see `desk`).
+    pub hold: bool,
+    /// The desk's quick apps, in order, by the id `desk` knows them by.
+    pub quick_apps: Vec<String>,
 }
 
 impl Default for Settings {
@@ -86,6 +90,8 @@ impl Default for Settings {
         Settings {
             language: Lang::from_env(),
             trigger: Trigger::Shift,
+            hold: true,
+            quick_apps: Vec::new(),
         }
     }
 }
@@ -116,6 +122,13 @@ impl Settings {
                         settings.trigger = trigger;
                     }
                 }
+                ("hold", "on") => settings.hold = true,
+                ("hold", "off") => settings.hold = false,
+                ("quick_app", id)
+                    if !id.is_empty() && !settings.quick_apps.iter().any(|a| a == id) =>
+                {
+                    settings.quick_apps.push(id.to_owned());
+                }
                 _ => {}
             }
         }
@@ -123,11 +136,16 @@ impl Settings {
     }
 
     pub fn to_text(&self) -> String {
-        format!(
-            "# {APP_NAME} settings\nlanguage = {}\ntrigger = {}\n",
+        let mut text = format!(
+            "# {APP_NAME} settings\nlanguage = {}\ntrigger = {}\nhold = {}\n",
             self.language.code(),
-            self.trigger.code()
-        )
+            self.trigger.code(),
+            if self.hold { "on" } else { "off" },
+        );
+        for id in &self.quick_apps {
+            text.push_str(&format!("quick_app = {id}\n"));
+        }
+        text
     }
 
     /// Writes the settings whole: a reader never sees half a file.
@@ -423,8 +441,13 @@ mod tests {
         let settings = Settings {
             language: Lang::Turkish,
             trigger: Trigger::Ctrl,
+            hold: false,
+            quick_apps: vec!["firefox.desktop".into(), r"C:\Apps\Kate.lnk".into()],
         };
         assert_eq!(Settings::parse(&settings.to_text()), settings);
+        // Older files say nothing of these.
+        let old = Settings::parse("language = tr\ntrigger = ctrl\n");
+        assert!(old.hold && old.quick_apps.is_empty());
     }
 
     /// Under a name of its own, so McGyver's own line is left alone.

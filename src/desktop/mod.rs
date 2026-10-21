@@ -11,12 +11,16 @@
 //! Quit; the settings window is a process of its own, as on Linux, and the app reads the
 //! settings file again when it changes.
 //!
+//! Holding the trigger key a moment on its own, with no button and no other key, opens the desk
+//! (see `desk`) under the pointer the same way: clicks do what its wedges do, and letting go
+//! of the key does what it aims at.
+//!
 //! What differs is in `mac` and `windows`: reading and hearing the input, putting the window
 //! under the pointer and letting clicks through it, and opening the settings.
 
 use std::fs::File;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant, SystemTime};
 
 use eframe::egui::{self, Pos2, Rect, Vec2};
@@ -24,6 +28,7 @@ use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, Predefin
 use tray_icon::{TrayIcon, TrayIconBuilder};
 
 use crate::catalog::Mode;
+use crate::desk;
 use crate::i18n::tr;
 use crate::overlay::{CardSpot, Overlay};
 use crate::settings::{APP_ID, APP_NAME, Settings, Trigger};
@@ -66,6 +71,8 @@ const LOOK_FOR_DRAG: Duration = Duration::from_secs(1);
 const NOTHING_OFFERED_AFTER: f32 = 16.0;
 /// …within this long, or it isn't files, and the drag goes through to what is below.
 const NOTHING_OFFERED_WAIT: Duration = Duration::from_millis(300);
+/// How long the trigger key is held alone before the desk opens.
+const HOLD: Duration = Duration::from_millis(400);
 
 /// The keys, the button and the pointer, as the window needs them.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -75,6 +82,9 @@ struct Input {
     /// On the screen, as the platform places windows: in points from the top left of the main
     /// display on macOS, in pixels on Windows.
     pointer: Pos2,
+    /// Moves on as other keys go down (a count where the platform keeps one): the trigger held
+    /// with another key is a shortcut, not a hold.
+    keys: u32,
 }
 
 fn lock_file() -> Option<PathBuf> {
@@ -153,6 +163,7 @@ impl Shared {
         self.input = input;
         input.trigger_down != before.trigger_down
             || input.button_down != before.button_down
+            || (input.trigger_down && input.keys != before.keys)
             || ((self.tracking || self.cards) && input.pointer != before.pointer)
     }
 }
@@ -281,6 +292,9 @@ pub fn run() -> Result<(), String> {
     let settings = Settings::load();
     crate::i18n::set(settings.language);
     platform::first_start();
+    if settings.hold {
+        desk::warm();
+    }
     let viewport = egui::ViewportBuilder::default()
         .with_title(APP_NAME)
         .with_app_id(APP_ID)
@@ -331,7 +345,25 @@ pub fn run() -> Result<(), String> {
                 };
                 eprintln!("keys and mouse: {how}");
             }
+            let (desk_tx, desk_rx) = mpsc::channel();
+            let runner = {
+                let (read, ctx) = (desk_tx.clone(), cc.egui_ctx.clone());
+                desk::Runner::new(move |number, menu| {
+                    let _ = read.send(DeskRead::Again(number, menu));
+                    ctx.request_repaint();
+                })
+            };
             Ok(Box::new(App {
+                hold: settings.hold,
+                quick_apps: settings.quick_apps.clone(),
+                hold_since: None,
+                holds: 0,
+                desk_keys: None,
+                runner,
+                desk_from: 0,
+                desk: None,
+                desk_tx,
+                desk_rx,
                 shared,
                 watcher,
                 window,
@@ -363,7 +395,32 @@ pub fn run() -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
+/// What a thread read of the system for the desk: to open it, or after a command.
+enum DeskRead {
+    /// For the hold with this number.
+    Open(u64, desk::Menu),
+    /// After the batch of commands with this number.
+    Again(u64, desk::Menu),
+}
+
 struct App {
+    /// Holding the key alone opens the desk, with these quick apps.
+    hold: bool,
+    quick_apps: Vec<String>,
+    /// The key went down alone, and the other keys' count then.
+    hold_since: Option<(Instant, u32)>,
+    /// Holds so far: a reading for an earlier one is dropped.
+    holds: u64,
+    /// The desk is being read for this hold, with this count of other keys.
+    desk_keys: Option<(u64, u32)>,
+    runner: desk::Runner,
+    /// The first batch of commands for the desk open now: readings after earlier ones are for
+    /// a desk gone since.
+    desk_from: u64,
+    /// The desk is open, with this count of other keys: another key closes it.
+    desk: Option<u32>,
+    desk_tx: mpsc::Sender<DeskRead>,
+    desk_rx: mpsc::Receiver<DeskRead>,
     shared: Arc<Mutex<Shared>>,
     /// The thread reading the input, woken when it has to read it often again.
     watcher: std::thread::Thread,
@@ -470,6 +527,8 @@ impl App {
     fn reload(&mut self) {
         let settings = Settings::load();
         crate::i18n::set(settings.language);
+        self.hold = settings.hold;
+        self.quick_apps = settings.quick_apps;
         {
             let mut s = self.shared.lock().unwrap_or_else(|e| e.into_inner());
             s.trigger = Some(settings.trigger);
@@ -479,6 +538,113 @@ impl App {
         if let Some(menu) = &self.menu {
             menu.retitle(self.paused);
         }
+    }
+
+    /// The key held alone: once it has been `HOLD` with no button and no other key, reads the
+    /// desk on a thread and opens it under the pointer. While it is open another key closes it,
+    /// and letting go of the trigger does what it aims at. (Its clicks are taken in `ui`.)
+    fn hold_for_desk(&mut self, ctx: &egui::Context, input: Input, now: Instant) {
+        let keys_now = platform::keys_now(&input);
+        let trigger = self
+            .shared
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .trigger;
+        let alone = !platform::other_modifiers(trigger.unwrap_or(Trigger::Shift));
+        if input.trigger_down
+            && !self.last.trigger_down
+            && !input.button_down
+            && alone
+            && self.hold
+            && !self.paused
+            && !self.active
+            && !self.overlay.wants_input()
+        {
+            self.holds += 1;
+            self.hold_since = Some((now, keys_now));
+        }
+        // Let go, a click, another key or modifier, or a drag: a tap, a Shift-click or a
+        // shortcut, not a hold.
+        let broken = |keys: u32| {
+            !input.trigger_down || input.button_down || keys_now != keys || !alone || self.active
+        };
+        if let Some((at, keys)) = self.hold_since {
+            if broken(keys) {
+                self.hold_since = None;
+            } else if now >= at + HOLD {
+                self.hold_since = None;
+                self.desk_keys = Some((self.holds, keys));
+                self.log("trigger held alone, reading the desk");
+                let (apps, read, ctx, hold) = (
+                    self.quick_apps.clone(),
+                    self.desk_tx.clone(),
+                    ctx.clone(),
+                    self.holds,
+                );
+                std::thread::spawn(move || {
+                    let _ = read.send(DeskRead::Open(hold, desk::Menu::read(&apps)));
+                    ctx.request_repaint();
+                });
+            } else {
+                ctx.request_repaint_after(at + HOLD - now);
+            }
+        }
+        if self.desk_keys.is_some_and(|(_, keys)| broken(keys)) {
+            self.desk_keys = None;
+        }
+        while let Ok(read) = self.desk_rx.try_recv() {
+            match read {
+                DeskRead::Open(hold, menu) => {
+                    let waiting = self.desk_keys.take();
+                    if waiting != Some((hold, keys_now)) || self.overlay.wants_input() {
+                        self.log("desk read, but the key is up or something else happened");
+                        continue;
+                    }
+                    self.take_drag(ctx, input.pointer);
+                    let local = self.window.local(input.pointer);
+                    let window = Rect::from_min_size(Pos2::ZERO, WINDOW);
+                    self.overlay.open_desk(menu, local, window, now);
+                    self.desk = Some(keys_now);
+                    self.desk_from = self.runner.next();
+                    self.log(format!("desk opened at {local:?} in the window"));
+                }
+                DeskRead::Again(number, menu) if number >= self.desk_from => {
+                    self.overlay.refresh_desk(menu, now);
+                }
+                DeskRead::Again(..) => {}
+            }
+        }
+        if let Some(keys) = self.desk {
+            if !self.overlay.desk_open() {
+                self.desk = None;
+            } else if !input.trigger_down {
+                self.desk = None;
+                let did = self.overlay.release(now);
+                self.log(format!(
+                    "trigger released on the desk, did something: {did}"
+                ));
+                self.run_desk_commands();
+            } else if keys_now != keys {
+                self.log("another key on the desk: closed");
+                self.desk = None;
+                self.overlay.cancel(now);
+            }
+        }
+    }
+
+    /// Hands what the desk was asked to do to its thread, which reads the system again after;
+    /// the settings this app opens itself.
+    fn run_desk_commands(&mut self) {
+        let mut commands = self.overlay.take_commands();
+        if commands.is_empty() {
+            return;
+        }
+        self.log(format!("desk: {commands:?}"));
+        if let Some(at) = commands.iter().position(|c| *c == desk::Command::Settings) {
+            commands.remove(at);
+            platform::show_settings();
+        }
+        self.runner.run(commands, self.quick_apps.clone());
     }
 
     /// Where the system can't tell beforehand that files are dragged: once the pointer has moved
@@ -498,7 +664,8 @@ impl App {
             self.guessed = None;
             self.held = false;
             self.log("no files came over the window: the drag goes through");
-        } else if guess.moved_at.is_none() && (pointer - guess.from).length() > NOTHING_OFFERED_AFTER
+        } else if guess.moved_at.is_none()
+            && (pointer - guess.from).length() > NOTHING_OFFERED_AFTER
         {
             self.guessed = Some(Guess {
                 moved_at: Some(now),
@@ -598,8 +765,13 @@ impl eframe::App for App {
             }
         }
         self.nothing_offered(ctx, input.pointer, now);
+        self.hold_for_desk(ctx, input, now);
         // The button before the key: the two coming up together is a drop, not a cancel.
-        if !input.button_down && self.overlay.wants_input() && self.released_at.is_none() {
+        if !input.button_down
+            && self.overlay.wants_input()
+            && self.desk.is_none()
+            && self.released_at.is_none()
+        {
             self.released_at = Some(now);
             self.let_go_at = None;
         }
@@ -657,7 +829,11 @@ impl eframe::App for App {
             drop(self.menu.take());
             std::process::exit(0);
         }
-        let tracking = self.active || self.pressed_at.is_some() || self.on_card;
+        let tracking = self.active
+            || self.pressed_at.is_some()
+            || self.on_card
+            || self.hold_since.is_some()
+            || self.desk_keys.is_some();
         self.shared
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -710,6 +886,25 @@ impl eframe::App for App {
         }
         if self.overlay.wants_input() {
             self.overlay.drag_moved(local, now);
+        }
+        // On the desk a click does what it aims at, and another button closes it.
+        if self.desk.is_some() && self.overlay.desk_open() {
+            let (primary, other) = ui.input(|i| {
+                (
+                    i.pointer.primary_pressed(),
+                    i.pointer.secondary_pressed()
+                        || i.pointer.button_pressed(egui::PointerButton::Middle),
+                )
+            });
+            if primary {
+                let did = self.overlay.click(now);
+                self.log(format!("clicked on the desk, did something: {did}"));
+                self.run_desk_commands();
+                // The click may have made this app the active one; give the keyboard back.
+                self.window.give_back_focus();
+            } else if other {
+                self.overlay.cancel(now);
+            }
         }
         if dropped && self.overlay.wants_input() {
             let picked = self.overlay.drop(now);

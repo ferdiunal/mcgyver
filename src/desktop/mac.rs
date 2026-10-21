@@ -64,6 +64,7 @@ const LEFT_BUTTON: u32 = 0;
 unsafe extern "C" {
     fn CGEventSourceFlagsState(state: i32) -> u64;
     fn CGEventSourceButtonState(state: i32, button: u32) -> bool;
+    fn CGEventSourceCounterForEventType(state: i32, kind: u32) -> u32;
     fn CGEventCreate(source: *const c_void) -> *mut c_void;
     fn CGEventGetLocation(event: *const c_void) -> CGPoint;
     fn CGGetDisplaysWithPoint(
@@ -118,6 +119,12 @@ const LEFT_UP: u32 = 2;
 const MOUSE_MOVED: u32 = 5;
 const LEFT_DRAGGED: u32 = 6;
 const FLAGS_CHANGED: u32 = 12;
+const KEY_DOWN: u32 = 10;
+const RIGHT_DOWN: u32 = 3;
+const OTHER_DOWN: u32 = 25;
+const SCROLL: u32 = 22;
+/// Every modifier's flag, for telling whether another one is held with the trigger.
+const MODIFIERS: u64 = 0x0002_0000 | 0x0004_0000 | 0x0008_0000 | 0x0010_0000;
 // The system turns a tap off when it answers too slowly, or when the user is typing a password.
 const TAP_DISABLED_BY_TIMEOUT: u32 = 0xFFFF_FFFE;
 const TAP_DISABLED_BY_USER_INPUT: u32 = 0xFFFF_FFFF;
@@ -150,8 +157,29 @@ pub(super) fn read_input(trigger: Trigger) -> Input {
             trigger_down: flags & flag(trigger) != 0,
             button_down,
             pointer,
+            // Read while the key is held (see `tracking`), as the tap doesn't listen to keys.
+            keys: keys_now(&Input::default()),
         }
     }
+}
+
+/// How many keys, other buttons and scrolls there have been in the session, read now: what was
+/// read with the input may be from before the trigger went down.
+pub(super) fn keys_now(_input: &Input) -> u32 {
+    // SAFETY: only reads the session's counts.
+    unsafe {
+        [KEY_DOWN, RIGHT_DOWN, OTHER_DOWN, SCROLL]
+            .into_iter()
+            .map(|kind| CGEventSourceCounterForEventType(COMBINED_SESSION, kind))
+            .fold(0u32, u32::wrapping_add)
+    }
+}
+
+/// Whether a modifier other than the trigger is held.
+pub(super) fn other_modifiers(trigger: Trigger) -> bool {
+    // SAFETY: only reads the session's state.
+    let flags = unsafe { CGEventSourceFlagsState(COMBINED_SESSION) };
+    flags & MODIFIERS & !flag(trigger) != 0
 }
 
 /// The display under `pointer`, in the same points as the pointer.

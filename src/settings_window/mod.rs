@@ -1,12 +1,14 @@
 //! The settings window (`--settings`), a process of its own so the overlay never waits on it:
-//! language, trigger key, starting at login, and the permissions the desktop grants, each with
-//! the button that fixes it (`linux`, `mac`, `windows`). Each change is saved at once and the
-//! running app picks it up.
+//! language, trigger key, the wheel without files and its quick apps, starting at login, and
+//! the permissions the desktop grants, each with the button that fixes it (`linux`, `mac`,
+//! `windows`). Each change is saved at once and the running app picks it up.
 
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use egui::{Color32, CornerRadius, Frame, Margin, RichText, Stroke, Vec2};
 
+use crate::desk::{self, App};
 use crate::glass::{ACCENT, TEXT, TEXT_MUTED};
 use crate::i18n::{self, Lang, tr, trf};
 use crate::settings::{self, APP_ID, APP_NAME, Settings, Trigger};
@@ -33,6 +35,8 @@ const AMBER: Color32 = Color32::from_rgb(226, 146, 18);
 const NOTE_FOR: Duration = Duration::from_secs(3);
 const BACKGROUND: Color32 = Color32::from_rgb(242, 243, 245);
 const CARD: Color32 = Color32::WHITE;
+/// More quick apps than this crowd the wheel.
+const MOST_QUICK_APPS: usize = 8;
 
 pub fn run() -> Result<(), String> {
     // One window at a time, however it was opened.
@@ -100,16 +104,28 @@ struct Window {
     first_frame: bool,
     /// What the last change came to, and when.
     note: Option<(String, Instant)>,
+    /// The installed apps, once a thread has listed them (that can take a moment on Windows).
+    apps: Arc<Mutex<Option<Vec<App>>>>,
+    /// What the list of apps to add is narrowed to.
+    filter: String,
 }
 
 impl Window {
     fn new(settings: Settings) -> Self {
+        let apps = Arc::new(Mutex::new(None));
+        let listed = apps.clone();
+        std::thread::spawn(move || {
+            let found = desk::installed_apps();
+            *listed.lock().unwrap_or_else(|e| e.into_inner()) = Some(found);
+        });
         Window {
             settings,
             start_at_login: settings::starts_at_login(),
             permissions: Permissions::new(),
             first_frame: true,
             note: None,
+            apps,
+            filter: String::new(),
         }
     }
 
@@ -137,7 +153,7 @@ impl eframe::App for Window {
         if std::mem::take(&mut self.first_frame) {
             platform::bring_forward(ui.ctx());
         }
-        let before = self.settings;
+        let before = self.settings.clone();
         egui::CentralPanel::default()
             .frame(Frame::new().fill(BACKGROUND).inner_margin(Margin::same(18)))
             .show(ui, |ui| {
@@ -186,6 +202,24 @@ impl Window {
             });
         });
 
+        let held = trf(
+            "Hold {} for a moment without dragging files: the wheel opens with what is playing, \
+             the keyboard layout, the volume, the brightness and your quick apps.",
+            &[&trigger.label()],
+        );
+        card(ui, tr("Without files"), Some(&held), |ui| {
+            toggle(ui, &mut self.settings.hold);
+        });
+
+        if self.settings.hold {
+            card(
+                ui,
+                tr("Quick Apps"),
+                Some(tr("On the wheel's Apps, in this order.")),
+                |ui| self.quick_apps(ui),
+            );
+        }
+
         card(ui, tr("Start at login"), None, |ui| {
             if toggle(ui, &mut self.start_at_login).changed() {
                 match settings::set_start_at_login(self.start_at_login) {
@@ -215,6 +249,147 @@ impl Window {
             }
         }
     }
+}
+
+impl Window {
+    /// The quick apps in order, each with buttons to move it or take it off, and a list to add
+    /// more from.
+    fn quick_apps(&mut self, ui: &mut egui::Ui) {
+        let apps = self.apps.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let name_of = |id: &str| {
+            apps.as_ref()
+                .and_then(|apps| apps.iter().find(|a| a.id == id))
+                .map_or_else(|| id.to_owned(), |a| a.name.clone())
+        };
+        let picked = &mut self.settings.quick_apps;
+        let count = picked.len();
+        let mut change = None;
+        for (i, id) in picked.iter().enumerate() {
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.label(RichText::new(format!("{}.", i + 1)).color(TEXT_MUTED));
+                ui.label(name_of(id));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if small_button(ui, Glyph::Remove, tr("Remove")).clicked() {
+                        change = Some(Change::Remove(i));
+                    }
+                    let down = i + 1 < count;
+                    if ui
+                        .add_enabled_ui(down, |ui| small_button(ui, Glyph::Down, tr("Move down")))
+                        .inner
+                        .clicked()
+                    {
+                        change = Some(Change::Swap(i, i + 1));
+                    }
+                    if ui
+                        .add_enabled_ui(i > 0, |ui| small_button(ui, Glyph::Up, tr("Move up")))
+                        .inner
+                        .clicked()
+                    {
+                        change = Some(Change::Swap(i - 1, i));
+                    }
+                });
+            });
+        }
+        match change {
+            Some(Change::Remove(i)) => {
+                picked.remove(i);
+            }
+            Some(Change::Swap(a, b)) => picked.swap(a, b),
+            None => {}
+        }
+        if picked.len() >= MOST_QUICK_APPS {
+            ui.label(
+                RichText::new(trf("The wheel holds {} apps.", &[&MOST_QUICK_APPS]))
+                    .size(12.5)
+                    .color(TEXT_MUTED),
+            );
+            return;
+        }
+
+        ui.add_space(4.0);
+        let Some(apps) = apps else {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(RichText::new(tr("Looking for apps…")).color(TEXT_MUTED));
+            });
+            ui.ctx().request_repaint_after(Duration::from_millis(100));
+            return;
+        };
+        ui.add(
+            egui::TextEdit::singleline(&mut self.filter)
+                .hint_text(tr("Add an app…"))
+                .desired_width(f32::INFINITY),
+        );
+        let words = self.filter.to_lowercase();
+        let offered: Vec<&App> = apps
+            .iter()
+            .filter(|a| !picked.contains(&a.id))
+            .filter(|a| words.is_empty() || a.name.to_lowercase().contains(&words))
+            .collect();
+        if offered.is_empty() {
+            ui.label(RichText::new(tr("No app has that name")).color(TEXT_MUTED));
+            return;
+        }
+        egui::ScrollArea::vertical()
+            .id_salt("apps to add")
+            .max_height(180.0)
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                for app in offered {
+                    let row = egui::Button::new(app.name.as_str())
+                        .frame(false)
+                        .min_size(Vec2::new(ui.available_width(), 24.0));
+                    if ui.add(row).on_hover_text(&app.id).clicked() {
+                        picked.push(app.id.clone());
+                    }
+                }
+            });
+    }
+}
+
+enum Change {
+    Remove(usize),
+    Swap(usize, usize),
+}
+
+/// What a small button shows, drawn rather than typed: Noto Sans has no arrows.
+#[derive(Clone, Copy)]
+enum Glyph {
+    Up,
+    Down,
+    Remove,
+}
+
+fn small_button(ui: &mut egui::Ui, glyph: Glyph, hint: &str) -> egui::Response {
+    let response = ui
+        .add(egui::Button::new("").min_size(Vec2::new(28.0, 24.0)))
+        .on_hover_text(hint);
+    let color = if ui.is_enabled() {
+        TEXT
+    } else {
+        TEXT_MUTED.gamma_multiply(0.5)
+    };
+    let stroke = Stroke::new(1.6, color);
+    let c = response.rect.center();
+    let p = ui.painter();
+    let at = |x: f32, y: f32| c + Vec2::new(x, y);
+    match glyph {
+        Glyph::Up | Glyph::Down => {
+            let k = if matches!(glyph, Glyph::Up) {
+                1.0
+            } else {
+                -1.0
+            };
+            p.line_segment([at(0.0, 5.0 * k), at(0.0, -5.0 * k)], stroke);
+            p.line_segment([at(-4.0, -k), at(0.0, -5.0 * k)], stroke);
+            p.line_segment([at(4.0, -k), at(0.0, -5.0 * k)], stroke);
+        }
+        Glyph::Remove => {
+            p.line_segment([at(-4.0, -4.0), at(4.0, 4.0)], stroke);
+            p.line_segment([at(-4.0, 4.0), at(4.0, -4.0)], stroke);
+        }
+    }
+    response
 }
 
 /// One settings window at a time, however it was opened: the guard holds a lock on a file in
@@ -360,6 +535,18 @@ mod tests {
             "Trigger key",
             TRIGGER_HELP,
             "Start at login",
+            "Without files",
+            "Hold {} for a moment without dragging files: the wheel opens with what is playing, \
+             the keyboard layout, the volume, the brightness and your quick apps.",
+            "Quick Apps",
+            "On the wheel's Apps, in this order.",
+            "Move up",
+            "Move down",
+            "Remove",
+            "The wheel holds {} apps.",
+            "Looking for apps…",
+            "Add an app…",
+            "No app has that name",
             "Permissions",
             "Saved",
             "Couldn't save: {}",

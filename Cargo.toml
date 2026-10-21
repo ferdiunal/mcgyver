@@ -85,11 +85,23 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 winit = { version = "0.30", default-features = false }
 
 # Windows (src/desktop/windows.rs and the Windows branches elsewhere): the input hooks, the
-# clipboard, the click, start at login, and the folder picker.
+# clipboard, the click, start at login, and the folder picker; the system's media controls and
+# the speakers' volume (src/desk/windows.rs) are WinRT and COM, which `windows` wraps.
 [target.'cfg(windows)'.dependencies]
 rfd = { version = "0.17", default-features = false }
+windows = { version = "0.62", features = [
+    "Foundation",
+    "Foundation_Collections",
+    "Media_Control",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+] }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
+    "Win32_Globalization",
     "Win32_Graphics_Gdi",
     "Win32_Media_Audio",
     "Win32_Storage_FileSystem",

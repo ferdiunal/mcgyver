@@ -9,6 +9,11 @@
 //!
 //! Tapping the trigger key alone (see `tap`) opens the wheel without a drag, for the files selected in the
 //! active Dolphin window; it stays open until a click picks something or dismisses it.
+//!
+//! Holding the trigger key a moment with no drag opens the desk (see `desk`) around the
+//! pointer: clicks do what its wedges do while the key is held, and letting go does what it
+//! aims at. Plasma doesn't let anyone see the other keys and the clicks, so a hold that was
+//! meant for a Shift-click or Shift-arrow opens it too; the settings can turn it off.
 
 use std::ffi::c_void;
 use std::io::Read;
@@ -83,6 +88,7 @@ use wayland_protocols_plasma::keystate::client::org_kde_kwin_keystate::{self, Or
 
 use crate::catalog::Mode;
 use crate::clipboard::Clipboard;
+use crate::desk::{self, Menu};
 use crate::overlay::{CardSpot, Overlay};
 use crate::service::Command;
 use crate::settings::{Settings, Trigger};
@@ -111,6 +117,10 @@ const STALE_TAP: Duration = Duration::from_secs(2);
 /// KGlobalAccel reports the key release that ends a drag as a tap too, about when keystate
 /// reports the release; taps this soon after one are ignored.
 const TAP_AFTER_DRAG: Duration = Duration::from_millis(300);
+/// How long the trigger key is held with no drag before the desk opens: past a capital or two
+/// typed with Shift.
+const HOLD: Duration = Duration::from_millis(500);
+
 const BTN_LEFT: u32 = 0x110;
 /// Height of the bands that approximate round glass in the blur region.
 const BLUR_BAND: i32 = 2;
@@ -181,6 +191,7 @@ pub fn run() -> Result<(), String> {
 
     let shm = Shm::bind(&globals, &qh).map_err(|e| e.to_string())?;
     let (picked_tx, picked_rx) = channel::channel::<(Vec<PathBuf>, Instant)>();
+    let (desk_tx, desk_rx) = channel::channel::<DeskRead>();
     let (tap_tx, tap_rx) = channel::channel::<()>();
     granted
         .fast_open
@@ -206,6 +217,8 @@ pub fn run() -> Result<(), String> {
     let tray = crate::tray::spawn(command_tx, settings.trigger);
     let mut app = App {
         trigger: settings.trigger,
+        hold: settings.hold,
+        quick_apps: settings.quick_apps.clone(),
         paused: false,
         quit: false,
         exit: None,
@@ -248,6 +261,19 @@ pub fn run() -> Result<(), String> {
         accepting: false,
         click_files: None,
         sticky: false,
+        held_at: None,
+        hold_at: None,
+        desk_menu: None,
+        desk: false,
+        holds: 0,
+        runner: {
+            let read = desk_tx.clone();
+            desk::Runner::new(move |number, menu| {
+                let _ = read.send(DeskRead::Again(number, menu));
+            })
+        },
+        desk_from: 0,
+        desk_read: desk_tx,
         key_saw_drag: false,
         taps_ignored_until: None,
         selecting: Arc::new(AtomicBool::new(false)),
@@ -318,6 +344,13 @@ pub fn run() -> Result<(), String> {
         .insert_source(picked_rx, |event, _, app| {
             if let channel::Event::Msg((files, tapped_at)) = event {
                 app.open_for_click(files, tapped_at);
+            }
+        })
+        .map_err(|e| format!("event loop: {e}"))?;
+    handle
+        .insert_source(desk_rx, |event, _, app| {
+            if let channel::Event::Msg(read) = event {
+                app.desk_read(read);
             }
         })
         .map_err(|e| format!("event loop: {e}"))?;
@@ -620,6 +653,14 @@ impl OverlaySurface {
     }
 }
 
+/// What a thread read of the system for the desk: to open it, or after a command.
+enum DeskRead {
+    /// For the hold with this number.
+    Open(u64, Menu),
+    /// After the batch of commands with this number.
+    Again(u64, Menu),
+}
+
 struct App {
     registry_state: RegistryState,
     seat_state: SeatState,
@@ -633,6 +674,9 @@ struct App {
     clipboard: Option<Clipboard>,
     /// The key held for a drag and tapped for Dolphin's selection.
     trigger: Trigger,
+    /// Holding the key alone opens the desk, with these quick apps.
+    hold: bool,
+    quick_apps: Vec<String>,
     /// From the tray: the trigger key does nothing until resumed.
     paused: bool,
     quit: bool,
@@ -672,6 +716,22 @@ struct App {
     click_files: Option<Vec<PathBuf>>,
     /// The wheel was opened by a tap: clicks pick, and letting go of keys doesn't close it.
     sticky: bool,
+    /// When the trigger key went down, and when it will have been held long enough with no
+    /// drag for the desk.
+    held_at: Option<Instant>,
+    hold_at: Option<Instant>,
+    /// What the desk will show, waiting for the pointer to say where.
+    desk_menu: Option<Menu>,
+    /// The wheel open is the desk: clicks do things, and letting go of the key ends it.
+    desk: bool,
+    desk_read: Sender<DeskRead>,
+    /// Holds so far (and other modifiers pressed during one): a reading for an earlier one is
+    /// dropped.
+    holds: u64,
+    runner: desk::Runner,
+    /// The first batch of commands for the desk open now: readings after earlier ones are for
+    /// a desk gone since.
+    desk_from: u64,
     /// This press of the trigger key found a drag (see `TAP_AFTER_DRAG`).
     key_saw_drag: bool,
     taps_ignored_until: Option<Instant>,
@@ -695,7 +755,7 @@ impl App {
 
     fn timeout(&self) -> Option<Duration> {
         let now = Instant::now();
-        [self.nudge_at, self.repaint_at]
+        [self.nudge_at, self.repaint_at, self.hold_at]
             .into_iter()
             .flatten()
             .min()
@@ -711,9 +771,14 @@ impl App {
         if self.repaint_at.is_some_and(|at| now >= at) {
             self.render();
         }
+        if self.hold_at.is_some_and(|at| now >= at) {
+            self.hold_at = None;
+            self.held_long();
+        }
         if self.layer.is_some()
             && !self.probing
             && self.click_files.is_none()
+            && self.desk_menu.is_none()
             && self.overlay.is_idle()
         {
             self.hide();
@@ -760,6 +825,8 @@ impl App {
     /// Puts away whatever the trigger key started; finished cards stay.
     fn fold(&mut self) {
         self.click_files = None;
+        self.hold_at = None;
+        self.desk_menu = None;
         if self.probing {
             self.end_probe("folded");
         }
@@ -802,10 +869,12 @@ impl App {
         }
     }
 
-    /// The settings window saved: take the language and trigger key from the file.
+    /// The settings window saved: take the language, trigger key and desk from the file.
     fn reload(&mut self) {
         let settings = Settings::load();
         crate::i18n::set(settings.language);
+        self.hold = settings.hold;
+        self.quick_apps = settings.quick_apps;
         if settings.trigger != self.trigger {
             self.fold();
             self.trigger = settings.trigger;
@@ -853,12 +922,26 @@ impl App {
 
     fn key_changed(&mut self, key: u32, pressed: bool) {
         if key != keystate_key(self.trigger) {
+            // Another modifier with it is a shortcut, not a hold (the locks don't count); a
+            // reading on its way is for the hold that ended.
+            if pressed && key >= 3 {
+                self.holds += 1;
+                if self.hold_at.is_some() || self.desk_menu.is_some() {
+                    self.log("another modifier went down, no desk");
+                }
+                self.hold_at = None;
+                self.desk_menu = None;
+            }
             return;
         }
         let now = Instant::now();
         if pressed {
             self.log("trigger down");
             self.key_saw_drag = false;
+            self.holds += 1;
+            self.held_at = Some(now);
+            self.hold_at = None;
+            self.desk_menu = None;
             if self.paused {
                 return;
             }
@@ -870,9 +953,20 @@ impl App {
             }
         } else {
             self.log("trigger up");
+            self.held_at = None;
+            self.hold_at = None;
+            self.desk_menu = None;
             // A probe still waiting means a drag is probably holding the pointer still.
             if self.key_saw_drag || self.probing {
                 self.taps_ignored_until = Some(now + TAP_AFTER_DRAG);
+            }
+            if std::mem::take(&mut self.desk) && self.overlay.desk_open() {
+                let did = self.overlay.release(now);
+                self.log(format!(
+                    "trigger released on the desk, did something: {did}"
+                ));
+                self.run_desk_commands();
+                self.repaint_now();
             }
             // Letting go of the key folds the wheel; the drag carries on below it.
             if self.probing {
@@ -956,11 +1050,107 @@ impl App {
         self.nudge_at = None;
     }
 
+    /// The trigger key has been held long enough with no drag: reads what the desk shows on a
+    /// thread (players and the volume take a few round trips), to open it once that's in.
+    fn held_long(&mut self) {
+        if !self.hold
+            || self.paused
+            || self.exit.is_some()
+            || self.probing
+            || self.click_files.is_some()
+            || self.overlay.wants_input()
+            || !self.pressed[keystate_key(self.trigger) as usize]
+            || self.other_modifiers()
+        {
+            return;
+        }
+        self.log("trigger held alone, reading the desk");
+        // Not a tap, however it ends.
+        self.key_saw_drag = true;
+        let (apps, read, hold) = (self.quick_apps.clone(), self.desk_read.clone(), self.holds);
+        std::thread::spawn(move || {
+            let _ = read.send(DeskRead::Open(hold, Menu::read(&apps)));
+        });
+    }
+
+    /// Whether a modifier other than the trigger is held (the locks don't count).
+    fn other_modifiers(&self) -> bool {
+        let trigger = keystate_key(self.trigger) as usize;
+        (3..self.pressed.len()).any(|key| key != trigger && self.pressed[key])
+    }
+
+    fn desk_read(&mut self, read: DeskRead) {
+        match read {
+            DeskRead::Open(hold, menu) => {
+                let held = self.pressed[keystate_key(self.trigger) as usize];
+                if hold != self.holds
+                    || !held
+                    || self.other_modifiers()
+                    || self.held_at.is_none()
+                    || self.paused
+                    || self.probing
+                    || self.click_files.is_some()
+                    || self.overlay.wants_input()
+                {
+                    self.log("desk read, but the key is up or something else is open");
+                    return;
+                }
+                self.log(format!("desk read: modes {:?}", menu.modes()));
+                self.desk_menu = Some(menu);
+                self.map_overlay();
+            }
+            DeskRead::Again(number, menu) if number >= self.desk_from => {
+                self.overlay.refresh_desk(menu, Instant::now());
+                self.repaint_now();
+            }
+            DeskRead::Again(..) => {}
+        }
+    }
+
+    /// The probe found the pointer rather than a drag. Held on, the key opens the desk.
+    fn no_drag(&mut self) {
+        if self.probing && self.hold {
+            self.hold_at = self.held_at.map(|at| at + HOLD);
+        }
+        self.end_probe("pointer entered, no drag");
+    }
+
+    /// Opens the desk at `at`, where the pointer showed up on the overlay.
+    fn open_desk(&mut self, at: Pos2) {
+        let Some(menu) = self.desk_menu.take() else {
+            return;
+        };
+        self.nudge_at = None;
+        let (w, h) = self.layer.as_ref().map_or((0, 0), |s| s.size);
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(w as f32, h as f32));
+        self.overlay.open_desk(menu, at, screen, Instant::now());
+        self.desk = true;
+        self.desk_from = self.runner.next();
+        self.sticky = false;
+        self.log(format!("desk opened at ({:.0}, {:.0})", at.x, at.y));
+        self.repaint_now();
+    }
+
+    /// Hands what the desk was asked to do to its thread, which reads the system again after;
+    /// the settings this app opens itself.
+    fn run_desk_commands(&mut self) {
+        let mut commands = self.overlay.take_commands();
+        if commands.is_empty() {
+            return;
+        }
+        self.log(format!("desk: {commands:?}"));
+        if let Some(at) = commands.iter().position(|c| *c == desk::Command::Settings) {
+            commands.remove(at);
+            self.show_settings();
+        }
+        self.runner.run(commands, self.quick_apps.clone());
+    }
+
     /// KWin re-targets a drag only when the pointer moves. If nothing answered the probe, a
     /// drag is probably holding the pointer: move it a pixel and back so the drag finds the
     /// overlay now rather than whenever the hand moves.
     fn nudge(&mut self) {
-        if !self.probing && self.click_files.is_none() {
+        if !self.probing && self.click_files.is_none() && self.desk_menu.is_none() {
             return;
         }
         if let Some(fake) = &self.fake_input {
@@ -1055,7 +1245,10 @@ impl App {
         // The whole screen while the key looks for a drag or a wheel is open; otherwise only
         // the cards, which can be moved and closed, and everything else goes to the windows
         // below. Committed with the frame, so it matches where the cards are drawn.
-        let want_input = self.probing || self.click_files.is_some() || self.overlay.wants_input();
+        let want_input = self.probing
+            || self.click_files.is_some()
+            || self.desk_menu.is_some()
+            || self.overlay.wants_input();
         let input_region = (!want_input).then(|| {
             self.overlay
                 .card_rects()
@@ -1287,6 +1480,8 @@ impl LayerShellHandler for App {
         self.probing = false;
         self.overlay.cancel(Instant::now());
         self.sticky = false;
+        self.desk = false;
+        self.desk_menu = None;
         self.hide();
     }
 
@@ -1350,10 +1545,12 @@ impl PointerHandler for App {
             if !self.is_ours(&event.surface) {
                 continue;
             }
-            let clicking = self.sticky && self.overlay.wants_input();
+            let clicking = (self.sticky || self.desk) && self.overlay.wants_input();
             // Only the cards take the pointer: no wheel, nothing being looked for.
-            let on_cards =
-                !self.probing && self.click_files.is_none() && !self.overlay.wants_input();
+            let on_cards = !self.probing
+                && self.click_files.is_none()
+                && self.desk_menu.is_none()
+                && !self.overlay.wants_input();
             let at = pos2(event.position.0 as f32, event.position.1 as f32);
             match event.kind {
                 PointerEventKind::Enter { serial } => {
@@ -1363,23 +1560,30 @@ impl PointerHandler for App {
                     }
                     if self.click_files.is_some() {
                         self.open_click_wheel(at);
+                    } else if self.desk_menu.is_some() {
+                        self.open_desk(at);
                     } else if clicking {
                         self.overlay.drag_moved(at, Instant::now());
                         self.repaint_now();
                     } else {
                         // A plain pointer enter means no drag is going on.
-                        self.end_probe("pointer entered, no drag");
+                        self.no_drag();
                         if on_cards {
                             self.card_pointer(at);
                         }
                     }
                 }
+                // Already on the overlay (a card is up), the pointer moves rather than enters.
+                PointerEventKind::Motion { .. } if self.probing => self.no_drag(),
                 PointerEventKind::Leave { .. } => {
                     self.overlay.card_hover(None);
                     self.repaint_now();
                 }
                 PointerEventKind::Motion { .. } if self.click_files.is_some() => {
                     self.open_click_wheel(at);
+                }
+                PointerEventKind::Motion { .. } if self.desk_menu.is_some() => {
+                    self.open_desk(at);
                 }
                 PointerEventKind::Motion { .. } if clicking => {
                     self.overlay.drag_moved(at, Instant::now());
@@ -1390,6 +1594,7 @@ impl PointerHandler for App {
                     if button == BTN_LEFT {
                         let picked = self.overlay.click(now);
                         self.log(format!("clicked, picked: {picked}"));
+                        self.run_desk_commands();
                     } else {
                         self.overlay.cancel(now);
                     }
@@ -1474,6 +1679,10 @@ impl DataDeviceHandler for App {
             return;
         }
         self.drop_pending_tap();
+        // A drag that comes by while the desk waits for the pointer gets the files' wheel.
+        if self.desk_menu.take().is_some() {
+            self.probing = true;
+        }
         self.open_wheel(x, y);
     }
 

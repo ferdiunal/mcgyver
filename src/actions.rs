@@ -2,7 +2,8 @@
 //! They lean on the desktop's own tools: a folder picker (kdialog or zenity), the clipboard
 //! (wl-copy or Klipper), a terminal, and KDE Connect for sending to a phone. On macOS: AppleScript's
 //! folder picker, pbcopy and Terminal. Files go on the clipboard the way the platform hands it
-//! over ([`serve_files_with`]).
+//! over ([`serve_files_with`]). Messaging apps that are installed take the files too (see
+//! `desk::Messenger`).
 
 use std::fs;
 use std::io::{self, Write};
@@ -13,6 +14,7 @@ use std::sync::OnceLock;
 use crate::archive::{self, Format, Progress};
 use crate::catalog;
 use crate::convert::{Scratch, move_to_free_name, parent_of, split_name};
+use crate::desk::Messenger;
 use crate::i18n::trf;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,10 +30,12 @@ pub enum Action {
     CopyPath,
     Terminal,
     Share,
+    /// To a messaging app.
+    Send(Messenger),
 }
 
 impl Action {
-    pub const ALL: [Action; 8] = [
+    pub const ALL: [Action; 12] = [
         Action::Zip,
         Action::Copy,
         Action::Cut,
@@ -40,6 +44,10 @@ impl Action {
         Action::CopyPath,
         Action::Terminal,
         Action::Share,
+        Action::Send(Messenger::Telegram),
+        Action::Send(Messenger::WhatsApp),
+        Action::Send(Messenger::Teams),
+        Action::Send(Messenger::Slack),
     ];
 
     pub fn label(self) -> &'static str {
@@ -52,6 +60,7 @@ impl Action {
             Action::CopyPath => "Copy Path",
             Action::Terminal => "Terminal",
             Action::Share => "Share",
+            Action::Send(messenger) => messenger.name(),
         }
     }
 
@@ -62,6 +71,7 @@ impl Action {
             Action::CopyTo | Action::MoveTo => "to a folder",
             Action::Terminal => "open here",
             Action::Share => "to your phone",
+            Action::Send(_) => "to a chat",
         }
     }
 
@@ -83,6 +93,7 @@ impl Action {
             }
             Action::Terminal => terminal().is_some(),
             Action::Share => has("kdeconnect-cli"),
+            Action::Send(messenger) => messenger.installed(),
         }
     }
 }
@@ -103,6 +114,7 @@ pub fn preview(files: &[PathBuf], action: Action) -> String {
             &[&catalog::display_name(&work_dir(files))],
         ),
         Action::Share => trf("Send {} to your phone", &[&subject]),
+        Action::Send(messenger) => trf("Send {} with {}", &[&subject, &messenger.name()]),
     }
 }
 
@@ -178,6 +190,7 @@ pub fn run(files: &[PathBuf], action: Action, progress: &Progress) -> io::Result
             Ok(trf("Opened {}", &[&pretty_terminal(name)]))
         }
         Action::Share => share(files),
+        Action::Send(messenger) => messenger.send(files).map_err(io::Error::other),
     }
 }
 
@@ -480,6 +493,11 @@ fn files_to_clipboard(files: &[PathBuf], cut: bool) -> io::Result<()> {
     } else {
         Err(io::Error::other("couldn't reach the clipboard"))
     }
+}
+
+/// Puts `files` on the clipboard, copied.
+pub(crate) fn put_files(files: &[PathBuf]) -> io::Result<()> {
+    files_to_clipboard(files, false)
 }
 
 /// `path` (absolute) as a `file://` URI, with anything but plain characters escaped.
