@@ -245,6 +245,11 @@ impl eframe::App for Window {
             platform::bring_forward(ui.ctx());
         }
         self.restyle(ui.ctx());
+        // Like the system: look again every second, so a switch elsewhere shows here too.
+        if self.settings.appearance == Appearance::System {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_secs(1));
+        }
         let before = self.settings.clone();
         egui::CentralPanel::default()
             .frame(

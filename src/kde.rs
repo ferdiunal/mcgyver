@@ -664,6 +664,18 @@ impl OverlaySurface {
     }
 }
 
+/// With the look like the system's, the glass follows the desktop as the desk sees it: a click
+/// on its Dark Mode turns the wheel at once, as the desktop turns.
+fn follow_desk_dark(appearance: crate::settings::Appearance, overlay: &Overlay) {
+    if appearance == crate::settings::Appearance::System
+        && let Some(dark) = overlay.desk_dark()
+        && dark != crate::glass::dark()
+    {
+        crate::glass::set_dark(dark);
+        crate::settings::system_dark_is(dark);
+    }
+}
+
 /// What a thread read of the system for the desk: to open it, or after a command.
 enum DeskRead {
     /// For the hold with this number.
@@ -1336,6 +1348,7 @@ impl App {
             .entry(ViewportId::ROOT)
             .or_default()
             .native_pixels_per_point = Some(scale as f32);
+        follow_desk_dark(self.appearance, &self.overlay);
         let overlay = &mut self.overlay;
         let mut wants = None;
         let output = self.egui.run_ui(input, |ui| wants = overlay.paint(ui, now));

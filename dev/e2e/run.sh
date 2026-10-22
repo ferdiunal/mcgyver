@@ -67,6 +67,11 @@ if [ "${1:-full}" = desk ]; then
         "$OUT" > "$OUT/bin/wpctl"
     chmod +x "$OUT/bin/wpctl"
 fi
+# The dark scenario starts on Breeze's light colours.
+if [ "${1:-full}" = dark ]; then
+    printf '[General]\nColorScheme=BreezeLight\n\n[Colors:Window]\nBackgroundNormal=239,240,241\n' \
+        > "$OUT/config/kdeglobals"
+fi
 # The quick apps scenario: two stand-in apps, Alpha and Beta, both quick apps in that order.
 if [ "${1:-full}" = quickapps ]; then
     mkdir -p "$OUT/data/applications" "$OUT/config/mcgyver"

@@ -269,14 +269,14 @@ static LOOKED_DARK: std::sync::Mutex<Option<(std::time::Instant, bool)>> =
 static LOOKING_DARK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Whether the desktop is dark, as last looked at; looked at again behind the scenes once that
-/// is a few seconds old (asking can take a moment, and wheels open on the thread asking).
+/// is a second old (asking can take a moment, and wheels open on the thread asking).
 pub fn system_dark() -> bool {
     use std::sync::atomic::Ordering;
     let looked = *LOOKED_DARK.lock().unwrap_or_else(|e| e.into_inner());
     let Some((at, dark)) = looked else {
         return system_dark_now();
     };
-    if at.elapsed() >= std::time::Duration::from_secs(5)
+    if at.elapsed() >= std::time::Duration::from_secs(1)
         && !LOOKING_DARK.swap(true, Ordering::AcqRel)
     {
         std::thread::spawn(|| {
@@ -285,6 +285,12 @@ pub fn system_dark() -> bool {
         });
     }
     dark
+}
+
+/// Takes the desktop to be `dark` from now on: the desk just switched it.
+pub fn system_dark_is(dark: bool) {
+    *LOOKED_DARK.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some((std::time::Instant::now(), dark));
 }
 
 /// Whether the desktop is dark, looked at again now (after the desk switched it).

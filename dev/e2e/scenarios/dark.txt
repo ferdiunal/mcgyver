@@ -1,0 +1,36 @@
+# Dark Mode from the desk: with the look like the system's (the default), the open wheel turns
+# with the desktop at once. System's wedges here: Lock, Dark Mode, Stay Awake, Empty Trash,
+# Desktop, Sleep (no microphone: PipeWire is out of reach), clockwise from the top.
+# It starts on Breeze's light colours; plasma-apply-colorscheme writes the nested session's own
+# kdeglobals (out/config), so out/scheme-1.txt should read BreezeDark and scheme-2 BreezeLight.
+log 1 shift held alone, to SYSTEM, onto Dark Mode
+move 640 400
+sleep 800
+key 42 1
+sleep 900
+wiggle 300
+glide 592 400 10 20
+press
+sleep 50
+release
+sleep 500
+glide 742 341 10 20
+wiggle 300
+shot dark-1-before
+log 2 a click switches it, and the wheel turns with it
+press
+sleep 50
+release
+sleep 1200
+shot dark-2-switched
+shell grep '^ColorScheme=' $OUT/config/kdeglobals > $OUT/scheme-1.txt
+log 3 again, back
+press
+sleep 50
+release
+sleep 1200
+shot dark-3-back
+shell grep '^ColorScheme=' $OUT/config/kdeglobals > $OUT/scheme-2.txt
+key 42 0
+sleep 800
+log done

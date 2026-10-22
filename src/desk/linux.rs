@@ -702,9 +702,20 @@ pub fn mic_muted() -> Option<bool> {
     None
 }
 
+/// What the desk last switched Plasma's colours to, and when: the desktop portal says so a
+/// moment later, so a reading right after the switch takes the desk's word for it.
+static SWITCHED_DARK: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
+
 /// Whether Plasma is dark, where its colours can be switched.
 pub fn dark() -> Option<bool> {
-    has("plasma-apply-colorscheme").then(crate::settings::system_dark_now)
+    if !has("plasma-apply-colorscheme") {
+        return None;
+    }
+    let switched = *SWITCHED_DARK.lock().unwrap_or_else(|e| e.into_inner());
+    match switched {
+        Some((at, dark)) if at.elapsed() < Duration::from_secs(3) => Some(dark),
+        _ => Some(crate::settings::system_dark_now()),
+    }
 }
 
 /// Switches Plasma's colours dark or light: back to the scheme it had before the last switch
@@ -732,7 +743,10 @@ fn dark_mode(on: bool) -> Result<(), String> {
     {
         let _ = std::fs::write(&kept, current);
     }
-    quietly("plasma-apply-colorscheme", &[&scheme])
+    quietly("plasma-apply-colorscheme", &[&scheme])?;
+    *SWITCHED_DARK.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), on));
+    crate::settings::system_dark_is(on);
+    Ok(())
 }
 
 /// Whether a colour scheme is dark: its windows' background, or else its name.

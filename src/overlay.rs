@@ -620,6 +620,12 @@ impl Overlay {
             .map(|d| d.menu.clone())
     }
 
+    /// Whether the desktop is dark, as the desk last read it or a click on its Dark Mode just set
+    /// it (while it is up, open or closing).
+    pub fn desk_dark(&self) -> Option<bool> {
+        self.wheel.as_ref()?.desk.as_ref()?.menu.dark
+    }
+
     /// The mode the desk is open on, if it is.
     pub fn desk_mode(&self) -> Option<Mode> {
         self.wheel

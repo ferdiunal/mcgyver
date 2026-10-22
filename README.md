@@ -148,8 +148,9 @@ window opens at a time. Quit waits for running conversions to finish.
 The settings window saves each change at once, to
 `~/.config/mcgyver/settings.conf`, and the running app picks it up straight away:
 
-- **Appearance:** light or dark glass, or like the system (followed as it changes); the settings
-  window follows too.
+- **Appearance:** light or dark glass, or like the system (followed as it changes, within a
+  second); the settings window follows too. Like the system, a click on the wheel's own Dark
+  Mode turns the open wheel at once, as the desktop turns.
 - **Language:** English or Türkçe; the first time, the desktop's language. The wheel, the cards,
   the tray menu and the settings change; format names, file names and an engine's own error
   messages stay as they are.
@@ -560,7 +561,9 @@ for screenshots, or the window opens on the desktop rather than under xvfb.
    `-sendpath` and the file to `out/telegram.log`) and on its WhatsApp bubble (the file's URI
    is on the clipboard, `out/clipboard-whatsapp.txt`), and
    `run.sh quickapps` moves the second of two quick apps up in the settings window, checks the
-   order saved (`out/quick-order.txt`) and that the wheel's Apps follows it. PipeWire is pointed
+   order saved (`out/quick-order.txt`) and that the wheel's Apps follows it, and
+   `run.sh dark` clicks System's Dark Mode twice: the nested session's colour scheme goes to
+   BreezeDark and back (`out/scheme-1.txt`, `out/scheme-2.txt`) and the open wheel turns with it. PipeWire is pointed
    at nothing in every run, so the real volume is never touched. Every run starts after the
    welcome; `WELCOME=1` keeps it).
 4. spectacle takes screenshots.
