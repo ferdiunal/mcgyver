@@ -2,7 +2,7 @@
   "name": "mcgyver-site",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=22" },
   "scripts": {
     "build": "node build.mjs",
     "dev": "wrangler dev",
