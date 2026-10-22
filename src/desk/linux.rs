@@ -846,6 +846,10 @@ fn stay_awake(on: bool) -> Result<(), String> {
     Ok(())
 }
 
+pub(super) fn open_link(url: &str) -> Result<(), String> {
+    quietly("xdg-open", &[url])
+}
+
 /// Runs `program` and waits for it; an error if it fails.
 fn quietly(program: &str, args: &[&str]) -> Result<(), String> {
     let status = Process::new(program)
@@ -900,6 +904,13 @@ fn application_dirs() -> Vec<PathBuf> {
         }
     }
     seen
+}
+
+/// Whether a desktop file of this name is installed, shown in menus or not.
+pub(crate) fn has_desktop_file(name: &str) -> bool {
+    application_dirs()
+        .iter()
+        .any(|dir| dir.join(name).is_file())
 }
 
 /// Every app a launcher would show, by id, read again every `APPS_FRESH`.

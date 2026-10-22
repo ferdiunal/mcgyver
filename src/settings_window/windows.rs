@@ -25,6 +25,11 @@ pub(super) fn tell_app() -> bool {
     crate::desktop::running()
 }
 
+/// The window's app id, which only Linux uses.
+pub(super) fn app_id() -> &'static str {
+    crate::settings::APP_ID
+}
+
 /// A window opened from the tray comes up in front by itself.
 pub(super) fn bring_forward(_: &egui::Context) {}
 

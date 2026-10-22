@@ -699,6 +699,10 @@ fn raise(id: &str) -> Result<(), String> {
     }
 }
 
+pub(super) fn open_link(url: &str) -> Result<(), String> {
+    shell_open(url)
+}
+
 /// Opens a file, a link or `shell:` place the way Explorer would, on a thread of its own that
 /// is set up for the shell's extensions.
 fn shell_open(target: &str) -> Result<(), String> {

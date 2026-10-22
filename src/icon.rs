@@ -1,6 +1,6 @@
 //! The app icon (assets/icon.svg), drawn at the sizes the tray and the window ask for.
 
-const SVG: &[u8] = include_bytes!("../assets/icon.svg");
+pub(crate) const SVG: &[u8] = include_bytes!("../assets/icon.svg");
 
 /// The icon as `size`×`size` RGBA with straight alpha, row by row.
 pub fn rgba(size: u32) -> Option<Vec<u8>> {

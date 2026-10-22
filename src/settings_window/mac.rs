@@ -37,6 +37,11 @@ pub(super) fn tell_app() -> bool {
     crate::desktop::running()
 }
 
+/// The window's app id, which only Linux uses.
+pub(super) fn app_id() -> &'static str {
+    crate::settings::APP_ID
+}
+
 /// The bundle starts as a menu bar app, whose windows open behind the app in front and can't be
 /// switched to: make this one a regular app and bring its window forward.
 pub(super) fn bring_forward(ctx: &egui::Context) {

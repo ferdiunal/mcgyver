@@ -382,6 +382,7 @@ fn turkish(english: &str) -> Option<&'static str> {
 
         // The tray.
         "Pause" => "Duraklat",
+        "Resume" => "Sürdür",
         "Settings…" => "Ayarlar…",
         "Quit" => "Çık",
         "Paused" => "Duraklatıldı",
@@ -438,6 +439,11 @@ fn turkish(english: &str) -> Option<&'static str> {
         "{} isn't running" => "{} çalışmıyor",
         "{} alone is taken by another shortcut" => "{} tek başına başka bir kısayolda",
         "Restart" => "Yeniden başlat",
+        "Version {}" => "Sürüm {}",
+        "Sponsor on GitHub" => "GitHub'da sponsor ol",
+        "If {} saves you time, you can support its development." => {
+            "{} işinize yarıyorsa geliştirilmesine destek olabilirsiniz."
+        }
         "Start" => "Başlat",
         "Open shortcuts" => "Kısayolları aç",
         "Try again" => "Tekrar dene",

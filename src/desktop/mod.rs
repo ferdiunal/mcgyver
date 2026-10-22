@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant, SystemTime};
 
 use eframe::egui::{self, Pos2, Rect, Vec2};
-use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem};
+use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIcon, TrayIconBuilder};
 
 use crate::catalog::Mode;
@@ -228,7 +228,8 @@ struct MenuBar {
     _icon: TrayIcon,
     /// Greyed out: the app's name and whether it is paused.
     status: MenuItem,
-    pause: CheckMenuItem,
+    /// Pause, or Resume while paused.
+    pause: MenuItem,
     settings: MenuItem,
     quit: MenuItem,
 }
@@ -236,7 +237,7 @@ struct MenuBar {
 impl MenuBar {
     fn new() -> Option<MenuBar> {
         let status = MenuItem::new(crate::settings::status_line(false), false, None);
-        let pause = CheckMenuItem::new(tr("Pause"), true, false, None);
+        let pause = MenuItem::new(tr("Pause"), true, None);
         let settings = MenuItem::new(tr("Settings…"), true, None);
         let quit = MenuItem::new(tr("Quit"), true, None);
         let menu = Menu::new();
@@ -273,7 +274,8 @@ impl MenuBar {
     /// The menu in the current language, and whether the app is paused.
     fn retitle(&self, paused: bool) {
         self.status.set_text(crate::settings::status_line(paused));
-        self.pause.set_text(tr("Pause"));
+        self.pause
+            .set_text(tr(if paused { "Resume" } else { "Pause" }));
         self.settings.set_text(tr("Settings…"));
         self.quit.set_text(tr("Quit"));
     }
@@ -546,9 +548,7 @@ impl App {
             return;
         };
         if id == menu.pause.id() {
-            // Kept here and shown on the item, whether or not the menu ticked it itself.
             self.paused = !self.paused;
-            menu.pause.set_checked(self.paused);
             menu.retitle(self.paused);
             if self.paused {
                 self.held = false;

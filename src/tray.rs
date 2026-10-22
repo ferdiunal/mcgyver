@@ -1,8 +1,8 @@
 //! The tray icon (a StatusNotifierItem, which Plasma shows in its system tray): a status line,
-//! then pause, settings and quit. Clicking the icon opens the settings too.
+//! then pause (or resume), settings and quit. Clicking the icon opens the settings too.
 
 use ksni::blocking::{Handle, TrayMethods};
-use ksni::menu::{CheckmarkItem, StandardItem};
+use ksni::menu::StandardItem;
 use ksni::{Icon, MenuItem, ToolTip};
 use smithay_client_toolkit::reexports::calloop::channel::Sender;
 
@@ -86,9 +86,15 @@ impl ksni::Tray for Tray {
             }
             .into(),
             MenuItem::Separator,
-            CheckmarkItem {
-                label: tr("Pause").into(),
-                checked: self.paused,
+            // An item with an icon like the others: Plasma lines a checkbox up apart from them.
+            StandardItem {
+                label: tr(if self.paused { "Resume" } else { "Pause" }).into(),
+                icon_name: if self.paused {
+                    "media-playback-start"
+                } else {
+                    "media-playback-pause"
+                }
+                .into(),
                 activate: Box::new(|tray: &mut Self| {
                     let _ = tray.commands.send(Command::TogglePause);
                 }),
@@ -146,7 +152,14 @@ mod tests {
 
     #[test]
     fn the_menu_has_turkish() {
-        for text in ["{} — ready", "{} — paused", "Pause", "Settings…", "Quit"] {
+        for text in [
+            "{} — ready",
+            "{} — paused",
+            "Pause",
+            "Resume",
+            "Settings…",
+            "Quit",
+        ] {
             assert_ne!(translate(Lang::Turkish, text), text);
         }
     }

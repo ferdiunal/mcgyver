@@ -1,7 +1,8 @@
 //! The settings window (`--settings`), a process of its own so the overlay never waits on it:
-//! language, trigger key, the wheel without files and its quick apps, starting at login, and
-//! the permissions the desktop grants, each with the button that fixes it (`linux`, `mac`,
-//! `windows`). Each change is saved at once and the running app picks it up.
+//! language, trigger key, the wheel without files and its quick apps, starting at login, the
+//! permissions the desktop grants, each with the button that fixes it (`linux`, `mac`,
+//! `windows`), and who made the app. Each change is saved at once and the running app picks
+//! it up.
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -37,9 +38,25 @@ const NOTE_FOR: Duration = Duration::from_secs(3);
 /// More quick apps than this crowd the wheel.
 const MOST_QUICK_APPS: usize = 8;
 /// The quick apps' icons, and the tiles to add one from.
-const ROW_ICON: f32 = 26.0;
-const TILE: Vec2 = Vec2::new(86.0, 82.0);
+const ROW_ICON: f32 = 28.0;
+const TILE: Vec2 = Vec2::new(88.0, 84.0);
 const TILE_ICON: f32 = 36.0;
+/// Room on the right for the scroll bar, which floats over what is under it.
+const SCROLL_GUTTER: i8 = 12;
+/// Who made the app, and where to find them.
+const AUTHOR: &str = "Ferdi ÜNAL";
+const EMAIL: &str = "ferdiunal@outlook.com";
+const WEB: [(LinkIcon, &str, &str); 2] = [
+    (
+        LinkIcon::Code,
+        "github.com/ferdiunal",
+        "https://github.com/ferdiunal",
+    ),
+    (LinkIcon::Globe, "ferdiunal.tr", "https://ferdiunal.tr"),
+];
+const SPONSOR: &str = "https://github.com/sponsors/ferdiunal";
+/// The sponsor banner's colour.
+const PINK: Color32 = Color32::from_rgb(219, 97, 162);
 
 /// The window's colours in light or dark.
 #[derive(Clone, Copy)]
@@ -103,6 +120,12 @@ fn muted() -> Color32 {
 }
 
 pub fn run() -> Result<(), String> {
+    run_sized([470.0, 720.0])
+}
+
+/// The window at `size` points, as `run` opens it: taller shows more of it at once (for the
+/// preview's screenshots).
+pub fn run_sized(size: [f32; 2]) -> Result<(), String> {
     // One window at a time, however it was opened.
     let Some(_claim) = platform::claim() else {
         println!("The settings are open already.");
@@ -114,8 +137,8 @@ pub fn run() -> Result<(), String> {
     crate::glass::set_dark(settings.appearance.dark());
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(title())
-        .with_app_id(APP_ID)
-        .with_inner_size([470.0, 720.0])
+        .with_app_id(platform::app_id())
+        .with_inner_size(size)
         .with_min_inner_size([400.0, 360.0]);
     if let Some(rgba) = crate::icon::rgba(64) {
         viewport = viewport.with_icon(egui::IconData {
@@ -167,6 +190,7 @@ fn style(ctx: &egui::Context) {
         v.selection.bg_fill = ACCENT;
         v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
         v.slider_trailing_fill = true;
+        v.hyperlink_color = ACCENT;
         for (widgets, fill) in [
             (&mut v.widgets.inactive, look.control),
             (&mut v.widgets.hovered, look.hover),
@@ -279,13 +303,19 @@ impl eframe::App for Window {
         }
         let before = self.settings.clone();
         egui::CentralPanel::default()
-            .frame(
-                Frame::new()
-                    .fill(look().background)
-                    .inner_margin(Margin::same(18)),
-            )
+            .frame(Frame::new().fill(look().background).inner_margin(Margin {
+                right: 18 - SCROLL_GUTTER,
+                ..Margin::same(18)
+            }))
             .show(ui, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| self.cards(ui));
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    Frame::new()
+                        .inner_margin(Margin {
+                            right: SCROLL_GUTTER,
+                            ..Margin::ZERO
+                        })
+                        .show(ui, |ui| self.cards(ui));
+                });
             });
         if self.settings != before {
             self.changed();
@@ -398,6 +428,7 @@ impl Window {
             });
         }
 
+        // Under the settings, not under About, where it would be out of sight.
         if let Some((said, at)) = &self.note {
             let left = NOTE_FOR.saturating_sub(at.elapsed());
             if left.is_zero() {
@@ -408,6 +439,8 @@ impl Window {
                 ui.ctx().request_repaint_after(left);
             }
         }
+
+        self.about(ui);
     }
 
     /// The app's icon and name over the cards.
@@ -423,6 +456,49 @@ impl Window {
             });
         });
         ui.add_space(8.0);
+    }
+
+    /// The app, its version and who made it, where to find them, and a way to sponsor it.
+    fn about(&self, ui: &mut egui::Ui) {
+        panel().show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                if let Some(logo) = &self.logo {
+                    ui.add(egui::Image::new((logo.id(), Vec2::splat(48.0))));
+                }
+                ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 3.0;
+                    ui.add_space(2.0);
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(APP_NAME).size(17.0).strong());
+                        pill(ui, &trf("Version {}", &[&env!("CARGO_PKG_VERSION")]));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 5.0;
+                        let small = |text| RichText::new(text).size(12.5).color(look().muted);
+                        ui.label(small(AUTHOR));
+                        ui.label(small("·"));
+                        let mail = format!("mailto:{EMAIL}");
+                        if ui
+                            .link(RichText::new(EMAIL).size(12.5).color(ACCENT))
+                            .on_hover_text(&mail)
+                            .clicked()
+                        {
+                            desk::open_link(&mail);
+                        }
+                    });
+                });
+            });
+            ui.add_space(8.0);
+            ui.horizontal_wrapped(|ui| {
+                for (icon, text, url) in WEB {
+                    chip(ui, icon, text, url);
+                }
+            });
+            ui.add_space(8.0);
+            sponsor(ui);
+        });
+        ui.add_space(6.0);
     }
 
     /// The quick apps in order, each with its icon and buttons to move it or take it off, then
@@ -443,13 +519,14 @@ impl Window {
             Frame::new()
                 .fill(look().control)
                 .corner_radius(CornerRadius::same(10))
-                .inner_margin(Margin::symmetric(8, 5))
+                .inner_margin(Margin::symmetric(10, 7))
                 .show(ui, |ui| {
                     ui.allocate_ui_with_layout(
                         Vec2::new(ui.available_width(), ROW_ICON + 4.0),
                         Layout::left_to_right(Align::Center),
                         |ui| {
                             app_icon(ui, icon, &name, ROW_ICON);
+                            ui.add_space(4.0);
                             ui.label(RichText::new(name).size(14.0));
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 if small_button(ui, Glyph::Remove, tr("Remove"), true).clicked() {
@@ -485,7 +562,7 @@ impl Window {
             return;
         }
 
-        ui.add_space(6.0);
+        ui.add_space(10.0);
         let Some(apps) = apps else {
             ui.horizontal(|ui| {
                 ui.spinner();
@@ -497,9 +574,10 @@ impl Window {
         ui.add(
             egui::TextEdit::singleline(&mut self.filter)
                 .hint_text(tr("Add an app…"))
-                .margin(Margin::symmetric(10, 7))
+                .margin(Margin::symmetric(12, 8))
                 .desired_width(f32::INFINITY),
         );
+        ui.add_space(4.0);
         let words = self.filter.to_lowercase();
         let offered: Vec<&App> = apps
             .iter()
@@ -511,13 +589,17 @@ impl Window {
             return;
         }
         let mut added = None;
+        // Two rows and a bit of the third, wherever the card is: inside the window's own scroll
+        // area, a scroll area only gets what is left of the window's height.
+        let height = TILE.y * 2.6;
         egui::ScrollArea::vertical()
             .id_salt("apps to add")
-            .max_height(TILE.y * 2.7)
+            .max_height(height)
+            .min_scrolled_height(height)
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
+                    ui.spacing_mut().item_spacing = Vec2::new(6.0, 6.0);
                     for app in offered {
                         let (rect, response) = ui.allocate_exact_size(TILE, Sense::click());
                         // Only the tiles in view look their icons up.
@@ -658,6 +740,164 @@ fn small_button(ui: &mut egui::Ui, glyph: Glyph, hint: &str, enabled: bool) -> e
     }
 }
 
+/// A small rounded label in the accent colour.
+fn pill(ui: &mut egui::Ui, text: &str) {
+    Frame::new()
+        .fill(ACCENT.gamma_multiply(0.16))
+        .corner_radius(CornerRadius::same(9))
+        .inner_margin(Margin::symmetric(8, 2))
+        .show(ui, |ui| {
+            ui.label(RichText::new(text).size(11.5).color(ACCENT));
+        });
+}
+
+/// What a link chip shows before its text, drawn like the small buttons' glyphs.
+#[derive(Clone, Copy)]
+enum LinkIcon {
+    /// `</>`, for code.
+    Code,
+    /// A globe, for a website.
+    Globe,
+}
+
+/// A link as a rounded chip with an icon, opening in the browser.
+fn chip(ui: &mut egui::Ui, icon: LinkIcon, text: &str, url: &str) {
+    let icon_id = egui::IdSalt::new(url);
+    let shown = egui::Button::new((
+        egui::Atom::custom(icon_id, Vec2::splat(14.0)),
+        RichText::new(text).size(13.0),
+    ))
+    .corner_radius(CornerRadius::same(15))
+    .min_size(Vec2::new(0.0, 30.0))
+    .atom_ui(ui);
+    if let Some(rect) = shown.rect(icon_id) {
+        let color = if shown.response.hovered() {
+            ACCENT
+        } else {
+            look().muted
+        };
+        let stroke = Stroke::new(1.4, color);
+        let at = |x: f32, y: f32| rect.center() + Vec2::new(x, y);
+        let p = ui.painter();
+        match icon {
+            LinkIcon::Code => {
+                p.add(egui::Shape::line(
+                    vec![at(-2.5, -4.0), at(-6.5, 0.0), at(-2.5, 4.0)],
+                    stroke,
+                ));
+                p.add(egui::Shape::line(
+                    vec![at(2.5, -4.0), at(6.5, 0.0), at(2.5, 4.0)],
+                    stroke,
+                ));
+                p.line_segment([at(1.2, -5.5), at(-1.2, 5.5)], stroke);
+            }
+            LinkIcon::Globe => {
+                p.circle_stroke(rect.center(), 6.0, stroke);
+                p.add(egui::Shape::ellipse_stroke(
+                    rect.center(),
+                    Vec2::new(2.6, 6.0),
+                    stroke,
+                ));
+                p.line_segment([at(-6.0, 0.0), at(6.0, 0.0)], stroke);
+            }
+        }
+    }
+    if shown
+        .response
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(url)
+        .clicked()
+    {
+        desk::open_link(url);
+    }
+}
+
+/// A banner across the card to sponsor the app on GitHub, pinker under the pointer.
+fn sponsor(ui: &mut egui::Ui) {
+    // The stroke is set before `begin`, which leaves room for it.
+    let mut banner = Frame::new()
+        .corner_radius(CornerRadius::same(12))
+        .inner_margin(Margin::symmetric(12, 10))
+        .stroke(Stroke::new(1.0, PINK.gamma_multiply(0.35)))
+        .begin(ui);
+    let content = &mut banner.content_ui;
+    content.set_min_width(content.available_width());
+    content.horizontal(|ui| {
+        let (badge, _) = ui.allocate_exact_size(Vec2::splat(34.0), Sense::hover());
+        // Drawn once the text is laid out, in the middle of its height.
+        let badge = badge.center().x;
+        ui.add_space(4.0);
+        // Room on the right for the arrow.
+        let width = (ui.available_width() - 24.0).max(0.0);
+        ui.allocate_ui_with_layout(Vec2::new(width, 0.0), Layout::top_down(Align::Min), |ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            ui.label(RichText::new(tr("Sponsor on GitHub")).size(14.0).strong());
+            ui.label(
+                RichText::new(trf(
+                    "If {} saves you time, you can support its development.",
+                    &[&APP_NAME],
+                ))
+                .size(12.0)
+                .color(look().muted),
+            );
+        });
+        let middle = egui::pos2(badge, ui.min_rect().center().y);
+        ui.painter().circle_filled(middle, 17.0, PINK);
+        heart(
+            ui.painter(),
+            egui::Rect::from_center_size(middle + Vec2::new(0.0, 0.5), Vec2::splat(16.0)),
+            Color32::WHITE,
+        );
+    });
+    let rect = banner.allocate_space(ui).rect;
+    let response = ui
+        .interact(rect, ui.scope_id().with("sponsor"), Sense::click())
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(SPONSOR);
+    response
+        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Link, true, tr("Sponsor on GitHub")));
+    let hovered = response.hovered();
+    banner.frame.fill = PINK.gamma_multiply(if hovered { 0.24 } else { 0.14 });
+    // Reached with Tab, it shows.
+    if response.has_focus() {
+        banner.frame.stroke.color = ACCENT;
+    }
+    banner.paint(ui);
+    let arrow = egui::pos2(rect.right() - 20.0, rect.center().y);
+    let stroke = Stroke::new(1.6, if hovered { PINK } else { look().muted });
+    ui.painter().add(egui::Shape::line(
+        vec![
+            arrow + Vec2::new(-2.5, -5.0),
+            arrow + Vec2::new(2.5, 0.0),
+            arrow + Vec2::new(-2.5, 5.0),
+        ],
+        stroke,
+    ));
+    if response.clicked() {
+        desk::open_link(SPONSOR);
+    }
+}
+
+/// A heart filling the square `rect`, drawn: no font here has one. Two circles over a wedge.
+fn heart(painter: &egui::Painter, rect: egui::Rect, color: Color32) {
+    let s = rect.width() / 14.0;
+    let at = |x: f32, y: f32| rect.center() + Vec2::new(x, y) * s;
+    painter.circle_filled(at(-3.22, -1.68), 3.78 * s, color);
+    painter.circle_filled(at(3.22, -1.68), 3.78 * s, color);
+    // From the point at the bottom to where its sides touch the circles, and their centres.
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            at(-5.54, 1.32),
+            at(-3.22, -1.68),
+            at(3.22, -1.68),
+            at(5.54, 1.32),
+            at(0.0, 5.6),
+        ],
+        color,
+        Stroke::NONE,
+    ));
+}
+
 /// A row with a label on the left and its controls.
 fn labelled(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal_wrapped(|ui| {
@@ -740,22 +980,26 @@ fn row(ui: &mut egui::Ui, row: &Row) -> Option<usize> {
     clicked
 }
 
-/// A white panel with a heading, an optional line under it, and the controls.
-fn card(ui: &mut egui::Ui, heading: &str, help: Option<&str>, add: impl FnOnce(&mut egui::Ui)) {
+/// A card's white (or dark) rounded panel.
+fn panel() -> Frame {
     Frame::new()
         .fill(look().card)
         .corner_radius(CornerRadius::same(14))
         .stroke(Stroke::new(1.0, look().edge))
         .inner_margin(Margin::same(16))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.label(RichText::new(heading).size(15.0).strong());
-            if let Some(help) = help {
-                ui.label(RichText::new(help).size(12.5).color(look().muted));
-            }
-            ui.add_space(2.0);
-            add(ui);
-        });
+}
+
+/// A panel with a heading, an optional line under it, and the controls.
+fn card(ui: &mut egui::Ui, heading: &str, help: Option<&str>, add: impl FnOnce(&mut egui::Ui)) {
+    panel().show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.label(RichText::new(heading).size(15.0).strong());
+        if let Some(help) = help {
+            ui.label(RichText::new(help).size(12.5).color(look().muted));
+        }
+        ui.add_space(2.0);
+        add(ui);
+    });
     ui.add_space(6.0);
 }
 
@@ -834,6 +1078,9 @@ mod tests {
             "Saved",
             "Couldn't save: {}",
             "{} isn't running; it will use these when it starts.",
+            "Version {}",
+            "Sponsor on GitHub",
+            "If {} saves you time, you can support its development.",
         ] {
             assert_ne!(translate(Lang::Turkish, text), text, "{text}");
         }

@@ -62,13 +62,13 @@ Mac with macOS 11 or later; either Mac can build it. On a Mac other than the one
 macOS refuses an app that isn't notarized: after copying it to Applications, run
 `xattr -dr com.apple.quarantine /Applications/McGyver.app` once (or Control-click it → Open).
 
-It sits in the menu bar (Pause, Settings…, Quit); there is no Dock icon, and opening the app
-again while it runs opens its settings. Drag files in Finder, hold the trigger key, and the
-wheel appears under the pointer (kept on the display near an edge). It is drawn in a
-transparent window that is always there, on every Space and over full-screen apps, and lets
-every click through until files are dragged and the key goes down; it then takes the drag with
-macOS's own drag and drop. Holding the key while dragging something that isn't files (a shape,
-some text) does nothing. What differs from KDE:
+It sits in the menu bar (Pause, or Resume while paused, Settings…, Quit); there is no Dock icon,
+and opening the app again while it runs opens its settings. Drag files in Finder, hold the
+trigger key, and the wheel appears under the pointer (kept on the display near an edge). It is
+drawn in a transparent window that is always there, on every Space and over full-screen apps,
+and lets every click through until files are dragged and the key goes down; it then takes the
+drag with macOS's own drag and drop. Holding the key while dragging something that isn't files
+(a shape, some text) does nothing. What differs from KDE:
 
 - **Trigger key:** Shift, Control, Option or Command. Control and Command change what a drag
   offers (a link, a move); the wheel accepts those too. Letting go of the key and the button
@@ -113,11 +113,11 @@ packaging/windows/build.sh arm64    # or x64: one of them
 ```
 
 Unzip it anywhere and run `mcgyver.exe`. It isn't signed, so SmartScreen warns the first time
-(More info → Run anyway). It sits in the notification area (Pause, Settings…, Quit), and starting
-it again while it runs opens its settings. Drag files in Explorer, hold the trigger key, and the
-wheel appears under the pointer, as on macOS: a transparent, topmost window that lets every
-click through until the key goes down during a drag, then takes the drag with Windows' own drag
-and drop. What differs:
+(More info → Run anyway). It sits in the notification area (Pause, or Resume while paused,
+Settings…, Quit), and starting it again while it runs opens its settings. Drag files in
+Explorer, hold the trigger key, and the wheel appears under the pointer, as on macOS: a
+transparent, topmost window that lets every click through until the key goes down during a drag,
+then takes the drag with Windows' own drag and drop. What differs:
 
 - **Trigger key:** Shift, Ctrl or Alt.
 - **No permission:** low-level keyboard and mouse hooks hear the key and the mouse as they
@@ -143,10 +143,10 @@ and drop. What differs:
 ### Tray and settings
 
 The app runs in the background with an icon in Plasma's system tray. Its menu has **Pause** (the
-trigger key does nothing until unpaused; the icon fades), **Settings…** and **Quit**; clicking the
-icon opens the settings too. Starting the app while it runs opens its settings instead of a
-second copy (it holds the session-bus name `io.github.McGyver`), and only one settings
-window opens at a time. Quit waits for running conversions to finish.
+trigger key does nothing until **Resume**, which takes its place; the icon fades), **Settings…**
+and **Quit**; clicking the icon opens the settings too. Starting the app while it runs opens its
+settings instead of a second copy (it holds the session-bus name `io.github.McGyver`), and only
+one settings window opens at a time. Quit waits for running conversions to finish.
 
 The settings window saves each change at once, to
 `~/.config/mcgyver/settings.conf`, and the running app picks it up straight away:
@@ -185,6 +185,8 @@ The settings window saves each change at once, to
   seconds late, so Set up and Remove wait until a fresh Wayland connection shows the change
   before restarting the app (once nothing is converting). KDE turned out to give a modifier
   tapped alone to two shortcuts at once, so "held by another shortcut" may never show there.
+- **About**, at the bottom: the version, who made McGyver with their e-mail, GitHub and website,
+  and a banner to sponsor it on GitHub Sponsors. The links open in the browser (or the mail app).
 
 The rest of this README says Shift for the trigger key.
 
@@ -193,7 +195,10 @@ The rest of this README says Shift for the trigger key.
 - It writes `~/.local/share/applications/mcgyver-kwin.desktop` so KWin offers
   this binary its fake-input protocol (see below). If the binary moves, the app rewrites it when
   it starts (a snap's points at its `current` revision). Without it, the wheel opens as soon as
-  the mouse moves after you press the key.
+  the mouse moves after you press the key. The entry names the app icon, which goes to
+  `~/.local/share/icons/hicolor/scalable/apps/mcgyver.svg`: KWin finds a window's icon only in
+  the desktop file named after its app id, so without a package's `mcgyver.desktop` the settings
+  window goes by `mcgyver-kwin` and shows the icon on its title bar.
 - It binds a KDE global shortcut, "McGyver", to the trigger key on its own. It shows up in
   System Settings → Shortcuts, but the trigger key in the app's settings wins: the app binds it
   again when it starts.
@@ -606,7 +611,7 @@ EFRAME_SCREENSHOT_TO=out.png MCGYVER_LANG=tr WAYLAND_DISPLAY= xvfb-run -a cargo 
 ```
 
 `MCGYVER_LANG=tr` shows it in Turkish and `MCGYVER_DARK=1` dark, `MCGYVER_TURN=1` partway through
-turning from light to dark (not in `settings`); `MCGYVER_AT=0.3` stops the clock 0.3 s in, to see a frame of the motion; `settings` opens the settings window. Clear `WAYLAND_DISPLAY`
+turning from light to dark (not in `settings`); `MCGYVER_AT=0.3` stops the clock 0.3 s in, to see a frame of the motion; `settings` opens the settings window, `MCGYVER_HEIGHT=1000` that tall. Clear `WAYLAND_DISPLAY`
 for screenshots, or the window opens on the desktop rather than under xvfb.
 
 ### End-to-end test

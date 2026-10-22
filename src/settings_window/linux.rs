@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use crate::glass::{GREEN, RED};
 use crate::i18n::{tr, trf};
 use crate::service;
-use crate::settings::{APP_NAME, Settings, Trigger};
+use crate::settings::{APP_ID, APP_NAME, Settings, Trigger};
 
 use super::{AMBER, Row, row};
 
@@ -30,6 +30,19 @@ pub(super) fn claim() -> Option<impl Sized> {
 /// Has the running app read the saved settings again; false when it isn't running.
 pub(super) fn tell_app() -> bool {
     service::call("Reload")
+}
+
+/// The window's app id. KWin shows the icon of the desktop file of that name: the menu entry a
+/// package installs, or else the entry `--install` wrote.
+pub(super) fn app_id() -> &'static str {
+    let installed = crate::kde::DESKTOP_FILE;
+    if !crate::desk::has_desktop_file(&format!("{APP_ID}.desktop"))
+        && crate::desk::has_desktop_file(installed)
+    {
+        installed.strip_suffix(".desktop").unwrap_or(installed)
+    } else {
+        APP_ID
+    }
 }
 
 /// KDE brings a new window forward by itself.

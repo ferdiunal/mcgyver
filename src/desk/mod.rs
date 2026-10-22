@@ -28,8 +28,21 @@ mod windows;
 use windows as system;
 
 #[cfg(target_os = "linux")]
+pub(crate) use linux::has_desktop_file;
+#[cfg(target_os = "linux")]
 pub use linux::{blend_changes, switched_dark};
 pub use system::installed_apps;
+
+/// Opens a web or mail link in the default app, on a thread of its own: a browser can take a
+/// moment to start.
+pub fn open_link(url: &str) {
+    let url = url.to_owned();
+    std::thread::spawn(move || {
+        if let Err(e) = system::open_link(&url) {
+            eprintln!("mcgyver: {e}");
+        }
+    });
+}
 
 /// The icon an app's desktop file names (a theme icon's name or a path), for `icons`.
 #[cfg(target_os = "linux")]

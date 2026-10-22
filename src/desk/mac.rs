@@ -534,6 +534,10 @@ fn stay_awake(on: bool) -> Result<(), String> {
     Ok(())
 }
 
+pub(super) fn open_link(url: &str) -> Result<(), String> {
+    open(&[url])
+}
+
 fn open(args: &[&str]) -> Result<(), String> {
     let status = Process::new("open")
         .args(args)

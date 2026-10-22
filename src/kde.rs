@@ -18,7 +18,7 @@
 use std::ffi::c_void;
 use std::io::Read;
 use std::num::NonZeroU32;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
@@ -100,7 +100,9 @@ const NUDGE_AFTER: Duration = Duration::from_millis(15);
 /// Nudges per probe, `NUDGE_AFTER` apart, in case KWin mapped the overlay late.
 const NUDGES: u8 = 3;
 /// Its own ID, so it doesn't hide the menu entry a package installs as `mcgyver.desktop`.
-const DESKTOP_FILE: &str = "mcgyver-kwin.desktop";
+pub(crate) const DESKTOP_FILE: &str = "mcgyver-kwin.desktop";
+/// Where `install` puts the app icon, under the data folder, for its entry to name.
+const ICON_FILE: &str = "icons/hicolor/scalable/apps/mcgyver.svg";
 /// What `install` wrote before the app was called McGyver.
 const OLD_DESKTOP_FILES: [&str; 2] = [
     "zero-click-converter.desktop",
@@ -424,6 +426,11 @@ pub fn uninstall() -> Result<(), String> {
             Err(e) => return Err(format!("{}: {e}", path.display())),
         }
     }
+    if let Ok(icon) = data_file(ICON_FILE)
+        && std::fs::remove_file(&icon).is_ok()
+    {
+        say(&format!("Removed {}.", icon.display()));
+    }
     if removed {
         refresh_service_cache();
         wait_for_kwin(false);
@@ -431,7 +438,8 @@ pub fn uninstall() -> Result<(), String> {
     crate::tap::uninstall()
 }
 
-/// What `install` writes: KWin matches the first word of Exec against the running binary.
+/// What `install` writes: KWin matches the first word of Exec against the running binary. The
+/// icon is named by its path, which KWin finds without its icon theme catching up.
 fn kwin_entry() -> Result<String, String> {
     let exe = crate::settings::own_exe()
         .and_then(|p| p.canonicalize())
@@ -456,34 +464,62 @@ fn kwin_entry() -> Result<String, String> {
         .to_str()
         .filter(|s| !s.contains(['"', '\\', '`', '$', '%']))
         .ok_or_else(|| format!("move the program to a plainer path than {}", exe.display()))?;
+    // A path the entry can hold as it is (a backslash would start an escape); else no icon.
+    let icon = data_file(ICON_FILE)
+        .ok()
+        .and_then(|p| p.to_str().map(str::to_owned))
+        .filter(|p| !p.contains('\\') && !p.contains(char::is_control))
+        .map(|p| format!("Icon={p}\n"))
+        .unwrap_or_default();
     Ok(format!(
-        "[Desktop Entry]\nType=Application\nName=McGyver\nExec=\"{exe}\"\nNoDisplay=true\n\
-         X-KDE-Wayland-Interfaces=org_kde_kwin_fake_input\n"
+        "[Desktop Entry]\nType=Application\nName=McGyver\nExec=\"{exe}\"\n{icon}\
+         NoDisplay=true\nX-KDE-Wayland-Interfaces=org_kde_kwin_fake_input\n"
     ))
 }
 
 fn write_kwin_entry() -> Result<PathBuf, String> {
     let entry = kwin_entry()?;
     let path = desktop_file(DESKTOP_FILE)?;
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    }
-    std::fs::write(&path, entry).map_err(|e| format!("{}: {e}", path.display()))?;
+    write_file(&path, entry.as_bytes())?;
     for old in OLD_DESKTOP_FILES {
         if let Ok(old) = desktop_file(old) {
             let _ = std::fs::remove_file(old);
         }
     }
     refresh_service_cache();
+    write_icon();
     Ok(path)
 }
 
+/// Puts the app icon where the KWin entry names it, unless it is there already. Without it the
+/// settings window only has KWin's own icon; fake input doesn't need it.
+fn write_icon() {
+    let Ok(path) = data_file(ICON_FILE) else {
+        return;
+    };
+    if std::fs::read(&path).is_ok_and(|icon| icon == crate::icon::SVG) {
+        return;
+    }
+    if let Err(e) = write_file(&path, crate::icon::SVG) {
+        eprintln!("mcgyver: no icon for the KWin entry: {e}");
+    }
+}
+
+fn write_file(path: &Path, contents: &[u8]) -> Result<(), String> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    std::fs::write(path, contents).map_err(|e| format!("{}: {e}", path.display()))
+}
+
 /// Rewrites what `install` wrote if this binary has moved since (a new build elsewhere, the
-/// old ID), so KWin keeps granting fake input.
+/// old ID), so KWin keeps granting fake input, and puts back the icon it names. KWin reads the
+/// icon by its path, so a new one needs neither the service cache nor a wait.
 fn heal_install() {
     if !installed() {
         return;
     }
+    write_icon();
     let current = desktop_file(DESKTOP_FILE)
         .and_then(|p| std::fs::read_to_string(p).map_err(|e| e.to_string()));
     if current.ok() != kwin_entry().ok() {
@@ -536,13 +572,18 @@ fn fake_input_offered() -> Option<bool> {
 }
 
 fn desktop_file(name: &str) -> Result<PathBuf, String> {
+    data_file(&format!("applications/{name}"))
+}
+
+/// `path` in the user's data folder.
+fn data_file(path: &str) -> Result<PathBuf, String> {
     // Per the XDG spec, an empty or relative XDG_DATA_HOME is ignored.
     let data = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))
         .ok_or("neither XDG_DATA_HOME nor HOME is set")?;
-    Ok(data.join("applications").join(name))
+    Ok(data.join(path))
 }
 
 fn refresh_service_cache() {
@@ -2165,6 +2206,18 @@ smithay_client_toolkit::delegate_dispatch2!(App);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_kwin_entry_names_the_icon_by_its_path() {
+        let entry = kwin_entry().unwrap();
+        let icon = data_file(ICON_FILE).unwrap();
+        assert!(
+            entry
+                .lines()
+                .any(|line| line == format!("Icon={}", icon.display())),
+            "{entry}"
+        );
+    }
 
     #[test]
     fn uri_list_decodes_paths() {

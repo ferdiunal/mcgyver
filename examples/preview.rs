@@ -5,9 +5,9 @@
 //!
 //! With `EFRAME_SCREENSHOT_TO=out.png` it saves the second frame and exits; `MCGYVER_LANG=tr` shows
 //! it in Turkish, `MCGYVER_DARK=1` dark, `MCGYVER_TURN=1` (not for `settings`) halfway through
-//! turning dark. The `settings` scene opens the settings window instead. `MCGYVER_AT=0.1` stops the clock that many
-//! seconds after the scene's last step (the wheel opening, the wedge aimed at, the mode switched),
-//! to see a frame of the motion.
+//! turning dark. The `settings` scene opens the settings window instead, `MCGYVER_HEIGHT=1000`
+//! points tall. `MCGYVER_AT=0.1` stops the clock that many seconds after the scene's last step
+//! (the wheel opening, the wedge aimed at, the mode switched), to see a frame of the motion.
 
 use std::f32::consts::FRAC_PI_2;
 use std::path::PathBuf;
@@ -37,7 +37,12 @@ fn main() -> eframe::Result {
     });
     #[cfg(target_os = "linux")]
     if scene == "settings" {
-        return mcgyver::settings_window::run().map_err(|e| eframe::Error::AppCreation(e.into()));
+        let height = std::env::var("MCGYVER_HEIGHT")
+            .ok()
+            .and_then(|h| h.parse().ok())
+            .unwrap_or(720.0);
+        return mcgyver::settings_window::run_sized([470.0, height])
+            .map_err(|e| eframe::Error::AppCreation(e.into()));
     }
     // The desk's bubbles reach further out.
     let size = if scene.starts_with("desk") || scene == "welcome" {
