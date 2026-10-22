@@ -665,13 +665,13 @@ impl OverlaySurface {
 }
 
 /// With the look like the system's, the glass follows the desktop as the desk sees it: a click
-/// on its Dark Mode turns the wheel at once, as the desktop turns.
+/// on its Dark Mode fades the wheel across, as the desktop turns.
 fn follow_desk_dark(appearance: crate::settings::Appearance, overlay: &Overlay) {
     if appearance == crate::settings::Appearance::System
         && let Some(dark) = overlay.desk_dark()
         && dark != crate::glass::dark()
     {
-        crate::glass::set_dark(dark);
+        crate::glass::turn_dark(dark);
         crate::settings::system_dark_is(dark);
     }
 }
@@ -912,6 +912,7 @@ impl App {
         self.hold = settings.hold;
         self.hold_time = settings.hold_time();
         self.appearance = settings.appearance;
+        crate::glass::turn_dark(self.appearance.dark());
         self.quick_apps = settings.quick_apps;
         if settings.trigger != self.trigger {
             self.fold();

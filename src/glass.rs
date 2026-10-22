@@ -1,12 +1,13 @@
 //! The overlay's material: frosted glass over a compositor-blurred backdrop, light grey and
-//! white with dark text or (see `set_dark`) smoky with light text, and one orange accent.
+//! white with dark text or (see `set_dark`) smoky with light text, and one orange accent. Turned
+//! from one to the other while it shows (`turn_dark`), every colour fades across.
 //!
 //! Painting only covers what we draw; the blur behind it comes from the platform, which reads
 //! the [`GlassShape`]s the overlay collected while painting.
 
 use std::f32::consts::{FRAC_PI_2, TAU};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use egui::epaint::TextShape;
 use egui::{
@@ -20,6 +21,7 @@ pub const GREEN: Color32 = Color32::from_rgb(52, 178, 84);
 pub const RED: Color32 = Color32::from_rgb(222, 64, 52);
 
 /// The overlay's colours in light or dark.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Palette {
     pub text: Color32,
     pub text_muted: Color32,
@@ -75,24 +77,123 @@ pub const DARK_GLASS: Palette = Palette {
     rim: 0.35,
 };
 
-static DARK: AtomicBool = AtomicBool::new(false);
+/// How long the glass takes to turn from light to dark, or back.
+pub const TURN_TIME: f32 = 0.45;
 
-/// Draws everything from now on dark, or light.
+/// Dark or light, and the turn to it: how dark it was when the turn began, and when.
+struct Look {
+    dark: bool,
+    from: f32,
+    since: Option<Instant>,
+}
+
+static LOOK: Mutex<Look> = Mutex::new(Look {
+    dark: false,
+    from: 0.0,
+    since: None,
+});
+
+fn look() -> std::sync::MutexGuard<'static, Look> {
+    LOOK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Draws everything dark, or light, from now on, at once: for what isn't showing yet. A turn
+/// already on its way there goes on, for what is showing.
 pub fn set_dark(dark: bool) {
-    DARK.store(dark, Ordering::Relaxed);
+    let mut look = look();
+    if look.dark == dark {
+        return;
+    }
+    *look = Look {
+        dark,
+        from: 0.0,
+        since: None,
+    };
 }
 
-/// Whether everything is drawn dark now.
+/// Turns everything dark, or light, over `TURN_TIME`, from however dark it is now.
+pub fn turn_dark(dark: bool) {
+    let mut look = look();
+    if look.dark == dark {
+        return;
+    }
+    let now = Instant::now();
+    let from = darkness_of(&look, now);
+    *look = Look {
+        dark,
+        from,
+        since: Some(now),
+    };
+}
+
+/// Whether everything is dark, or turning dark.
 pub fn dark() -> bool {
-    DARK.load(Ordering::Relaxed)
+    look().dark
 }
 
-/// The colours to draw with now.
-pub fn palette() -> &'static Palette {
-    if DARK.load(Ordering::Relaxed) {
-        &DARK_GLASS
+/// Whether the glass is turning: what shows it has to be drawn again.
+pub fn turning() -> bool {
+    look()
+        .since
+        .is_some_and(|at| at.elapsed().as_secs_f32() < TURN_TIME)
+}
+
+/// How dark everything is now, 0 (light) → 1 (dark).
+pub fn darkness() -> f32 {
+    darkness_of(&look(), Instant::now())
+}
+
+fn darkness_of(look: &Look, now: Instant) -> f32 {
+    let to = if look.dark { 1.0 } else { 0.0 };
+    let Some(at) = look.since else {
+        return to;
+    };
+    let t = (now.saturating_duration_since(at).as_secs_f32() / TURN_TIME).min(1.0);
+    // Slow out of one, slow into the other.
+    let eased = t * t * (3.0 - 2.0 * t);
+    look.from + (to - look.from) * eased
+}
+
+/// The colours to draw with now: light's or dark's, or on the way between.
+pub fn palette() -> Palette {
+    blend(&LIGHT_GLASS, &DARK_GLASS, darkness())
+}
+
+/// Text `t` of the way from light's to dark's. Faded across, it would be as grey as the glass
+/// halfway; instead it fades out just before the middle and back in as the other just after.
+pub fn swap_text(light: Color32, dark: Color32, t: f32) -> Color32 {
+    let (color, away) = if t < 0.5 {
+        (light, 1.0 - 2.0 * t)
     } else {
-        &LIGHT_GLASS
+        (dark, 2.0 * t - 1.0)
+    };
+    color.gamma_multiply((away / 0.3).min(1.0))
+}
+
+/// `light`'s colours `t` of the way to `dark`'s.
+fn blend(light: &Palette, dark: &Palette, t: f32) -> Palette {
+    if t <= 0.0 {
+        return *light;
+    }
+    if t >= 1.0 {
+        return *dark;
+    }
+    let c = |a: Color32, b: Color32| a.lerp_to_gamma(b, t);
+    let f = |a: f32, b: f32| a + (b - a) * t;
+    Palette {
+        text: swap_text(light.text, dark.text, t),
+        text_muted: swap_text(light.text_muted, dark.text_muted, t),
+        frame: c(light.frame, dark.frame),
+        frame_alpha: f(light.frame_alpha, dark.frame_alpha),
+        panel: c(light.panel, dark.panel),
+        panel_alpha: f(light.panel_alpha, dark.panel_alpha),
+        wedge: c(light.wedge, dark.wedge),
+        wedge_shade: c(light.wedge_shade, dark.wedge_shade),
+        track: c(light.track, dark.track),
+        raised: c(light.raised, dark.raised),
+        hub: c(light.hub, dark.hub),
+        edge: c(light.edge, dark.edge),
+        rim: f(light.rim, dark.rim),
     }
 }
 
@@ -359,6 +460,29 @@ fn font(size: f32, bold: bool) -> FontId {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_glass_turns_across_and_settles() {
+        assert_eq!(blend(&LIGHT_GLASS, &DARK_GLASS, 0.0), LIGHT_GLASS);
+        assert_eq!(blend(&LIGHT_GLASS, &DARK_GLASS, 1.0), DARK_GLASS);
+        let half = blend(&LIGHT_GLASS, &DARK_GLASS, 0.5);
+        assert!(half.frame != LIGHT_GLASS.frame && half.frame != DARK_GLASS.frame);
+        // Text is never grey on grey: light's or dark's, faded out only near the middle.
+        assert_eq!(half.text.a(), 0);
+        assert_eq!(blend(&LIGHT_GLASS, &DARK_GLASS, 0.3).text, LIGHT_GLASS.text);
+        assert_eq!(blend(&LIGHT_GLASS, &DARK_GLASS, 0.7).text, DARK_GLASS.text);
+        assert!((half.rim - (LIGHT_GLASS.rim + DARK_GLASS.rim) / 2.0).abs() < 1e-6);
+        let at = Instant::now();
+        let look = Look {
+            dark: true,
+            from: 0.25,
+            since: Some(at),
+        };
+        let at_t = |s: f32| darkness_of(&look, at + std::time::Duration::from_secs_f32(s));
+        assert!((at_t(0.0) - 0.25).abs() < 1e-6);
+        assert!(at_t(TURN_TIME / 2.0) > 0.25 && at_t(TURN_TIME / 2.0) < 1.0);
+        assert_eq!(at_t(TURN_TIME + 0.01), 1.0);
+    }
 
     #[test]
     fn circle_bands_cover_the_disc() {

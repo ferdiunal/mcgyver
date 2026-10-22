@@ -150,7 +150,9 @@ The settings window saves each change at once, to
 
 - **Appearance:** light or dark glass, or like the system (followed as it changes, within a
   second); the settings window follows too. Like the system, a click on the wheel's own Dark
-  Mode turns the open wheel at once, as the desktop turns.
+  Mode turns the open wheel with it, as the desktop turns. A change of look fades across in
+  under half a second: the glass blends, and the text fades out halfway and back in as the
+  other colour, so it never sits grey on grey.
 - **Language:** English or Türkçe; the first time, the desktop's language. The wheel, the cards,
   the tray menu and the settings change; format names, file names and an engine's own error
   messages stay as they are.
@@ -522,8 +524,8 @@ cargo run --example preview -- desk      # desk|desk-apps|desk-media|desk-volume
 EFRAME_SCREENSHOT_TO=out.png MCGYVER_LANG=tr WAYLAND_DISPLAY= xvfb-run -a cargo run --example preview -- card
 ```
 
-`MCGYVER_LANG=tr` shows it in Turkish and `MCGYVER_DARK=1` dark; `MCGYVER_AT=0.3` stops the clock
-0.3 s in, to see a frame of the motion; `settings` opens the settings window. Clear `WAYLAND_DISPLAY`
+`MCGYVER_LANG=tr` shows it in Turkish and `MCGYVER_DARK=1` dark, `MCGYVER_TURN=1` partway through
+turning from light to dark (not in `settings`); `MCGYVER_AT=0.3` stops the clock 0.3 s in, to see a frame of the motion; `settings` opens the settings window. Clear `WAYLAND_DISPLAY`
 for screenshots, or the window opens on the desktop rather than under xvfb.
 
 ### End-to-end test

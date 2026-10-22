@@ -42,6 +42,7 @@ const TILE: Vec2 = Vec2::new(86.0, 82.0);
 const TILE_ICON: f32 = 36.0;
 
 /// The window's colours in light or dark.
+#[derive(Clone, Copy)]
 struct Look {
     background: Color32,
     card: Color32,
@@ -74,8 +75,25 @@ const DARK: Look = Look {
     hover: Color32::from_rgb(60, 60, 70),
 };
 
-fn look() -> &'static Look {
-    if crate::glass::dark() { &DARK } else { &LIGHT }
+/// The window's colours now: light's or dark's, or on the way between as the glass turns.
+fn look() -> Look {
+    let t = crate::glass::darkness();
+    if t <= 0.0 {
+        return LIGHT;
+    }
+    if t >= 1.0 {
+        return DARK;
+    }
+    let c = |a: Color32, b: Color32| a.lerp_to_gamma(b, t);
+    Look {
+        background: c(LIGHT.background, DARK.background),
+        card: c(LIGHT.card, DARK.card),
+        edge: c(LIGHT.edge, DARK.edge),
+        text: crate::glass::swap_text(LIGHT.text, DARK.text, t),
+        muted: crate::glass::swap_text(LIGHT.muted, DARK.muted, t),
+        control: c(LIGHT.control, DARK.control),
+        hover: c(LIGHT.hover, DARK.hover),
+    }
 }
 
 /// Muted text, for the platforms' permission rows.
@@ -130,7 +148,7 @@ fn title() -> String {
 /// The look of every widget, light or dark as the glass is.
 fn style(ctx: &egui::Context) {
     let look = look();
-    let dark = crate::glass::dark();
+    let dark = crate::glass::darkness() >= 0.5;
     ctx.set_theme(if dark {
         egui::Theme::Dark
     } else {
@@ -182,6 +200,8 @@ struct Window {
     logo: Option<egui::TextureHandle>,
     /// Whether the window is dark now, to restyle it when the system's look changes.
     dark: bool,
+    /// The glass turned last frame: the window is styled once more, at the turn's end.
+    turned: bool,
 }
 
 impl Window {
@@ -198,6 +218,7 @@ impl Window {
         });
         Window {
             dark: settings.appearance.dark(),
+            turned: false,
             settings,
             start_at_login: settings::starts_at_login(),
             permissions: Permissions::new(),
@@ -228,13 +249,19 @@ impl Window {
         self.note = Some((said, Instant::now()));
     }
 
-    /// Follows the appearance chosen, or the system's as it changes.
+    /// Follows the appearance chosen, or the system's as it changes, fading across.
     fn restyle(&mut self, ctx: &egui::Context) {
         let dark = self.settings.appearance.dark();
         if dark != self.dark {
             self.dark = dark;
-            crate::glass::set_dark(dark);
+            crate::glass::turn_dark(dark);
+        }
+        let turning = crate::glass::turning();
+        if turning || std::mem::take(&mut self.turned) {
             style(ctx);
+            ctx.request_repaint();
+            // Once more after the turn, at its end.
+            self.turned = turning;
         }
     }
 }

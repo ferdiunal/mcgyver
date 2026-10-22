@@ -1043,6 +1043,10 @@ impl Overlay {
                 soon(since + SETTLE - now);
             }
         }
+        // Turning light or dark, every colour is on its way.
+        if glass::turning() && (self.wheel.is_some() || !self.cards.is_empty()) {
+            soon(Duration::ZERO);
+        }
         if let Some(w) = &self.wheel {
             if w.moving(now) {
                 soon(Duration::ZERO);

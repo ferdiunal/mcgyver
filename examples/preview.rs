@@ -4,9 +4,10 @@
 //!     cargo run --example preview -- [desk|desk-apps|desk-media|desk-volume|desk-keyboard|desk-monitor|desk-system|desk-empty|welcome]
 //!
 //! With `EFRAME_SCREENSHOT_TO=out.png` it saves the second frame and exits; `MCGYVER_LANG=tr` shows
-//! it in Turkish, `MCGYVER_DARK=1` dark. The `settings` scene opens the settings window instead. `MCGYVER_AT=0.1` stops
-//! the clock that many seconds after the scene's last step (the wheel opening, the wedge aimed
-//! at, the mode switched), to see a frame of the motion.
+//! it in Turkish, `MCGYVER_DARK=1` dark, `MCGYVER_TURN=1` (not for `settings`) halfway through
+//! turning dark. The `settings` scene opens the settings window instead. `MCGYVER_AT=0.1` stops the clock that many
+//! seconds after the scene's last step (the wheel opening, the wedge aimed at, the mode switched),
+//! to see a frame of the motion.
 
 use std::f32::consts::FRAC_PI_2;
 use std::path::PathBuf;
@@ -84,7 +85,15 @@ impl eframe::App for Preview {
             // The scene's last step two seconds ago, everything settled; or at the frozen time.
             let then = now - Duration::from_secs(2);
             self.frozen = at.map(|at| then + Duration::from_secs_f32(at));
-            scene(&self.scene, screen, then)
+            let overlay = scene(&self.scene, screen, then);
+            // Halfway through turning dark, once the scene is set up (the glass keeps its own
+            // time, not the frozen one).
+            if std::env::var_os("MCGYVER_TURN").is_some() {
+                mcgyver::glass::set_dark(false);
+                mcgyver::glass::turn_dark(true);
+                std::thread::sleep(Duration::from_secs_f32(mcgyver::glass::TURN_TIME * 0.45));
+            }
+            overlay
         });
         let now = self.frozen.unwrap_or_else(Instant::now);
         // A frozen clock shows the same frame for good: no need to draw it again.
