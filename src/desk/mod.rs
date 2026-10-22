@@ -27,6 +27,8 @@ mod windows;
 #[cfg(windows)]
 use windows as system;
 
+#[cfg(target_os = "linux")]
+pub use linux::{blend_changes, switched_dark};
 pub use system::installed_apps;
 
 /// The icon an app's desktop file names (a theme icon's name or a path), for `icons`.

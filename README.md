@@ -155,7 +155,12 @@ The settings window saves each change at once, to
   second); the settings window follows too. Like the system, a click on the wheel's own Dark
   Mode turns the open wheel with it, as the desktop turns. A change of look fades across in
   under half a second: the glass blends, and the text fades out halfway and back in as the
-  other colour, so it never sits grey on grey.
+  other colour, so it never sits grey on grey. On KDE, KWin fades the whole screen across when
+  the colours change (its Blend Changes effect: a still of every window, held while they
+  repaint, then blended into them); the wheel's Dark Mode starts that fade itself before the
+  colours switch and turns the wheel at once beneath the still, so the wheel goes across with
+  everything else instead of being caught halfway by it. With that effect off, the wheel fades
+  on its own once the colours have switched.
 - **Language:** English or Türkçe; the first time, the desktop's language. The wheel, the cards,
   the tray menu and the settings change; format names, file names and an engine's own error
   messages stay as they are.

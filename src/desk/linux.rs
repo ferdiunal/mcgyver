@@ -706,16 +706,42 @@ pub fn mic_muted() -> Option<bool> {
 /// moment later, so a reading right after the switch takes the desk's word for it.
 static SWITCHED_DARK: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
 
+/// What the desk switched Plasma's colours to, if it did a moment ago.
+pub fn switched_dark() -> Option<bool> {
+    let switched = *SWITCHED_DARK.lock().unwrap_or_else(|e| e.into_inner());
+    switched
+        .filter(|(at, _)| at.elapsed() < Duration::from_secs(3))
+        .map(|(_, dark)| dark)
+}
+
 /// Whether Plasma is dark, where its colours can be switched.
 pub fn dark() -> Option<bool> {
     if !has("plasma-apply-colorscheme") {
         return None;
     }
-    let switched = *SWITCHED_DARK.lock().unwrap_or_else(|e| e.into_inner());
-    match switched {
-        Some((at, dark)) if at.elapsed() < Duration::from_secs(3) => Some(dark),
-        _ => Some(crate::settings::system_dark_now()),
-    }
+    Some(switched_dark().unwrap_or_else(crate::settings::system_dark_now))
+}
+
+/// How long KWin holds its still of the screen before blending it into the new colours: the
+/// 300 ms plasma-apply-colorscheme asks for, from when it starts, which is about 150 ms after
+/// the click that starts the fade here.
+const BLEND_HOLD_MS: i32 = 450;
+
+/// Starts KWin's fade across the screen for a change of colours (its BlendChanges effect): it
+/// takes a still of every window at once, shows it while they repaint, then blends it into what
+/// they show. Whether it could; a start while one runs does nothing.
+pub fn blend_changes() -> bool {
+    let Some(bus) = bus() else {
+        return false;
+    };
+    bus.call_method(
+        Some("org.kde.KWin"),
+        "/org/kde/KWin/BlendChanges",
+        Some("org.kde.KWin.BlendChanges"),
+        "start",
+        &(BLEND_HOLD_MS,),
+    )
+    .is_ok()
 }
 
 /// Switches Plasma's colours dark or light: back to the scheme it had before the last switch

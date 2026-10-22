@@ -664,11 +664,12 @@ impl OverlaySurface {
     }
 }
 
-/// With the look like the system's, the glass follows the desktop as the desk sees it: a click
-/// on its Dark Mode fades the wheel across, as the desktop turns.
-fn follow_desk_dark(appearance: crate::settings::Appearance, overlay: &Overlay) {
+/// With the look like the system's, the glass follows the desk's Dark Mode once it has switched
+/// the desktop's colours, fading across with them. Where KWin fades the screen across itself,
+/// the glass has turned already (see `run_desk_commands`).
+fn follow_desk_dark(appearance: crate::settings::Appearance) {
     if appearance == crate::settings::Appearance::System
-        && let Some(dark) = overlay.desk_dark()
+        && let Some(dark) = desk::switched_dark()
         && dark != crate::glass::dark()
     {
         crate::glass::turn_dark(dark);
@@ -1178,6 +1179,15 @@ impl App {
                 }
                 if number >= self.desk_from {
                     self.overlay.refresh_desk(menu, Instant::now());
+                    // Turned at the click, but the colours didn't switch: back as the desktop is.
+                    if self.appearance == crate::settings::Appearance::System
+                        && desk::switched_dark().is_none()
+                        && let Some(dark) = self.overlay.desk_dark()
+                        && dark != crate::glass::dark()
+                    {
+                        crate::glass::turn_dark(dark);
+                        crate::settings::system_dark_is(dark);
+                    }
                     self.repaint_now();
                 }
             }
@@ -1251,6 +1261,23 @@ impl App {
         if let Some(at) = commands.iter().position(|c| *c == desk::Command::Settings) {
             commands.remove(at);
             self.show_settings();
+        }
+        // KWin fades the whole screen across when Plasma's colours change: it shows a still of
+        // every window while they repaint, then blends it into what they show. Started here,
+        // before the colours switch, the still has the wheel as it is, and the glass turns at
+        // once beneath it to fade with everything else; plasma-apply-colorscheme's own start
+        // then does nothing. A fade of the wheel's own would be caught halfway in the still.
+        if self.appearance == crate::settings::Appearance::System
+            && let Some(dark) = commands.iter().find_map(|c| match c {
+                desk::Command::DarkMode(on) => Some(*on),
+                _ => None,
+            })
+            && desk::blend_changes()
+        {
+            self.log("desk: KWin fades the colours across");
+            crate::glass::set_dark(dark);
+            crate::settings::system_dark_is(dark);
+            self.repaint_now();
         }
         // Readings asked before these would undo what the click shows at once.
         self.desk_from = self.runner.run(commands, self.quick_apps.clone());
@@ -1349,7 +1376,7 @@ impl App {
             .entry(ViewportId::ROOT)
             .or_default()
             .native_pixels_per_point = Some(scale as f32);
-        follow_desk_dark(self.appearance, &self.overlay);
+        follow_desk_dark(self.appearance);
         let overlay = &mut self.overlay;
         let mut wants = None;
         let output = self.egui.run_ui(input, |ui| wants = overlay.paint(ui, now));
