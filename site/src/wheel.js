@@ -1,7 +1,8 @@
 // The demo wheel: McGyver's radial menu drawn in SVG, with the app's geometry (src/wheel.rs) and
 // its POP, SWELL and NUDGE springs (src/motion.rs). Nothing here touches a file: a drop makes a
 // card, not a conversion.
-// Also the page's small chores: the banner, the platform picked for Download, the tour.
+// Also the page's small chores: the banner, the platform picked for Download, the tour, the
+// language picked.
 (() => {
   "use strict";
 
@@ -114,14 +115,169 @@
     }
   }
 
+  // ---------- Words: written in English, shown in Turkish on /tr/ (the app's own, src/i18n.rs) ----------
+
+  const TURKISH = document.documentElement.lang === "tr";
+  const TR = {
+    // Modes, kinds of file, wedges and bubbles.
+    Convert: "Dönüştür",
+    Tools: "Araçlar",
+    Actions: "Eylemler",
+    Apps: "Uygulama",
+    Media: "Medya",
+    Everyday: "Günlük",
+    System: "Sistem",
+    "{} mode": "{} modu",
+    Image: "Resim",
+    Audio: "Ses",
+    Document: "Belge",
+    Archive: "Arşiv",
+    Subtitles: "Altyazı",
+    Share: "Paylaş",
+    Phone: "Telefon",
+    Copy: "Kopyala",
+    Cut: "Kes",
+    "Copy To": "Şuraya kopyala",
+    "Move To": "Şuraya taşı",
+    "Copy Path": "Yolu kopyala",
+    Compress: "Sıkıştır",
+    Resize: "Boyutlandır",
+    Crop: "Kırp",
+    Rotate: "Döndür",
+    "Strip EXIF": "EXIF’i sil",
+    Trim: "Kes",
+    Mute: "Sessize al",
+    Frames: "Kareler",
+    Normalize: "Dengele",
+    Split: "Böl",
+    Merge: "Birleştir",
+    Unzip: "Çıkar",
+    Shift: "Kaydır",
+    Files: "Dosyalar",
+    Browser: "Tarayıcı",
+    Music: "Müzik",
+    Notes: "Notlar",
+    Pause: "Duraklat",
+    Play: "Oynat",
+    Next: "Sonraki",
+    Repeat: "Tekrarla",
+    Player: "Oynatıcı",
+    Shuffle: "Karıştır",
+    Previous: "Önceki",
+    Keyboard: "Klavye",
+    Language: "Dil",
+    Volume: "Ses",
+    Brightness: "Parlaklık",
+    Screenshot: "Ekran Görüntüsü",
+    Record: "Ekran Kaydı",
+    Monitor: "Sistem İzleyici",
+    Area: "Alan",
+    Screen: "Ekran",
+    Window: "Pencere",
+    Lock: "Kilitle",
+    "Dark Mode": "Karanlık Mod",
+    "Stay Awake": "Uyanık Kal",
+    Microphone: "Mikrofon",
+    "Empty Trash": "Çöpü Boşalt",
+    Desktop: "Masaüstü",
+    Sleep: "Uyku",
+    On: "Açık",
+    Off: "Kapalı",
+    off: "kapalı",
+    // The caption.
+    "{} files": "{} dosya",
+    "Move {} by {}": "{}, {} kaydırılacak",
+    "Move {} in time": "{} zamanda kaydırılacak",
+    "Copy {}": "{} kopyalanacak",
+    "Cut {}": "{} kesilecek",
+    "Copy {} to…": "{} kopyalanacak…",
+    "Move {} to…": "{} taşınacak…",
+    "Copy the path of {}": "Yolu kopyala: {}",
+    "Open a terminal there": "Orada bir terminal açılacak",
+    "Send {} to your phone": "{} telefona gönderilecek",
+    "Send {} with {}": "{} {} ile gönderilecek",
+    "Switch to {}": "Geç: {}",
+    "Switch to an app": "Bir uygulamaya geç",
+    "Repeating all": "Tümü tekrarlanıyor",
+    "Repeat is off": "Tekrar kapalı",
+    "Shuffle is on": "Karıştırma açık",
+    "Shuffle is off": "Karıştırma kapalı",
+    "Morning mix · track {}": "Sabah karışımı · {}. parça",
+    " · paused": " · duraklatıldı",
+    "Language · Türkçe after you log in again": "Dil · Türkçe, yeniden oturum açınca",
+    "Language · English": "Dil · English",
+    "Volume {}": "Ses {}",
+    "Brightness {}": "Parlaklık {}",
+    "pick an area": "bir alan seçin",
+    "the whole screen": "tüm ekran",
+    "the window in front": "öndeki pencere",
+    "Record the screen": "Ekranı kaydet",
+    "CPU {} · memory {} · disk {}": "İşlemci {} · bellek {} · disk {}",
+    "Lock the screen": "Ekranı kilitle",
+    "The microphone is on": "Mikrofon açık",
+    "The microphone is muted": "Mikrofon kapalı",
+    "Empty the trash": "Çöp kutusunu boşalt",
+    "Show the desktop": "Masaüstünü göster",
+    "Put the computer to sleep": "Bilgisayarı uyut",
+    "The wheel without files": "Dosyasız çark",
+    "The wheel for {}": "{} için çark",
+    " and ": " ve ",
+    // The hint under the wheel.
+    "Pick how far, on one of its bubbles.": "Ne kadar kayacağını balonlarından birinde seçin.",
+    "{} would come to the front.": "{} öne gelirdi.",
+    "The player would come to the front.": "Oynatıcı öne gelirdi.",
+    "{}: {}. In the app, that is.": "{}: {}. Uygulamada, tabii.",
+    "Pick one of its bubbles.": "Balonlarından birini seçin.",
+    "The system monitor would open.": "Sistem İzleyici açılırdı.",
+    "Locked. Well, it would be: this page is only a demo.": "Kilitlendi. Yani kilitlenirdi: bu sayfa yalnızca bir demo.",
+    "The trash would be empty now.": "Çöp kutusu şimdi boş olurdu.",
+    "Every window would step aside.": "Bütün pencereler kenara çekilirdi.",
+    "The computer would go to sleep. The demo stays awake.": "Bilgisayar uyurdu. Demo uyanık kalıyor.",
+    "Rest the file on the space a moment.": "Dosyayı bir an alanın üstünde tutun.",
+    "Now hold Shift.": "Şimdi Shift’i basılı tutun.",
+    "Dropped off the wheel: nothing happens.": "Çarkın dışına bırakıldı: bir şey olmaz.",
+    "Rest the file on the space until the wheel opens.": "Çark açılana kadar dosyayı alanın üstünde tutun.",
+    "Hold Shift while the file is over the space.": "Dosya alanın üstündeyken Shift’i basılı tutun.",
+    "Let go of Shift on a wedge to do it.": "Yapmak için Shift’i bir dilimin üstünde bırakın.",
+    "Tap a wedge, or drag a file onto the space.": "Bir dilime dokunun ya da bir dosyayı alana sürükleyin.",
+    "Hover a wedge, then click it. Or drag a file onto the space and hold Shift.":
+      "Bir dilimin üstüne gelip tıklayın. Ya da bir dosyayı alana sürükleyip Shift’i basılı tutun.",
+    // The cards.
+    "Sent to your phone": "Telefona gönderildi",
+    "Through KDE Connect": "KDE Connect ile",
+    "Pick a chat in Telegram": "Telegram’da bir sohbet seçin",
+    "Copied: paste in {}": "Kopyalandı: {} içine yapıştırın",
+    "Next to {}": "{} ile aynı klasörde",
+    "Moved by {}": "{} kaydırıldı",
+    "Unzipping {}": "{} çıkarılıyor",
+    "Converting {}": "{} dönüştürülüyor",
+    "Working on {}": "{} işleniyor",
+    "A moment…": "Bir saniye…",
+    Cancel: "İptal",
+    "Put the card away": "Kartı kaldır",
+    Cancelled: "İptal edildi",
+    "Nothing was made": "Hiçbir şey yapılmadı",
+  };
+
+  /** `english` in the page's language, each `{}` replaced by the next of `args`. */
+  function tr(english, ...args) {
+    const text = (TURKISH && TR[english]) || english;
+    let k = 0;
+    return args.length ? text.replace(/\{\}/g, () => args[k++]) : text;
+  }
+
+  /** A share of something, as each language writes it: 25 % and %25. */
+  const pct = (n) => (TURKISH ? `%${n}` : `${n} %`);
+
   // ---------- What the wheel offers (the app's catalog, for these sample files) ----------
 
   const SHARE = { label: "Share", bubbles: ["Phone", "WhatsApp", "Telegram", "Slack", "Teams"] };
   const ACTIONS = ["Zip", "Copy", "Cut", "Copy To", "Move To", "Copy Path", "Terminal", SHARE];
 
+  // Each scene is named by its file on the English page; the files it shows are the page's own.
   const SCENES = {
     "holiday.jpg": {
-      files: ["holiday.jpg"],
+      files: TURKISH ? ["tatil.jpg"] : ["holiday.jpg"],
       kind: "Image",
       modes: {
         Convert: ["PNG", "WEBP", "AVIF", "TIFF", "GIF", "BMP", "ICO", "PDF"],
@@ -130,7 +286,7 @@
       },
     },
     "trip.mov": {
-      files: ["trip.mov"],
+      files: TURKISH ? ["gezi.mov"] : ["trip.mov"],
       kind: "Video",
       modes: {
         Convert: ["MP4", "MKV", "WEBM", "GIF", "MP3"],
@@ -139,7 +295,7 @@
       },
     },
     "song.flac": {
-      files: ["song.flac"],
+      files: TURKISH ? ["şarkı.flac"] : ["song.flac"],
       kind: "Audio",
       modes: {
         Convert: ["MP3", "M4A", "WAV", "OGG", "OPUS", "AIFF"],
@@ -148,7 +304,7 @@
       },
     },
     "report.pdf": {
-      files: ["report.pdf"],
+      files: TURKISH ? ["rapor.pdf"] : ["report.pdf"],
       kind: "PDF",
       modes: {
         Convert: ["DOCX", "PPTX", "XLSX", "JPG", "PNG", "EPUB", "TXT", "MD"],
@@ -157,12 +313,12 @@
       },
     },
     "notes.docx": {
-      files: ["notes.docx"],
+      files: TURKISH ? ["notlar.docx"] : ["notes.docx"],
       kind: "Document",
       modes: { Convert: ["PDF", "ODT", "RTF", "HTML", "TXT", "MD"], Actions: ACTIONS },
     },
     "photos.zip": {
-      files: ["photos.zip"],
+      files: TURKISH ? ["fotolar.zip"] : ["photos.zip"],
       kind: "Archive",
       modes: {
         Convert: ["Unzip", "7Z", "TAR.GZ", "TAR.XZ", "TAR.ZST", "TAR.BZ2", "TAR"],
@@ -179,7 +335,7 @@
       },
     },
     chapters: {
-      files: ["chapter-1.pdf", "chapter-2.pdf"],
+      files: TURKISH ? ["bölüm-1.pdf", "bölüm-2.pdf"] : ["chapter-1.pdf", "chapter-2.pdf"],
       kind: "PDF",
       modes: {
         Convert: ["DOCX", "PPTX", "XLSX", "JPG", "PNG", "EPUB", "TXT", "MD"],
@@ -245,7 +401,7 @@
   const extOf = (name) => (name.match(/\.([^.]+)$/) || ["", ""])[1];
   const labelOf = (item) => (typeof item === "string" ? item : item.label);
   /** The label as the wedge shows it: Pause reads Play while nothing plays. */
-  const shownLabel = (item) => (item && item.glyph === "pause" && !desk.playing ? "Play" : labelOf(item));
+  const shownLabel = (item) => tr(item && item.glyph === "pause" && !desk.playing ? "Play" : labelOf(item));
   const isDark = () => document.documentElement.dataset.theme === "dark";
 
   const TOOL_SUFFIX = {
@@ -264,8 +420,8 @@
     const s = SCENES[scene];
     if (scene === "desk") return deskCaption(mode, item, bubble);
     const first = s.files[0];
-    const what = s.files.length > 1 ? `${s.files.length} files` : first;
-    if (!item) return `${what} · ${s.kind}`;
+    const what = s.files.length > 1 ? tr("{} files", s.files.length) : first;
+    if (!item) return `${what} · ${tr(s.kind)}`;
     const label = labelOf(item);
     const stem = stemOf(first);
     const ext = extOf(first);
@@ -277,61 +433,63 @@
       if (label === "Merge") return `${what} › ${stem} (merged).pdf`;
       if (label === "Split") return `${what} › ${stem} (pages)`;
       if (label === "Frames") return `${what} › ${stem} (frames)`;
-      if (label === "Shift") return bubble ? `Move ${what} by ${bubble}` : `Move ${what} in time`;
+      if (label === "Shift") return bubble ? tr("Move {} by {}", what, bubble) : tr("Move {} in time", what);
       return `${what} › ${stem} (${TOOL_SUFFIX[label] || label.toLowerCase()}).${ext}`;
     }
     switch (label) {
       case "Zip": return `${what} › ${stem}.zip`;
-      case "Copy": return `Copy ${what}`;
-      case "Cut": return `Cut ${what}`;
-      case "Copy To": return `Copy ${what} to…`;
-      case "Move To": return `Move ${what} to…`;
-      case "Copy Path": return `Copy the path of ${what}`;
-      case "Terminal": return "Open a terminal there";
+      case "Copy": return tr("Copy {}", what);
+      case "Cut": return tr("Cut {}", what);
+      case "Copy To": return tr("Copy {} to…", what);
+      case "Move To": return tr("Move {} to…", what);
+      case "Copy Path": return tr("Copy the path of {}", what);
+      case "Terminal": return tr("Open a terminal there");
       default:
-        if (!bubble || bubble === "Phone") return `Send ${what} to your phone`;
-        return `Send ${what} with ${bubble}`;
+        if (!bubble || bubble === "Phone") return tr("Send {} to your phone", what);
+        return tr("Send {} with {}", what, bubble);
     }
   }
 
   function deskCaption(mode, item, bubble) {
     const label = item ? labelOf(item) : null;
-    if (mode === "Apps") return label ? `Switch to ${label}` : "Switch to an app";
+    if (mode === "Apps") return label ? tr("Switch to {}", tr(label)) : tr("Switch to an app");
     if (mode === "Media") {
-      if (label === "Repeat") return desk.repeat ? "Repeating all" : "Repeat is off";
-      if (label === "Shuffle") return desk.shuffle ? "Shuffle is on" : "Shuffle is off";
-      return `Morning mix · track ${desk.track}${desk.playing ? "" : " · paused"}`;
+      if (label === "Repeat") return tr(desk.repeat ? "Repeating all" : "Repeat is off");
+      if (label === "Shuffle") return tr(desk.shuffle ? "Shuffle is on" : "Shuffle is off");
+      return tr("Morning mix · track {}", desk.track) + (desk.playing ? "" : tr(" · paused"));
     }
     if (mode === "Everyday") {
+      const shot = { Area: "pick an area", Screen: "the whole screen", Window: "the window in front" };
       switch (label) {
-        case "Keyboard": return `Keyboard · ${bubble || ["EN", "TR", "DE"][desk.layout]}`;
-        case "Language": return desk.turkish ? "Language · Türkçe after you log in again" : "Language · English";
-        case "Volume": return `Volume ${bubble ? (bubble === "Mute" ? "off" : bubble + " %") : ["off", "25 %", "50 %", "75 %", "100 %"][desk.volume]}`;
-        case "Brightness": return `Brightness ${bubble ? bubble + " %" : ["25 %", "50 %", "75 %", "100 %"][desk.brightness]}`;
-        case "Screenshot": return bubble ? `Screenshot · ${bubble === "Area" ? "pick an area" : bubble === "Screen" ? "the whole screen" : "the window in front"}` : "Screenshot";
-        case "Record": return bubble ? `Record · ${bubble === "Area" ? "pick an area" : "the whole screen"}` : "Record the screen";
-        case "Monitor": return "CPU 12 % · memory 41 % · disk 63 %";
-        default: return "Everyday";
+        case "Keyboard": return `${tr("Keyboard")} · ${bubble || ["EN", "TR", "DE"][desk.layout]}`;
+        case "Language": return tr(desk.turkish ? "Language · Türkçe after you log in again" : "Language · English");
+        case "Volume": return tr("Volume {}", bubble ? (bubble === "Mute" ? tr("off") : pct(bubble)) : [tr("off"), pct(25), pct(50), pct(75), pct(100)][desk.volume]);
+        case "Brightness": return tr("Brightness {}", pct(bubble || [25, 50, 75, 100][desk.brightness]));
+        case "Screenshot": return bubble ? `${tr("Screenshot")} · ${tr(shot[bubble])}` : tr("Screenshot");
+        case "Record": return bubble ? `${tr("Record")} · ${tr(shot[bubble])}` : tr("Record the screen");
+        case "Monitor": return tr("CPU {} · memory {} · disk {}", pct(12), pct(41), pct(63));
+        default: return tr("Everyday");
       }
     }
     switch (label) {
-      case "Lock": return "Lock the screen";
-      case "Dark Mode": return `Dark Mode · ${isDark() ? "On" : "Off"}`;
-      case "Stay Awake": return `Stay Awake · ${desk.awake ? "On" : "Off"}`;
-      case "Microphone": return desk.mic ? "The microphone is on" : "The microphone is muted";
-      case "Empty Trash": return "Empty the trash";
-      case "Desktop": return "Show the desktop";
-      case "Sleep": return "Put the computer to sleep";
-      default: return "System";
+      case "Lock": return tr("Lock the screen");
+      case "Dark Mode": return `${tr("Dark Mode")} · ${tr(isDark() ? "On" : "Off")}`;
+      case "Stay Awake": return `${tr("Stay Awake")} · ${tr(desk.awake ? "On" : "Off")}`;
+      case "Microphone": return tr(desk.mic ? "The microphone is on" : "The microphone is muted");
+      case "Empty Trash": return tr("Empty the trash");
+      case "Desktop": return tr("Show the desktop");
+      case "Sleep": return tr("Put the computer to sleep");
+      default: return tr("System");
     }
   }
 
   /** What the centre of the hub says. */
   function centreText(scene, mode, item, bubble) {
-    if (item) return bubble && bubble.length <= 9 ? bubble : shownLabel(item);
-    if (scene === "desk") return mode;
+    const word = bubble && tr(bubble);
+    if (item) return word && word.length <= 9 ? word : shownLabel(item);
+    if (scene === "desk") return tr(mode);
     const s = SCENES[scene];
-    return s.files.length > 1 ? `${s.files.length} files` : extOf(s.files[0]).toUpperCase();
+    return s.files.length > 1 ? tr("{} files", s.files.length) : extOf(s.files[0]).toUpperCase();
   }
 
   // ---------- Drawing ----------
@@ -560,6 +718,8 @@
       const parts = lines(shownLabel(item));
       const hasMark = item.tile || item.glyph;
       const text = el("text", { class: "wedge__label", "text-anchor": "middle" }, content);
+      // A word longer than any English one (Turkish's Boyutlandır) gets a smaller size, not the wedge's edge.
+      if (Math.max(...parts.map((p) => p.length)) > 10) text.style.setProperty("--fit", "0.84");
       parts.forEach((part, k) => {
         const t = el("tspan", { x: 0, dy: k === 0 ? (hasMark ? 21 : parts.length > 1 ? "-0.2em" : "0.37em") : "1.13em" }, text);
         t.textContent = part;
@@ -567,7 +727,7 @@
       if (item.tile) {
         el("rect", { class: "wedge__tile", x: -15, y: -26, width: 30, height: 30, rx: 8 }, content);
         const t = el("text", { class: "wedge__tile-text", "text-anchor": "middle", "dominant-baseline": "central", y: -11 }, content);
-        t.textContent = item.tile;
+        t.textContent = TURKISH ? shownLabel(item)[0] : item.tile;
       }
       if (item.glyph) drawGlyph(content, item.glyph === "pause" && !desk.playing ? "play" : item.glyph);
       let dot = null;
@@ -615,13 +775,13 @@
         }, hubLabels);
         const t = el("text", { class: `hub__label${i === w.mode ? " is-current" : ""}`, "text-anchor": "middle" }, hubLabels);
         const tp = el("textPath", { href: `#${id}`, startOffset: "50%" }, t);
-        tp.textContent = name;
+        tp.textContent = tr(name);
         const hit = el("path", {
           class: "hub__hit",
           d: sector(a - mspan / 2, a + mspan / 2, INFO_R, HUB_R, 0, 0.01),
           role: "button",
           tabindex: w.open ? "0" : "-1",
-          "aria-label": `${name} mode`,
+          "aria-label": tr("{} mode", tr(name)),
         }, hubHits);
         hit.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -641,7 +801,7 @@
     }
     w.bubbles = [];
     bubbleLayer.replaceChildren();
-    svg.setAttribute("aria-label", w.scene === "desk" ? "The wheel without files" : `The wheel for ${SCENES[w.scene].files.join(" and ")}`);
+    svg.setAttribute("aria-label", w.scene === "desk" ? tr("The wheel without files") : tr("The wheel for {}", SCENES[w.scene].files.join(tr(" and "))));
     refreshDots();
     text();
   }
@@ -712,12 +872,12 @@
         class: `bubble${k === current ? " is-current" : ""}`,
         role: "button",
         tabindex: "0",
-        "aria-label": word,
+        "aria-label": tr(word),
       }, bubbleLayer);
       const discEl = el("circle", { class: "bubble__disc", r: BUBBLE_R }, g);
       const ringEl = el("circle", { class: "bubble__ring", r: BUBBLE_R + 3.5 }, g);
       const t = el("text", { class: "bubble__text", "text-anchor": "middle", "dominant-baseline": "central" }, g);
-      t.textContent = word;
+      t.textContent = tr(word);
       let r = BUBBLE_R;
       try {
         r = Math.max(BUBBLE_R, t.getComputedTextLength() / 2 + 7);
@@ -1042,7 +1202,7 @@
     const bubble = item.bubbles && w.bubble >= 0 ? item.bubbles[w.bubble] : null;
     if (item.bubbles && !bubble && w.scene !== "desk" && labelOf(item) !== "Share") {
       // Shift: its bubbles say how far; the wedge on its own is not an answer.
-      say("Pick how far, on one of its bubbles.");
+      say(tr("Pick how far, on one of its bubbles."));
       return;
     }
     const now = performance.now();
@@ -1089,7 +1249,7 @@
     const mode = w.modes[w.mode];
     w.acted = true;
     if (mode === "Apps") {
-      say(`${label} would come to the front.`);
+      say(tr("{} would come to the front.", tr(label)));
       foldAndReturn();
       return;
     }
@@ -1100,7 +1260,7 @@
       else if (label === "Repeat") desk.repeat = !desk.repeat;
       else if (label === "Shuffle") desk.shuffle = !desk.shuffle;
       else if (label === "Player") {
-        say("The player would come to the front.");
+        say(tr("The player would come to the front."));
         foldAndReturn();
         return;
       }
@@ -1129,15 +1289,15 @@
       } else if (label === "Language") {
         desk.turkish = !desk.turkish;
       } else if (label === "Screenshot" || label === "Record") {
-        say(bubble ? `${label}: ${caption("desk", "Everyday", item, bubble).split("· ")[1]}. In the app, that is.` : "Pick one of its bubbles.");
+        say(bubble ? tr("{}: {}. In the app, that is.", tr(label), caption("desk", "Everyday", item, bubble).split("· ")[1]) : tr("Pick one of its bubbles."));
         if (bubble) foldAndReturn();
         return;
       } else if (label === "Monitor") {
-        say("The system monitor would open.");
+        say(tr("The system monitor would open."));
         foldAndReturn();
         return;
       } else if (item.bubbles) {
-        say("Pick one of its bubbles.");
+        say(tr("Pick one of its bubbles."));
         text();
         return;
       }
@@ -1158,12 +1318,12 @@
         desk.mic = !desk.mic;
         break;
       default:
-        say({
+        say(tr({
           Lock: "Locked. Well, it would be: this page is only a demo.",
           "Empty Trash": "The trash would be empty now.",
           Desktop: "Every window would step aside.",
           Sleep: "The computer would go to sleep. The demo stays awake.",
-        }[label]);
+        }[label]));
         if (label !== "Empty Trash") foldAndReturn();
         text();
         return;
@@ -1237,39 +1397,49 @@
 
   // ---------- Cards: what a drop makes, at the bottom right as the app's do ----------
 
-  const DONE = {
-    Copy: ["Copied", "Ready to paste in a folder"],
-    Cut: ["Cut", "Paste it where it goes"],
-    "Copy To": ["Pick a folder", "In the app, a folder picker opens"],
-    "Move To": ["Pick a folder", "In the app, a folder picker opens"],
-    "Copy Path": ["Path copied", "Ready to paste"],
-    Terminal: ["Terminal opened", "In the folder the file is in"],
-  };
+  // In each language whole: "Cut" is the wedge's word and the card's, but not in Turkish.
+  const DONE = TURKISH
+    ? {
+        Copy: ["Kopyalandı", "Bir klasöre yapıştırılmaya hazır"],
+        Cut: ["Kesildi", "Taşınacağı yere yapıştırın"],
+        "Copy To": ["Bir klasör seçin", "Uygulamada klasör seçici açılır"],
+        "Move To": ["Bir klasör seçin", "Uygulamada klasör seçici açılır"],
+        "Copy Path": ["Yol kopyalandı", "Yapıştırılmaya hazır"],
+        Terminal: ["Terminal açıldı", "Dosyanın bulunduğu klasörde"],
+      }
+    : {
+        Copy: ["Copied", "Ready to paste in a folder"],
+        Cut: ["Cut", "Paste it where it goes"],
+        "Copy To": ["Pick a folder", "In the app, a folder picker opens"],
+        "Move To": ["Pick a folder", "In the app, a folder picker opens"],
+        "Copy Path": ["Path copied", "Ready to paste"],
+        Terminal: ["Terminal opened", "In the folder the file is in"],
+      };
 
   function addCard(scene, mode, item, bubble, said) {
     if (!cardsList) return;
     const s = SCENES[scene];
     const label = labelOf(item);
-    const what = s.files.length > 1 ? `${s.files.length} files` : s.files[0];
+    const what = s.files.length > 1 ? tr("{} files", s.files.length) : s.files[0];
     let title;
     let sub;
     const made = said.includes("›") ? said.split("› ")[1] : null;
     if (mode === "Actions") {
       if (label === "Share") {
-        if (!bubble || bubble === "Phone") [title, sub] = ["Sent to your phone", "Through KDE Connect"];
-        else if (bubble === "Telegram") [title, sub] = ["Pick a chat in Telegram", what];
-        else [title, sub] = [`Copied: paste in ${bubble}`, what];
+        if (!bubble || bubble === "Phone") [title, sub] = [tr("Sent to your phone"), tr("Through KDE Connect")];
+        else if (bubble === "Telegram") [title, sub] = [tr("Pick a chat in Telegram"), what];
+        else [title, sub] = [tr("Copied: paste in {}", bubble), what];
       } else if (label === "Zip") {
-        [title, sub] = [made, `Next to ${what}`];
+        [title, sub] = [made, tr("Next to {}", what)];
       } else {
         [title, sub] = DONE[label];
       }
     } else if (label === "Shift") {
-      [title, sub] = [`${stemOf(s.files[0])}.srt`, `Moved by ${bubble}`];
+      [title, sub] = [`${stemOf(s.files[0])}.srt`, tr("Moved by {}", bubble)];
     } else {
-      [title, sub] = [made, `Next to ${what}`];
+      [title, sub] = [made, tr("Next to {}", what)];
     }
-    const working = mode === "Actions" ? title : `${label === "Unzip" ? "Unzipping" : mode === "Convert" ? "Converting" : "Working on"} ${what}`;
+    const working = mode === "Actions" ? title : tr(label === "Unzip" ? "Unzipping {}" : mode === "Convert" ? "Converting {}" : "Working on {}", what);
     const li = document.createElement("li");
     li.className = "card";
     li.innerHTML = `
@@ -1279,13 +1449,13 @@
         <path class="card__done" d="M9.5 15.5l3.6 3.6 7.4-7.6"/>
       </svg>
       <div class="card__text"><span class="card__title"></span><span class="card__sub"></span></div>
-      <button class="card__close" type="button" aria-label="Cancel"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg></button>`;
+      <button class="card__close" type="button" aria-label="${tr("Cancel")}"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg></button>`;
     const titleEl = li.querySelector(".card__title");
     const subEl = li.querySelector(".card__sub");
     const ring = li.querySelector(".card__progress");
     const closeBtn = li.querySelector(".card__close");
     titleEl.textContent = working;
-    subEl.textContent = mode === "Actions" ? sub : "A moment…";
+    subEl.textContent = mode === "Actions" ? sub : tr("A moment…");
     cardsList.appendChild(li);
     while (cardsList.children.length > 3) cardsList.firstElementChild.remove();
     const quick = mode === "Actions";
@@ -1317,15 +1487,15 @@
       li.classList.add("is-done");
       titleEl.textContent = title;
       subEl.textContent = sub;
-      closeBtn.setAttribute("aria-label", "Put the card away");
+      closeBtn.setAttribute("aria-label", tr("Put the card away"));
       later();
     };
     closeBtn.addEventListener("click", () => {
       if (!finished) {
         finished = true;
-        titleEl.textContent = "Cancelled";
-        subEl.textContent = "Nothing was made";
-        closeBtn.setAttribute("aria-label", "Put the card away");
+        titleEl.textContent = tr("Cancelled");
+        subEl.textContent = tr("Nothing was made");
+        closeBtn.setAttribute("aria-label", tr("Put the card away"));
         later();
         return;
       }
@@ -1432,7 +1602,7 @@
         if (w.open) close(true);
         startGhost(button);
         stage.classList.add("is-busy");
-        say(drag.touch ? "Rest the file on the space a moment." : "Now hold Shift.");
+        say(tr(drag.touch ? "Rest the file on the space a moment." : "Now hold Shift."));
       }
       if (!drag.moved) return;
       moveGhost(e.clientX, e.clientY);
@@ -1471,11 +1641,11 @@
           w.how = "drop";
           pick();
         } else {
-          say("Dropped off the wheel: nothing happens.");
+          say(tr("Dropped off the wheel: nothing happens."));
           close();
         }
       } else if (e.type === "pointerup") {
-        say(d.touch ? "Rest the file on the space until the wheel opens." : "Hold Shift while the file is over the space.");
+        say(tr(d.touch ? "Rest the file on the space until the wheel opens." : "Hold Shift while the file is over the space."));
       }
     };
     button.addEventListener("pointerup", end);
@@ -1550,7 +1720,7 @@
         if (drag) return;
         const at = pointer && onStage(...pointer) ? toLocal(...pointer) : null;
         open("desk", "hold", at, w.scene === "desk" ? w.modes[w.mode] : undefined);
-        say("Let go of Shift on a wedge to do it.");
+        say(tr("Let go of Shift on a wedge to do it."));
       }, HOLD_MS);
     }
   });
@@ -1679,7 +1849,7 @@
   const begin = () => {
     open("holiday.jpg", "click", null, "Convert");
     const touch = window.matchMedia("(hover: none)").matches;
-    say(touch ? "Tap a wedge, or drag a file onto the space." : "Hover a wedge, then click it. Or drag a file onto the space and hold Shift.");
+    say(tr(touch ? "Tap a wedge, or drag a file onto the space." : "Hover a wedge, then click it. Or drag a file onto the space and hold Shift."));
   };
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => setTimeout(begin, 350));
   else setTimeout(begin, 350);
@@ -1760,7 +1930,21 @@
       platforms.querySelectorAll(".platform__get").forEach((a) => a.classList.add("btn--soft"));
       yours.querySelector(".platform__get").classList.remove("btn--soft");
       const cta = document.querySelector("[data-download-cta]");
-      if (cta) cta.textContent = { mac: "Download for Mac", windows: "Download for Windows", linux: "Download for Linux" }[os];
+      const names = document.documentElement.lang === "tr"
+        ? { mac: "Mac için indir", windows: "Windows için indir", linux: "Linux için indir" }
+        : { mac: "Download for Mac", windows: "Download for Windows", linux: "Download for Linux" };
+      if (cta) cta.textContent = names[os];
     }
   }
+
+  // A language picked here is kept, so the English page stops sending a Turkish browser to /tr/.
+  document.querySelectorAll("[data-lang]").forEach((link) => {
+    link.addEventListener("click", () => {
+      try {
+        localStorage.setItem("mcgyver-lang", link.dataset.lang);
+      } catch (e) {
+        // No storage: the next visit is guessed from the browser again.
+      }
+    });
+  });
 })();

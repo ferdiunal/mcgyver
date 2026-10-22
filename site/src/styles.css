@@ -81,6 +81,7 @@ em { font-style: normal; font-weight: 600; }
 .shell,
 .opens,
 .get,
+.privacy,
 .support {
   width: min(100% - 2 * var(--page-gutter), var(--page-max));
   margin-inline: auto;
@@ -454,8 +455,8 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 .wedge__focus { fill: none; stroke: var(--color-focus); opacity: 0; }
 .wedge:focus { outline: none; }
 .wedge:focus-visible .wedge__focus { opacity: 1; }
-.wedge__label { fill: var(--wheel-text); font-weight: 650; font-size: calc(15px * min(var(--boost, 1), 1.2)); letter-spacing: -0.01em; }
-.wedge.is-aimed .wedge__label { fill: var(--color-on-accent); font-size: calc(19px * min(var(--boost, 1), 1.2)); font-weight: 700; }
+.wedge__label { fill: var(--wheel-text); font-weight: 650; font-size: calc(15px * var(--fit, 1) * min(var(--boost, 1), 1.2)); letter-spacing: -0.01em; }
+.wedge.is-aimed .wedge__label { fill: var(--color-on-accent); font-size: calc(19px * var(--fit, 1) * min(var(--boost, 1), 1.2)); font-weight: 700; }
 .wedge__glyph { fill: var(--wheel-text); }
 .wedge__glyph--line { fill: none; stroke: var(--wheel-text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .wedge.is-aimed .wedge__glyph { fill: var(--color-on-accent); }
@@ -644,6 +645,8 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   .spec td::before { display: block; font-size: var(--text-xs); font-weight: 600; color: var(--color-muted); }
   .spec td:nth-child(2)::before { content: "Convert to"; }
   .spec td:nth-child(3)::before { content: "Tools"; }
+  :lang(tr) .spec td:nth-child(2)::before { content: "Dönüştür"; }
+  :lang(tr) .spec td:nth-child(3)::before { content: "Araçlar"; }
 }
 
 /* ---------- Get McGyver: yours first and biggest ---------- */
@@ -662,12 +665,24 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
 .platform__needs { font-weight: 500; }
 .platform__note { color: var(--color-ink-2); font-size: var(--text-sm); }
 .platform__get { justify-self: start; margin-top: var(--space-sm); }
+/* The other build of the same platform: a link under the button, not a second button. */
+.platform__alt { color: var(--color-ink-2); font-size: var(--text-sm); }
+.platform__alt a { color: var(--color-ink); font-weight: 600; text-decoration-color: var(--color-accent); text-decoration-thickness: 2px; text-underline-offset: 2px; }
 .platform.is-yours { background: var(--color-accent-tint); background-color: color-mix(in oklch, var(--color-accent) 13%, var(--color-paper)); }
 
 @media (min-width: 60rem) {
   .platforms { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
   .platform.is-yours { padding: var(--space-xl); }
   .platform.is-yours .platform__name { font-size: var(--text-xl); }
+}
+
+/* ---------- Privacy: what the update check carries ---------- */
+
+.privacy {
+  display: grid;
+  gap: var(--space-sm);
+  padding-block: var(--space-2xl);
+  border-top: 1px dashed var(--color-rule);
 }
 
 /* ---------- Support ---------- */

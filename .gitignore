@@ -7,3 +7,4 @@
 /site/.wrangler/
 /site/dist/
 /site/node_modules/
+/site/.dev.vars

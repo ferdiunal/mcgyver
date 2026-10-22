@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>McGyver: KDE, Mac ve Windows için sürükle-bırak dönüştürücü</title>
+  <meta name="description" content="Dosya sürüklerken Shift’i basılı tutun, bir çark açılır: resimleri dönüştürün, videoları küçültün, PDF’leri Word’e çevirin. Hepsi bilgisayarınızda.">
+  <link rel="canonical" href="https://mcgyver.ferdiunal.tr/tr/">
+  <!-- The same page in English, which every other language gets. -->
+  <link rel="alternate" hreflang="en" href="https://mcgyver.ferdiunal.tr/">
+  <link rel="alternate" hreflang="tr" href="https://mcgyver.ferdiunal.tr/tr/">
+  <link rel="alternate" hreflang="x-default" href="https://mcgyver.ferdiunal.tr/">
+  <!-- llmstxt.org: the page as Markdown, and the llms.txt that covers it. -->
+  <link rel="alternate" type="text/markdown" href="/tr/index.md">
+  <link rel="describedby" href="/llms.txt">
+  <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+  <!-- The paper tokens (tokens.css --color-paper), in the form the browser's own bar reads. -->
+  <meta name="theme-color" content="#fbf5ed" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#140e0b" media="(prefers-color-scheme: dark)">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="McGyver">
+  <meta property="og:locale" content="tr_TR">
+  <meta property="og:locale:alternate" content="en_US">
+  <meta property="og:url" content="https://mcgyver.ferdiunal.tr/tr/">
+  <meta property="og:title" content="McGyver: dosyayı sürükle, Shift’i basılı tut, bir dilim seç">
+  <meta property="og:description" content="Dosya sürüklerken bir çark açılır: resimleri dönüştürün, videoları küçültün, PDF’leri Word’e çevirin. KDE, Mac, Windows için.">
+  <meta property="og:image" content="https://mcgyver.ferdiunal.tr/assets/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Bir dosya sütununun yanında açık duran McGyver çarkı ve İngilizce “Drag a file. Hold Shift. Pick a wedge.” yazısı.">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "McGyver",
+    "url": "https://mcgyver.ferdiunal.tr/tr/",
+    "image": "https://mcgyver.ferdiunal.tr/assets/og.jpg",
+    "description": "Dosya sürüklerken imlecin çevresinde açılan bir çark: dosyaları bir dilimin üstüne bırakarak dönüştürün, sıkıştırın, zip’leyin ya da paylaşın. Dönüştürmeler bilgisayarınızda yapılır.",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Linux (KDE Plasma 6, Wayland), macOS 11 veya üstü, Windows 10, Windows 11",
+    "softwareVersion": "1.0.0",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "downloadUrl": "https://mcgyver.ferdiunal.tr/tr/#download",
+    "author": {
+      "@type": "Person",
+      "name": "Ferdi ÜNAL",
+      "url": "https://ferdiunal.tr/",
+      "sameAs": ["https://github.com/ferdiunal"]
+    }
+  }
+  </script>
+  <script>
+    // Dark or light before anything paints: the visitor's choice from the wheel, else the system's.
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem("mcgyver-theme"); } catch (e) {}
+      var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (dark) document.documentElement.dataset.theme = "dark";
+      // A choice made on the wheel paints the browser's bar too, whatever the system says.
+      if (saved) document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute("content", dark ? "#140e0b" : "#fbf5ed"); });
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Geist:wght@300..700&display=swap">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/wheel.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">İçeriğe geç</a>
+
+  <header class="masthead" data-masthead>
+    <div class="banner" data-banner>
+      <p class="banner__text">McGyver 1.0.0 çıktı: ilk kararlı sürüm. KDE Plasma 6, macOS ve Windows için.</p>
+      <button class="banner__close" type="button" data-banner-close aria-label="Duyuruyu kapat">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <nav class="nav" aria-label="Ana menü">
+      <a class="brand" href="#main">
+        <img class="brand__mark" src="/assets/icon.svg" alt="" width="34" height="34">
+        <span class="brand__name">McGyver</span>
+      </a>
+      <ul class="nav__links">
+        <li><a class="nav__link" href="#try">Deneyin</a></li>
+        <li><a class="nav__link" href="#opens">Dosya türleri</a></li>
+        <li><a class="nav__link" href="#download">İndir</a></li>
+      </ul>
+      <div class="nav__actions">
+        <a class="nav__link" href="/" hreflang="en" lang="en" data-lang="en">English</a>
+        <a class="btn btn--soft btn--sm nav__sponsor" href="https://github.com/sponsors/ferdiunal">
+          <svg class="heart" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14s-5.5-3.4-5.5-7.3A3 3 0 0 1 8 4.6a3 3 0 0 1 5.5 2.1C13.5 10.6 8 14 8 14z"/></svg>
+          Sponsor ol
+        </a>
+        <a class="btn btn--sm" href="#download">İndir</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="workbench" id="try" aria-labelledby="hero-title">
+      <div class="hero">
+        <h1 class="hero__title" id="hero-title"><span>Dosyayı sürükle.</span> <span>Shift’i basılı tut.</span> <span>Bir dilim&nbsp;seç.</span></h1>
+        <p class="hero__lede">McGyver, dosya sürüklerken imlecin çevresinde bir çark açar. Dosyaları bir dilimin üstüne bırakın: resimler biçim değiştirir, videolar küçülür, PDF’ler Word dosyasına dönüşür, klasörler zip’lenir. Dönüştürmeler bulutta değil, bilgisayarınızda yapılır.</p>
+        <div class="hero__actions">
+          <a class="btn btn--lg" href="#download" data-download-cta>İndir</a>
+          <a class="link-arrow" href="#stage" data-try>Çarkı deneyin <span aria-hidden="true">→</span></a>
+        </div>
+        <p class="hero__meta">Sürüm 1.0.0 · KDE Plasma 6, macOS ve Windows</p>
+      </div>
+
+      <div class="workbench__stage">
+        <div class="stage" id="stage" data-stage tabindex="-1" role="group" aria-label="Çarkı denemek için bir masaüstü">
+          <ul class="desktop" aria-label="Bu masaüstündeki dosyalar">
+            <li><button class="file" type="button" data-file="holiday.jpg"><span class="file__icon" aria-hidden="true">JPG</span><span class="file__name">tatil.jpg</span></button></li>
+            <li><button class="file" type="button" data-file="trip.mov"><span class="file__icon" aria-hidden="true">MOV</span><span class="file__name">gezi.mov</span></button></li>
+            <li><button class="file" type="button" data-file="song.flac"><span class="file__icon" aria-hidden="true">FLAC</span><span class="file__name">şarkı.flac</span></button></li>
+            <li><button class="file" type="button" data-file="report.pdf"><span class="file__icon" aria-hidden="true">PDF</span><span class="file__name">rapor.pdf</span></button></li>
+            <li><button class="file" type="button" data-file="notes.docx"><span class="file__icon" aria-hidden="true">DOCX</span><span class="file__name">notlar.docx</span></button></li>
+            <li><button class="file" type="button" data-file="photos.zip"><span class="file__icon" aria-hidden="true">ZIP</span><span class="file__name">fotolar.zip</span></button></li>
+            <li><button class="file" type="button" data-file="film.srt"><span class="file__icon" aria-hidden="true">SRT</span><span class="file__name">film.srt</span></button></li>
+            <li><button class="file file--pair" type="button" data-file="chapters"><span class="file__icon" aria-hidden="true">PDF</span><span class="file__name">2 bölüm</span></button></li>
+          </ul>
+          <button class="keycap" type="button" data-shift aria-label="Tek başına Shift: dosyasız çark">
+            <span aria-hidden="true">⇧</span> Shift
+          </button>
+          <svg class="wheel" data-wheel role="group" aria-label="Çark" aria-hidden="true"></svg>
+          <ol class="cards" data-cards aria-live="polite" aria-label="Yapılanlar"></ol>
+          <p class="stage__hint" data-hint aria-live="polite"></p>
+          <p class="visually-hidden" data-status aria-live="polite"></p>
+        </div>
+        <p class="stage__note">Bir demo: bu sayfadan hiçbir şey çıkmaz, hiçbir dosyaya dokunulmaz. Bir dosyayı alana sürükleyip Shift’i basılı tutun ya da yalnızca tıklayın.</p>
+      </div>
+
+      <div class="tour" id="modes">
+        <h2 class="tour__title">Tek çark, yedi mod</h2>
+        <p class="tour__lede">Merkezin çevresindeki halka modlar arasında geçiş yapar. Halkadaki bir bölümün üstünde durun ya da halka boyunca onun içine geçin.</p>
+
+        <h3 class="tour__group">Dosyalarla</h3>
+        <ol class="steps">
+          <li class="step" data-step="holiday.jpg|Convert">
+            <h4 class="step__title">Dönüştür</h4>
+            <p>Çark Dönüştür modunda açılır. Bir biçime nişan alıp bırakın: tatil.webp, tatil.jpg’nin yanına gelir. Resimler, video, ses, PDF’ler, Office dosyaları, arşivler ve altyazılar için ayrı listeler var.</p>
+            <button class="link-arrow step__try" type="button" data-show="holiday.jpg|Convert">Dönüştür’ü deneyin <span aria-hidden="true">→</span></button>
+          </li>
+          <li class="step" data-step="trip.mov|Tools">
+            <h4 class="step__title">Araçlar</h4>
+            <p>Bir videoyu sıkıştırın, kesin, sessize alın, döndürün ya da içinden kareler çıkarın. Resimler boyutlanır, kırpılır, EXIF bilgilerinden arınır; PDF’ler bölünür ve döner, iki ya da daha fazlası tek dosyada birleşir.</p>
+            <button class="link-arrow step__try" type="button" data-show="trip.mov|Tools">Araçlar’ı deneyin <span aria-hidden="true">→</span></button>
+          </li>
+          <li class="step" data-step="report.pdf|Actions">
+            <h4 class="step__title">Eylemler</h4>
+            <p>Zip’leyin, kopyalayın ya da bir yere taşıyın, yolunu kopyalayın, orada bir terminal açın ya da telefonunuza, WhatsApp’a, Telegram’a, Slack’e veya Teams’e gönderin.</p>
+            <button class="link-arrow step__try" type="button" data-show="report.pdf|Actions">Eylemler’i deneyin <span aria-hidden="true">→</span></button>
+          </li>
+        </ol>
+
+        <h3 class="tour__group">Dosyasız</h3>
+        <p class="tour__aside">Shift’i tek başına biraz basılı tutun; çark bu kez bilgisayar için açılır.</p>
+        <ol class="steps">
+          <li class="step" data-step="desk|Apps">
+            <h4 class="step__title">Uygulamalar</h4>
+            <p>Açık olanlar, en son kullandığınız en üstte; ardından ayarlardan seçtiğiniz uygulamalar. Çember biçiminde bir Alt+Tab.</p>
+            <button class="link-arrow step__try" type="button" data-show="desk|Apps">Uygulamalar’ı deneyin <span aria-hidden="true">→</span></button>
+          </li>
+          <li class="step" data-step="desk|Media">
+            <h4 class="step__title">Medya</h4>
+            <p>Ne çalıyorsa: oynatın ya da duraklatın, sonraki, önceki, tekrarla, karıştır ve oynatıcının kendisi.</p>
+            <button class="link-arrow step__try" type="button" data-show="desk|Media">Medya’yı deneyin <span aria-hidden="true">→</span></button>
+          </li>
+          <li class="step" data-step="desk|Everyday">
+            <h4 class="step__title">Günlük</h4>
+            <p>Klavye düzeni, bilgisayarın dili, ses, parlaklık, ekran görüntüsü, ekran kaydı ve bilgisayarın ne kadar meşgul olduğu.</p>
+            <button class="link-arrow step__try" type="button" data-show="desk|Everyday">Günlük’ü deneyin <span aria-hidden="true">→</span></button>
+          </li>
+          <li class="step" data-step="desk|System">
+            <h4 class="step__title">Sistem</h4>
+            <p>Kilit, Karanlık Mod, Uyanık Kal, mikrofon, çöp kutusu ve uyku. Karanlık Mod’u deneyin: bu sayfa da onunla kararır.</p>
+            <button class="link-arrow step__try" type="button" data-show="desk|System">Sistem’i deneyin <span aria-hidden="true">→</span></button>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="opens" id="opens" aria-labelledby="opens-title">
+      <div class="opens__head">
+        <h2 class="section__title" id="opens-title">Her dosyaya ne sunulur</h2>
+        <p class="section__lede">Çark yalnızca elinizdeki dosyaların dönüşebileceği şeyleri sunar. Zaten o biçimde olan bir dosyaya o biçim sunulmaz; sunacak bir şeyi olmayan modun dilimi olmaz.</p>
+      </div>
+      <table class="spec">
+        <caption class="visually-hidden">Dosya türüne göre dilimler</caption>
+        <thead>
+          <tr><th scope="col">Dosya</th><th scope="col">Dönüştür</th><th scope="col">Araçlar</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Resimler <span>JPEG, PNG, HEIC, kamera RAW, PSD, SVG…</span></th><td>JPG · PNG · WEBP · HEIC · AVIF · TIFF · GIF · BMP · ICO · PDF</td><td>Sıkıştır · Boyutlandır · Kırp · Döndür · EXIF’i sil</td></tr>
+          <tr><th scope="row">Video <span>FFmpeg gerekir</span></th><td>MP4 · MOV · MKV · WEBM · GIF · MP3</td><td>Sıkıştır · Kes · Sessize al · Döndür · Kareler</td></tr>
+          <tr><th scope="row">Ses <span>FFmpeg gerekir</span></th><td>MP3 · M4A · WAV · FLAC · OGG · OPUS · AIFF</td><td>Kes · Dengele · Sıkıştır · Birleştir</td></tr>
+          <tr><th scope="row">PDF</th><td>DOCX · PPTX · XLSX · JPG · PNG · EPUB · TXT · MD</td><td>Sıkıştır · Böl · Döndür · Birleştir</td></tr>
+          <tr><th scope="row">Belgeler <span>DOCX, DOC, ODT, RTF</span></th><td>PDF · DOCX · ODT · RTF · HTML · TXT · MD</td><td>Birleştir</td></tr>
+          <tr><th scope="row">Tablolar <span>XLSX, XLS, ODS, CSV</span></th><td>PDF · XLSX · CSV · TSV · HTML · MD</td><td>Birleştir</td></tr>
+          <tr><th scope="row">Sunumlar <span>PPTX; PPT ve ODP yalnızca MD’ye</span></th><td>PDF · PPTX · TXT · MD</td><td>Sıkıştır</td></tr>
+          <tr><th scope="row">Arşivler <span>ZIP, 7Z, RAR, TAR…</span></th><td>Çıkar · ZIP · 7Z · TAR.GZ · TAR.XZ · TAR.ZST · TAR.BZ2 · TAR</td><td>—</td></tr>
+          <tr><th scope="row">Sıkıştırılmış dosyalar <span>GZ, XZ, ZST, BZ2, LZ4</span></th><td>Çıkar · GZ · XZ · ZST · BZ2 · LZ4 · ZIP · 7Z</td><td>—</td></tr>
+          <tr><th scope="row">Altyazılar <span>SRT, VTT</span></th><td>VTT · SRT · TXT</td><td>Yarım ya da bir saniye kaydır</td></tr>
+          <tr><th scope="row">Klasörler</th><td>ZIP · 7Z · TAR.GZ · TAR.XZ · TAR.ZST · TAR.BZ2 · TAR</td><td>Düzleştir</td></tr>
+        </tbody>
+      </table>
+      <p class="opens__foot">Her dosya ve klasöre ayrıca <strong>Eylemler</strong> de sunulur: Zip, Kopyala, Kes, Şuraya kopyala, Şuraya taşı, Yolu kopyala, Terminal ve Paylaş. Birleştir, elinizde iki ya da daha fazla dosya olunca görünür. HEIC ve AVIF, bilgisayardaki libheif bunları yazabiliyorsa görünür.</p>
+    </section>
+
+    <section class="get" id="download" aria-labelledby="get-title">
+      <div class="get__head">
+        <h2 class="section__title" id="get-title">McGyver’ı indirin</h2>
+        <p class="section__lede">Bir kez indirin; sonra siz Shift’e basana kadar sistem tepsisinde ya da menü çubuğunda bekler.</p>
+      </div>
+      <div class="platforms" data-platforms>
+        <article class="platform" data-os="linux">
+          <h3 class="platform__name">KDE Plasma 6</h3>
+          <p class="platform__needs">Linux, Wayland üzerinde. McGyver’ın doğduğu yer.</p>
+          <p class="platform__note">İlk açılıştan sonra ayarlarında <em>Kur</em>’a basın; böylece sürüklerken Shift’e bastığınız anda çark açılır.</p>
+          <a class="btn platform__get" href="/download/deb">Linux için indir</a>
+          <p class="platform__alt">Debian ve Ubuntu için .deb ya da Fedora için <a href="/download/rpm">.rpm</a>.</p>
+        </article>
+        <article class="platform" data-os="mac">
+          <h3 class="platform__name">macOS</h3>
+          <p class="platform__needs">macOS 11 veya üstü. Apple Silicon ve Intel için tek uygulama.</p>
+          <p class="platform__note">Disk görüntüsünü açın; uygulama kendini Uygulamalar klasörüne taşımayı önerir. Henüz Apple’ın onayından (notarization) geçmedi: ilk seferde Control tuşuna basarak tıklayıp <em>Aç</em>’ı seçin (macOS 15’ten itibaren Gizlilik ve Güvenlik’te <em>Yine de Aç</em>).</p>
+          <a class="btn btn--soft platform__get" href="/download/macos">Mac için indir</a>
+        </article>
+        <article class="platform" data-os="windows">
+          <h3 class="platform__name">Windows</h3>
+          <p class="platform__needs">Windows 10 ve 11, x64 ve ARM64 bilgisayarlarda.</p>
+          <p class="platform__note">Ekran kartı sürücüsü olmayan bir bilgisayarda, örneğin bir sanal makinede, zip’in içinde gelen Mesa’nın yazılım OpenGL’i ile çizer. SmartScreen bir kez sorar: <em>Ek bilgi</em>, ardından <em>Yine de çalıştır</em>.</p>
+          <a class="btn btn--soft platform__get" href="/download/windows-x64">Windows için indir</a>
+          <p class="platform__alt">x64 bilgisayarlar için ya da <a href="/download/windows-arm64">ARM64</a>.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="privacy" id="privacy" aria-labelledby="privacy-title">
+      <h2 class="section__title" id="privacy-title">Gizlilik</h2>
+      <p class="section__lede">Uygulama günde bir kez mcgyver.ferdiunal.tr’ye yeni bir sürüm çıkıp çıkmadığını sorar. Bu istek ayrıca uygulamanın sürümünü, işletim sistemini ve sürümünü, işlemci türünü, uygulamanın dilini ve sistemin kendi kimliğinin tek yönlü özetinden (hash) oluşan bir makine kimliğini taşır (bu kimlikten sistemin kimliğine geri dönülemez). Sunucu ayrıca IP adresini ve isteğin geldiği ülkeyi görür ve bunları o kimlikle birlikte saklar.</p>
+      <p class="section__lede">Hiçbir dosya, dosya adı ya da çarkla yaptıklarınız bilgisayardan çıkmaz. Uygulamanın hiç sormaması için onu ortamında <code>MCGYVER_OFFLINE=1</code> ile başlatın.</p>
+    </section>
+
+    <section class="support" id="support" aria-labelledby="support-title">
+      <h2 class="support__title" id="support-title">Ücretsiz; sponsorların desteğiyle sürüyor.</h2>
+      <p class="support__text">McGyver’ı Ferdi ÜNAL geliştiriyor. Size günde birkaç tıklama kazandırıyorsa, sponsor olmanız işin sürmesini sağlar.</p>
+      <div class="support__actions">
+        <a class="btn btn--lg support__sponsor" href="https://github.com/sponsors/ferdiunal">
+          <svg class="heart" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14s-5.5-3.4-5.5-7.3A3 3 0 0 1 8 4.6a3 3 0 0 1 5.5 2.1C13.5 10.6 8 14 8 14z"/></svg>
+          GitHub’da sponsor ol
+        </a>
+        <a class="link-arrow" href="https://github.com/ferdiunal">Ferdi GitHub’da <span aria-hidden="true">↗</span></a>
+        <a class="link-arrow" href="https://ferdiunal.tr/?utm_source=mcgyver-site">ferdiunal.tr <span aria-hidden="true">↗</span></a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="marquee" data-marquee>
+      <button class="marquee__toggle" type="button" data-marquee-toggle aria-pressed="false" aria-label="Kayan listeyi durdur">
+        <svg class="marquee__pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9M11 3.5v9"/></svg>
+        <svg class="marquee__play" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.2v9.6L12.6 8z"/></svg>
+      </button>
+      <div class="marquee__track" aria-hidden="true">
+        <span>JPG · PNG · WEBP · HEIC · AVIF · PDF · DOCX · XLSX · PPTX · EPUB · MD · MP4 · MKV · WEBM · MP3 · FLAC · OPUS · ZIP · 7Z · TAR.GZ · SRT · VTT ·&nbsp;</span>
+        <span>JPG · PNG · WEBP · HEIC · AVIF · PDF · DOCX · XLSX · PPTX · EPUB · MD · MP4 · MKV · WEBM · MP3 · FLAC · OPUS · ZIP · 7Z · TAR.GZ · SRT · VTT ·&nbsp;</span>
+      </div>
+    </div>
+    <div class="foot__meta">
+      <p class="foot__line"><img src="/assets/icon.svg" alt="" width="22" height="22"> McGyver 1.0.0 · MIT veya Apache-2.0 · © 2026 McGyver yazarları</p>
+      <ul class="foot__links">
+        <li><a href="https://github.com/ferdiunal">GitHub</a></li>
+        <li><a href="https://github.com/sponsors/ferdiunal">Sponsor ol</a></li>
+        <li><a href="#privacy">Gizlilik</a></li>
+        <li><a href="/" hreflang="en" lang="en" data-lang="en">English</a></li>
+        <li><a href="mailto:mail@ferdiunal.tr">mail@ferdiunal.tr</a></li>
+      </ul>
+    </div>
+  </footer>
+</body>
+</html>

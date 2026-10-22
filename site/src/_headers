@@ -9,3 +9,7 @@
 /
   Link: </index.md>; rel="alternate"; type="text/markdown"
   Link: </llms.txt>; rel="describedby"
+
+/tr/
+  Link: </tr/index.md>; rel="alternate"; type="text/markdown"
+  Link: </llms.txt>; rel="describedby"

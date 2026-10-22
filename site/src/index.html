@@ -3,9 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>McGyver: drag-and-drop file converter for KDE, Mac &amp; Windows</title>
+  <title>McGyver: drag-and-drop file converter for KDE, Mac, Windows</title>
   <meta name="description" content="Hold Shift while dragging a file and a wheel opens: convert pictures, shrink videos, turn PDFs into Word, zip folders. All on your computer. KDE, Mac, Windows.">
   <link rel="canonical" href="https://mcgyver.ferdiunal.tr/">
+  <!-- The same page in Turkish; English for every other language. -->
+  <link rel="alternate" hreflang="en" href="https://mcgyver.ferdiunal.tr/">
+  <link rel="alternate" hreflang="tr" href="https://mcgyver.ferdiunal.tr/tr/">
+  <link rel="alternate" hreflang="x-default" href="https://mcgyver.ferdiunal.tr/">
   <!-- llmstxt.org: the page as Markdown, and the llms.txt that covers it. -->
   <link rel="alternate" type="text/markdown" href="/index.md">
   <link rel="describedby" href="/llms.txt">
@@ -16,9 +20,11 @@
   <meta name="theme-color" content="#140e0b" media="(prefers-color-scheme: dark)">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="McGyver">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="tr_TR">
   <meta property="og:url" content="https://mcgyver.ferdiunal.tr/">
   <meta property="og:title" content="McGyver: drag a file, hold Shift, pick a wedge">
-  <meta property="og:description" content="A wheel opens around your pointer while you drag files: convert pictures, shrink videos, turn PDFs into Word, zip folders. For KDE Plasma 6, macOS and Windows.">
+  <meta property="og:description" content="A wheel opens as you drag files: convert pictures, shrink videos, turn PDFs into Word. For KDE Plasma 6, macOS and Windows.">
   <meta property="og:image" content="https://mcgyver.ferdiunal.tr/assets/og.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -34,9 +40,9 @@
     "description": "A wheel that opens around the pointer while you drag files: convert, compress, zip or share them by dropping them on a wedge. Conversions run on your computer.",
     "applicationCategory": "UtilitiesApplication",
     "operatingSystem": "Linux (KDE Plasma 6, Wayland), macOS 11 or later, Windows 10, Windows 11",
-    "softwareVersion": "0.1.0",
+    "softwareVersion": "1.0.0",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-    "downloadUrl": "https://github.com/ferdiunal/mcgyver/releases/latest",
+    "downloadUrl": "https://mcgyver.ferdiunal.tr/#download",
     "author": {
       "@type": "Person",
       "name": "Ferdi ÜNAL",
@@ -44,6 +50,16 @@
       "sameAs": ["https://github.com/ferdiunal"]
     }
   }
+  </script>
+  <script>
+    // A browser that asks for Turkish first gets the Turkish page, until a language is picked on
+    // either page (wheel.js keeps that choice).
+    (function () {
+      var picked = null;
+      try { picked = localStorage.getItem("mcgyver-lang"); } catch (e) {}
+      var first = (navigator.languages && navigator.languages[0]) || navigator.language || "";
+      if (!picked && /^tr\b/i.test(first)) location.replace("/tr/" + location.search + location.hash);
+    })();
   </script>
   <script>
     // Dark or light before anything paints: the visitor's choice from the wheel, else the system's.
@@ -68,7 +84,7 @@
 
   <header class="masthead" data-masthead>
     <div class="banner" data-banner>
-      <p class="banner__text">A prototype, made in the open. KDE Plasma 6 first; the macOS and Windows builds are in testing.</p>
+      <p class="banner__text">McGyver 1.0.0 is out, the first stable release. For KDE Plasma 6, macOS and Windows.</p>
       <button class="banner__close" type="button" data-banner-close aria-label="Dismiss the notice">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
       </button>
@@ -84,6 +100,7 @@
         <li><a class="nav__link" href="#download">Download</a></li>
       </ul>
       <div class="nav__actions">
+        <a class="nav__link" href="/tr/" hreflang="tr" lang="tr" data-lang="tr">Türkçe</a>
         <a class="btn btn--soft btn--sm nav__sponsor" href="https://github.com/sponsors/ferdiunal">
           <svg class="heart" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14s-5.5-3.4-5.5-7.3A3 3 0 0 1 8 4.6a3 3 0 0 1 5.5 2.1C13.5 10.6 8 14 8 14z"/></svg>
           Sponsor
@@ -102,7 +119,7 @@
           <a class="btn btn--lg" href="#download" data-download-cta>Download</a>
           <a class="link-arrow" href="#stage" data-try>Try the wheel <span aria-hidden="true">→</span></a>
         </div>
-        <p class="hero__meta">Version 0.1.0 · KDE Plasma 6, macOS and Windows</p>
+        <p class="hero__meta">Version 1.0.0 · KDE Plasma 6, macOS and Windows</p>
       </div>
 
       <div class="workbench__stage">
@@ -215,32 +232,40 @@
           <h3 class="platform__name">KDE Plasma 6</h3>
           <p class="platform__needs">Linux, on Wayland. Where McGyver started.</p>
           <p class="platform__note">After the first start, press <em>Set up</em> in its settings, so the wheel opens the moment you press Shift during a drag.</p>
-          <a class="btn platform__get" href="https://github.com/ferdiunal/mcgyver/releases/latest">Download for Linux</a>
+          <a class="btn platform__get" href="/download/deb">Download for Linux</a>
+          <p class="platform__alt">A .deb for Debian and Ubuntu, or <a href="/download/rpm">the .rpm</a> for Fedora.</p>
         </article>
         <article class="platform" data-os="mac">
           <h3 class="platform__name">macOS</h3>
           <p class="platform__needs">macOS 11 or later. One app for Apple Silicon and Intel.</p>
-          <p class="platform__note">In testing on Apple Silicon. It isn’t notarized yet: Control-click it in Applications and choose <em>Open</em> the first time.</p>
-          <a class="btn btn--soft platform__get" href="https://github.com/ferdiunal/mcgyver/releases/latest">Download for Mac</a>
+          <p class="platform__note">Open the disk image and the app offers to move itself to Applications. It isn’t notarized yet: the first time, Control-click it and choose <em>Open</em> (from macOS 15 on, <em>Open Anyway</em> in Privacy &amp; Security).</p>
+          <a class="btn btn--soft platform__get" href="/download/macos">Download for Mac</a>
         </article>
         <article class="platform" data-os="windows">
           <h3 class="platform__name">Windows</h3>
           <p class="platform__needs">Windows 10 and 11, on x64 and ARM64 PCs.</p>
-          <p class="platform__note">A first port, not yet run on a real Windows machine. SmartScreen asks once: <em>More info</em>, then <em>Run anyway</em>.</p>
-          <a class="btn btn--soft platform__get" href="https://github.com/ferdiunal/mcgyver/releases/latest">Download for Windows</a>
+          <p class="platform__note">On a PC without a graphics driver, like a virtual machine, it draws with Mesa’s software OpenGL, which comes in the zip. SmartScreen asks once: <em>More info</em>, then <em>Run anyway</em>.</p>
+          <a class="btn btn--soft platform__get" href="/download/windows-x64">Download for Windows</a>
+          <p class="platform__alt">For x64 PCs, or <a href="/download/windows-arm64">ARM64</a>.</p>
         </article>
       </div>
     </section>
 
+    <section class="privacy" id="privacy" aria-labelledby="privacy-title">
+      <h2 class="section__title" id="privacy-title">Privacy</h2>
+      <p class="section__lede">Once a day the app asks mcgyver.ferdiunal.tr whether a new version is out. That request also carries the app version, the operating system and its version, the processor type, the app’s language, and a machine ID that is a one-way hash of the system’s own ID (it can’t be turned back into it). The server also sees the IP address and the country it comes from, and stores them with that ID.</p>
+      <p class="section__lede">No files, file names, or what you do with the wheel ever leave the computer. To keep the app from asking at all, start it with <code>MCGYVER_OFFLINE=1</code> in its environment.</p>
+    </section>
+
     <section class="support" id="support" aria-labelledby="support-title">
-      <h2 class="support__title" id="support-title">Made by one person, in Gaziantep.</h2>
+      <h2 class="support__title" id="support-title">Free to use, kept going by sponsors.</h2>
       <p class="support__text">McGyver is built by Ferdi ÜNAL. If it saves you a few clicks a day, sponsoring it keeps the work going.</p>
       <div class="support__actions">
         <a class="btn btn--lg support__sponsor" href="https://github.com/sponsors/ferdiunal">
           <svg class="heart" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14s-5.5-3.4-5.5-7.3A3 3 0 0 1 8 4.6a3 3 0 0 1 5.5 2.1C13.5 10.6 8 14 8 14z"/></svg>
           Sponsor on GitHub
         </a>
-        <a class="link-arrow" href="https://github.com/ferdiunal/mcgyver">Source on GitHub <span aria-hidden="true">↗</span></a>
+        <a class="link-arrow" href="https://github.com/ferdiunal">Ferdi on GitHub <span aria-hidden="true">↗</span></a>
         <a class="link-arrow" href="https://ferdiunal.tr/?utm_source=mcgyver-site">ferdiunal.tr <span aria-hidden="true">↗</span></a>
       </div>
     </section>
@@ -258,11 +283,13 @@
       </div>
     </div>
     <div class="foot__meta">
-      <p class="foot__line"><img src="assets/icon.svg" alt="" width="22" height="22"> McGyver 0.1.0 · MIT or Apache-2.0 · © 2026 The McGyver authors</p>
+      <p class="foot__line"><img src="assets/icon.svg" alt="" width="22" height="22"> McGyver 1.0.0 · MIT or Apache-2.0 · © 2026 The McGyver authors</p>
       <ul class="foot__links">
-        <li><a href="https://github.com/ferdiunal/mcgyver">GitHub</a></li>
+        <li><a href="https://github.com/ferdiunal">GitHub</a></li>
         <li><a href="https://github.com/sponsors/ferdiunal">Sponsor</a></li>
-        <li><a href="mailto:ferdiunal@outlook.com">ferdiunal@outlook.com</a></li>
+        <li><a href="#privacy">Privacy</a></li>
+        <li><a href="/tr/" hreflang="tr" lang="tr" data-lang="tr">Türkçe</a></li>
+        <li><a href="mailto:mail@ferdiunal.tr">mail@ferdiunal.tr</a></li>
       </ul>
     </div>
   </footer>

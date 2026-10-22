@@ -1,14 +1,15 @@
 # McGyver
 
-> McGyver is a desktop app that opens a wheel of options around the pointer while you drag files. Hold Shift during a drag, then drop the files on a wedge to convert, compress, zip or share them. Conversions run on the computer; nothing is uploaded. KDE Plasma 6 (Linux, Wayland) first; the macOS and Windows builds are in testing.
+> McGyver is a desktop app that opens a wheel of options around the pointer while you drag files. Hold Shift during a drag, then drop the files on a wedge to convert, compress, zip or share them. Conversions run on the computer; nothing is uploaded. For KDE Plasma 6 (Linux, Wayland), macOS and Windows.
 
 Things to know before reading the pages below:
 
-- Version 0.1.0, a prototype. Free to download; licensed MIT or Apache-2.0. Made by Ferdi ÜNAL.
+- Version 1.0.0, the first stable release. Free to download; licensed MIT or Apache-2.0. Made by Ferdi ÜNAL.
 - The wheel has seven modes on a ring around its centre. With files in hand: Convert, Tools and Actions. Shift held on its own, without files: Apps, Media, Everyday and System.
 - The wheel only offers what the files in hand can become. A file already in a format skips it, and a mode with nothing to offer has no slice. Merge appears once two or more files are in hand.
 - Video and audio need FFmpeg on the computer. HEIC and AVIF appear where the computer's libheif can write them.
-- KDE Plasma 6 needs Wayland, and Set up pressed once in the settings. macOS 11 or later, one app for Apple Silicon and Intel, not notarized yet. Windows 10 and 11 on x64 and ARM64, a first port not yet run on a real Windows machine.
+- KDE Plasma 6 needs Wayland, and Set up pressed once in the settings. macOS 11 or later, one app for Apple Silicon and Intel, not notarized yet. Windows 10 and 11 on x64 and ARM64; on a PC without a graphics driver, like a virtual machine, it draws with Mesa's software OpenGL, which comes in the zip.
+- Privacy: once a day the app asks mcgyver.ferdiunal.tr whether a new version is out. That request also carries the app version, the operating system and its version, the processor type, the app's language, and a machine ID that is a one-way hash of the system's own ID (it can't be turned back into it). The server also sees the IP address and the country it comes from, and stores them with that ID. No files, file names, or what you do with the wheel ever leave the computer. Started with MCGYVER_OFFLINE=1 in its environment, the app never asks.
 
 What each kind of file can become (Convert) and what can be done to it (Tools):
 
@@ -29,13 +30,17 @@ What each kind of file can become (Convert) and what can be done to it (Tools):
 
 - [McGyver in Markdown](https://mcgyver.ferdiunal.tr/index.md): the landing page as text: what the wheel does, each of its modes, every format, and how to install it on each platform.
 - [Landing page](https://mcgyver.ferdiunal.tr/): the same, with a working demo of the wheel; nothing in the demo touches a file.
+- [McGyver in Turkish](https://mcgyver.ferdiunal.tr/tr/index.md): the same page in Turkish, also [with the demo](https://mcgyver.ferdiunal.tr/tr/). The app itself speaks English and Turkish.
 
 ## Download
 
-- [Latest release](https://github.com/ferdiunal/mcgyver/releases/latest): the builds for KDE Plasma 6, macOS and Windows.
+- [Linux .deb](https://mcgyver.ferdiunal.tr/download/deb): KDE Plasma 6 on Debian and Ubuntu, x86_64.
+- [Linux .rpm](https://mcgyver.ferdiunal.tr/download/rpm): KDE Plasma 6 on Fedora, x86_64.
+- [macOS](https://mcgyver.ferdiunal.tr/download/macos): one app for Apple Silicon and Intel, macOS 11 or later.
+- [Windows x64](https://mcgyver.ferdiunal.tr/download/windows-x64): a zip for Windows 10 and 11.
+- [Windows ARM64](https://mcgyver.ferdiunal.tr/download/windows-arm64): the same, for ARM64 PCs.
 
 ## Optional
 
-- [Source code](https://github.com/ferdiunal/mcgyver): the app, written in Rust.
 - [Sponsor](https://github.com/sponsors/ferdiunal): support McGyver's development on GitHub Sponsors.
 - [Ferdi ÜNAL](https://ferdiunal.tr/): the author's site.

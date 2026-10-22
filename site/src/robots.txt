@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
+# Downloads and the app's update check: nothing to index, and each costs a GitHub request.
+Disallow: /download/
+Disallow: /api/
 
 Sitemap: https://mcgyver.ferdiunal.tr/sitemap.xml

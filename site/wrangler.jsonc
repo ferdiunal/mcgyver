@@ -1,17 +1,39 @@
-// The landing page, served by Workers Static Assets with no Worker script. src/ is what is
-// written; dist/ is what is served, built by build.mjs before every dev and deploy.
+// The landing page, served by Workers Static Assets, and a small Worker (worker/index.js) for
+// the app's update check and usage ping (/api/*) and the downloads (/download/*). src/ is what
+// is written; dist/ is what is served, built by build.mjs before every dev and deploy.
 //   npm ci
+//   npx wrangler d1 migrations apply mcgyver --local    the tables, once and after each new migration
 //   npm run dev       try it at http://localhost:8787
 //   npm run deploy    publish to https://mcgyver.ferdiunal.tr
+// The release and its files are read from the private GitHub repo with GITHUB_TOKEN, a
+// fine-grained token with read-only Contents on ferdiunal/mcgyver. Live, it is a secret
+// (`npx wrangler secret put GITHUB_TOKEN`); locally it goes in .dev.vars as GITHUB_TOKEN=...,
+// which git ignores. Without it, /api/latest and /api/ping answer 503 (the app asks again within
+// the hour) and downloads land on #download.
+// Remote tables: `npx wrangler d1 migrations apply mcgyver --remote`, before the deploy that
+// needs them.
 {
   "name": "mcgyver-site",
+  "main": "worker/index.js",
   "compatibility_date": "2026-10-22",
   "build": { "command": "node build.mjs", "watch_dir": "src" },
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
-    "not_found_handling": "404-page"
+    "not_found_handling": "404-page",
+    // Only these reach the Worker; every other path is a file, or the 404 page, as before.
+    "run_worker_first": ["/api/*", "/download/*"]
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mcgyver",
+      // From `npx wrangler d1 create mcgyver --location eeur`.
+      "database_id": "2401650a-0ab3-40b1-8521-65d82c8065c0",
+      "migrations_dir": "migrations"
+    }
+  ],
   // ferdiunal.tr is a zone on the same Cloudflare account: the deploy makes the DNS record
   // and the certificate.
   "routes": [{ "pattern": "mcgyver.ferdiunal.tr", "custom_domain": true }],

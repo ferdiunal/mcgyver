@@ -2,7 +2,7 @@
 
 McGyver opens a wheel around your pointer while you drag files. Drop them on a wedge: pictures change format, videos shrink, PDFs turn into Word files, folders get zipped. Conversions run on your computer, not in a cloud.
 
-Version 0.1.0, a prototype made in the open. KDE Plasma 6 first; the macOS and Windows builds are in testing.
+Version 1.0.0, the first stable release. For KDE Plasma 6, macOS and Windows.
 
 ## One wheel, seven modes
 
@@ -45,18 +45,26 @@ Every file and folder also gets **Actions**: Zip, Copy, Cut, Copy To, Move To, C
 
 ## Get McGyver
 
-One download, then it waits in the tray or the menu bar until you hold Shift. [Download the latest release](https://github.com/ferdiunal/mcgyver/releases/latest).
+One download, then it waits in the tray or the menu bar until you hold Shift.
 
-- **KDE Plasma 6.** Linux, on Wayland. Where McGyver started. After the first start, press *Set up* in its settings, so the wheel opens the moment you press Shift during a drag.
-- **macOS.** macOS 11 or later. One app for Apple Silicon and Intel. In testing on Apple Silicon. It isn't notarized yet: Control-click it in Applications and choose *Open* the first time.
-- **Windows.** Windows 10 and 11, on x64 and ARM64 PCs. A first port, not yet run on a real Windows machine. SmartScreen asks once: *More info*, then *Run anyway*.
+- **KDE Plasma 6.** Linux, on Wayland. Where McGyver started. After the first start, press *Set up* in its settings, so the wheel opens the moment you press Shift during a drag. [Download the .deb](https://mcgyver.ferdiunal.tr/download/deb) for Debian and Ubuntu, or [the .rpm](https://mcgyver.ferdiunal.tr/download/rpm) for Fedora.
+- **macOS.** macOS 11 or later. One app for Apple Silicon and Intel. Open the disk image and the app offers to move itself to Applications. It isn't notarized yet: the first time, Control-click it and choose *Open* (from macOS 15 on, *Open Anyway* in Privacy & Security). [Download for Mac](https://mcgyver.ferdiunal.tr/download/macos).
+- **Windows.** Windows 10 and 11, on x64 and ARM64 PCs. On a PC without a graphics driver, like a virtual machine, it draws with Mesa's software OpenGL, which comes in the zip. SmartScreen asks once: *More info*, then *Run anyway*. [Download for x64 PCs](https://mcgyver.ferdiunal.tr/download/windows-x64), or [for ARM64](https://mcgyver.ferdiunal.tr/download/windows-arm64).
 
-## Made by one person, in Gaziantep
+## Privacy
+
+Once a day the app asks mcgyver.ferdiunal.tr whether a new version is out. That request also carries the app version, the operating system and its version, the processor type, the app's language, and a machine ID that is a one-way hash of the system's own ID (it can't be turned back into it). The server also sees the IP address and the country it comes from, and stores them with that ID.
+
+No files, file names, or what you do with the wheel ever leave the computer. To keep the app from asking at all, start it with `MCGYVER_OFFLINE=1` in its environment.
+
+## Free to use, kept going by sponsors
 
 McGyver is built by Ferdi ÜNAL. If it saves you a few clicks a day, [sponsoring it on GitHub](https://github.com/sponsors/ferdiunal) keeps the work going.
 
-- [Source on GitHub](https://github.com/ferdiunal/mcgyver)
+- [Ferdi on GitHub](https://github.com/ferdiunal)
 - [ferdiunal.tr](https://ferdiunal.tr/)
-- [ferdiunal@outlook.com](mailto:ferdiunal@outlook.com)
+- [mail@ferdiunal.tr](mailto:mail@ferdiunal.tr)
 
-McGyver 0.1.0 · MIT or Apache-2.0 · © 2026 The McGyver authors
+McGyver 1.0.0 · MIT or Apache-2.0 · © 2026 The McGyver authors
+
+[Türkçe](https://mcgyver.ferdiunal.tr/tr/index.md)
