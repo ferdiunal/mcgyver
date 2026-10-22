@@ -46,13 +46,18 @@ const SCROLL_GUTTER: i8 = 12;
 /// Who made the app, and where to find them.
 const AUTHOR: &str = "Ferdi ÜNAL";
 const EMAIL: &str = "ferdiunal@outlook.com";
+/// Tagged with `utm_source`, so the sites' analytics can tell visits from the app.
 const WEB: [(LinkIcon, &str, &str); 2] = [
     (
         LinkIcon::Code,
         "github.com/ferdiunal",
-        "https://github.com/ferdiunal",
+        "https://github.com/ferdiunal?utm_source=mcgyver",
     ),
-    (LinkIcon::Globe, "ferdiunal.tr", "https://ferdiunal.tr"),
+    (
+        LinkIcon::Globe,
+        "ferdiunal.tr",
+        "https://ferdiunal.tr/?utm_source=mcgyver",
+    ),
 ];
 const SPONSOR: &str = "https://github.com/sponsors/ferdiunal";
 /// The sponsor banner's colour.
