@@ -1,16 +1,23 @@
 //! What the settings window sets, kept as `key = value` lines in
-//! `$XDG_CONFIG_HOME/mcgyver/settings.conf` (on macOS `~/Library/Application Support`, on
-//! Windows `%APPDATA%`), and starting at login.
+//! `$XDG_CONFIG_HOME/mcgyver/settings.conf` (on macOS `~/Library/Application Support/McGyver`,
+//! on Windows `%APPDATA%\McGyver`), and starting at login.
 
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::i18n::Lang;
 
-/// Names the config folder, the desktop files and the tray item.
+/// Names the desktop files and the tray item, and the config folder on Linux.
 pub const APP_ID: &str = "mcgyver";
 /// What people see.
 pub const APP_NAME: &str = "McGyver";
+/// The app's folder in `config_home`: by its name where people browse to it, the XDG way on
+/// Linux.
+pub const DIR_NAME: &str = if cfg!(any(windows, target_os = "macos")) {
+    APP_NAME
+} else {
+    APP_ID
+};
 /// The macOS bundle's identifier, which also names its login item.
 pub const BUNDLE_ID: &str = "io.github.ferdiunal.mcgyver";
 /// The ID before the app was called McGyver.
@@ -249,6 +256,9 @@ pub fn migrate() {
     let Some(config) = config_home() else {
         return;
     };
+    if DIR_NAME != APP_ID {
+        rename_app_dir(&config);
+    }
     let old = config.join(OLD_APP_ID).join("settings.conf");
     if path().is_some_and(|new| !new.exists())
         && let Ok(text) = std::fs::read_to_string(old)
@@ -261,6 +271,20 @@ pub fn migrate() {
     if old_autostart.exists() && set_start_at_login(true).is_ok() {
         let _ = std::fs::remove_file(old_autostart);
     }
+}
+
+/// The folder was `mcgyver` on every system at first. Renamed in place: a case-insensitive disk
+/// (Windows, macOS by default) then shows the new name, a case-sensitive one finds the folder.
+/// While the app or its settings hold a file in it, Windows refuses; the next start tries again.
+fn rename_app_dir(config: &Path) {
+    let Ok(entries) = std::fs::read_dir(config) else {
+        return;
+    };
+    let names: Vec<_> = entries.flatten().map(|entry| entry.file_name()).collect();
+    if names.iter().any(|name| name == DIR_NAME) || !names.iter().any(|name| name == APP_ID) {
+        return;
+    }
+    let _ = std::fs::rename(config.join(APP_ID), config.join(DIR_NAME));
 }
 
 /// When the desktop was last looked at, and whether it was dark; and a look under way.
@@ -400,8 +424,13 @@ pub fn config_home() -> Option<PathBuf> {
     xdg.or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(default)))
 }
 
+/// Where the settings, the locks and the log are kept.
+pub fn app_dir() -> Option<PathBuf> {
+    config_home().map(|dir| dir.join(DIR_NAME))
+}
+
 fn path() -> Option<PathBuf> {
-    config_home().map(|dir| dir.join(APP_ID).join("settings.conf"))
+    app_dir().map(|dir| dir.join("settings.conf"))
 }
 
 /// What starts the app at login: an XDG autostart entry, or on macOS a launch agent.
@@ -586,6 +615,17 @@ pub fn own_exe() -> io::Result<PathBuf> {
     }
 }
 
+/// The exe the app was started as, when it runs on Mesa's OpenGL from a link to it.
+#[cfg(windows)]
+fn started_as() -> Option<PathBuf> {
+    crate::software_gl::started_as().map(PathBuf::from)
+}
+
+#[cfg(not(windows))]
+fn started_as() -> Option<PathBuf> {
+    None
+}
+
 /// What starts this app: the snap's or AppImage's launcher when packaged so (the binary inside
 /// moves with every update), else this binary.
 fn launcher() -> io::Result<String> {
@@ -595,8 +635,12 @@ fn launcher() -> io::Result<String> {
         PathBuf::from(image)
     } else if cfg!(windows) {
         // Already absolute; made canonical it would start with \\?\, which not every program
-        // that reads the Run key takes.
-        own_exe()?
+        // that reads the Run key takes. On Mesa's OpenGL the app runs from a link to itself
+        // (software_gl): the exe it was started as is the one to start, and to try OpenGL first.
+        match started_as() {
+            Some(exe) => exe,
+            None => own_exe()?,
+        }
     } else {
         own_exe()?.canonicalize()?
     };
@@ -661,7 +705,7 @@ mod tests {
     #[test]
     fn a_run_entry_comes_and_goes() {
         let name = "McGyver test";
-        set_run_entry(name, Some(r#""C:\Program Files\McGyver\mcgyver.exe""#)).unwrap();
+        set_run_entry(name, Some(r#""C:\Program Files\McGyver\McGyver.exe""#)).unwrap();
         assert!(has_run_entry(name));
         set_run_entry(name, None).unwrap();
         assert!(!has_run_entry(name));

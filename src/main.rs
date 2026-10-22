@@ -2,17 +2,31 @@
 // there is something to say.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
-/// Prints `log` records (egui_glow reports GL problems through it) when `MCGYVER_DEBUG` is set.
+use std::io::Write;
+
+use mcgyver::settings::APP_NAME;
+
+/// Prints `log` records: warnings and errors, and egui_glow's account of the OpenGL it got, the
+/// first thing to know when the wheel won't show. On Windows always (stderr is the log there),
+/// elsewhere when `MCGYVER_DEBUG` is set.
 struct StderrLog;
 
 impl log::Log for StderrLog {
     fn enabled(&self, meta: &log::Metadata) -> bool {
         meta.level() <= log::Level::Warn
+            || (meta.target() == "egui_glow::painter" && meta.level() <= log::Level::Debug)
     }
 
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
-            eprintln!("{} {}: {}", record.level(), record.target(), record.args());
+            // One write, so two processes on one log don't interleave; a full disk isn't a panic.
+            let line = format!(
+                "{} {}: {}\n",
+                record.level(),
+                record.target(),
+                record.args()
+            );
+            let _ = std::io::stderr().write_all(line.as_bytes());
         }
     }
 
@@ -36,7 +50,7 @@ its own, then click an option. Starting it again while it runs opens its setting
 
 #[cfg(target_os = "macos")]
 const MAC_USAGE: &str = "\
-mcgyver [--settings]
+McGyver [--settings]
 
 Starts in the background with an icon in the menu bar. Drag files, then hold the trigger key
 (Shift unless the settings say otherwise) and drop them on an option; the ring around the
@@ -47,7 +61,7 @@ opens its settings.
 
 #[cfg(windows)]
 const WINDOWS_USAGE: &str = "\
-mcgyver [--settings]
+McGyver [--settings]
 
 Starts in the background with an icon in the notification area. Drag files, then hold the
 trigger key (Shift unless the settings say otherwise) and drop them on an option; the ring
@@ -59,10 +73,26 @@ it runs opens its settings.
 /// `--help`, errors and `MCGYVER_DEBUG` are seen (after the prompt, which doesn't wait for it).
 /// Only then: attached, it would also be closed by Ctrl+C there, or with the terminal.
 #[cfg(windows)]
-fn attach_console() {
+fn attach_console() -> bool {
     use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
     // SAFETY: fails harmlessly when there is no console to attach to.
-    unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+    unsafe { AttachConsole(ATTACH_PARENT_PROCESS) != 0 }
+}
+
+/// Runs the app or its settings window: the folder renamed before the log is opened in it, and a
+/// panic while the window comes up (eframe panics when no pixel format fits) taken as the failure
+/// to start it is.
+#[cfg(windows)]
+fn windowed(run: fn() -> Result<(), String>, console: bool) -> Result<(), String> {
+    mcgyver::settings::migrate();
+    mcgyver::logbook::start(console);
+    std::panic::catch_unwind(run).unwrap_or_else(|panic| {
+        Err(panic
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| panic.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "it panicked".into()))
+    })
 }
 
 /// An app opened from Finder gets only the system's PATH; ffmpeg usually comes from Homebrew.
@@ -84,9 +114,9 @@ fn homebrew_on_path() {
 }
 
 fn main() {
-    if std::env::var_os("MCGYVER_DEBUG").is_some() {
+    if cfg!(windows) || std::env::var_os("MCGYVER_DEBUG").is_some() {
         let _ = log::set_logger(&StderrLog);
-        log::set_max_level(log::LevelFilter::Warn);
+        log::set_max_level(log::LevelFilter::Debug);
     }
     #[cfg(target_os = "linux")]
     let result = match std::env::args().nth(1).as_deref() {
@@ -94,7 +124,7 @@ fn main() {
         Some("--settings") => mcgyver::settings_window::run(),
         Some("--quit") => {
             if !mcgyver::service::call("Quit") {
-                eprintln!("mcgyver: it isn't running");
+                eprintln!("{APP_NAME}: it isn't running");
             }
             Ok(())
         }
@@ -131,13 +161,20 @@ fn main() {
         }
     };
     #[cfg(windows)]
-    let result = {
-        if std::env::var_os("MCGYVER_DEBUG").is_some() {
-            attach_console();
+    let console = {
+        mcgyver::software_gl::take_env();
+        // std's panic hook, which ignores a failed write, with the backtrace; nothing else runs yet.
+        if std::env::var_os("RUST_BACKTRACE").is_none() {
+            // SAFETY: no other thread is there to read the environment.
+            unsafe { std::env::set_var("RUST_BACKTRACE", "1") };
         }
+        std::env::var_os("MCGYVER_DEBUG").is_some() && attach_console()
+    };
+    #[cfg(windows)]
+    let result = {
         match std::env::args().nth(1).as_deref() {
-            None => mcgyver::desktop::run(),
-            Some("--settings") => mcgyver::settings_window::run(),
+            None => windowed(mcgyver::desktop::run, console),
+            Some("--settings") => windowed(mcgyver::settings_window::run, console),
             Some("-h" | "--help") => {
                 attach_console();
                 println!("{WINDOWS_USAGE}");
@@ -155,9 +192,23 @@ fn main() {
         Err("only KDE Plasma on Wayland, macOS and Windows are supported so far".into());
 
     if let Err(err) = result {
+        // OpenGL older than 2.0: once more, on Mesa's software OpenGL, in a process of its own.
         #[cfg(windows)]
-        attach_console();
-        eprintln!("mcgyver: {err}");
+        if let Some(mut again) = mcgyver::software_gl::start_again(&err) {
+            // The terminal is this process's: the new one writes to it while this one waits.
+            if console {
+                let _ = again.wait();
+            }
+            std::process::exit(0);
+        }
+        // Started from a terminal, it is told there; unless the log has stderr already.
+        #[cfg(windows)]
+        if !mcgyver::logbook::is_open() {
+            attach_console();
+        }
+        let _ = writeln!(std::io::stderr(), "{APP_NAME}: {err}");
+        #[cfg(windows)]
+        mcgyver::logbook::alert(&err);
         std::process::exit(1);
     }
 }

@@ -45,3 +45,7 @@ mod tray;
 
 #[cfg(any(target_os = "macos", windows))]
 pub mod desktop;
+#[cfg(windows)]
+pub mod logbook;
+#[cfg(windows)]
+pub mod software_gl;

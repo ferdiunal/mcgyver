@@ -89,7 +89,7 @@ drag with macOS's own drag and drop. Holding the key while dragging something th
   Terminal opens Terminal.app; Share isn't offered. The click plays through `afplay`.
 - **FFmpeg** for audio and video: `brew install ffmpeg`. The app looks in `/opt/homebrew/bin` and
   `/usr/local/bin` too, which an app opened from Finder doesn't otherwise see.
-- **Files:** settings in `~/Library/Application Support/mcgyver/settings.conf`; Start at login
+- **Files:** settings in `~/Library/Application Support/McGyver/settings.conf`; Start at login
   writes `~/Library/LaunchAgents/io.github.ferdiunal.mcgyver.plist`, and asks for the app to be
   in Applications first (run from the disk image, macOS runs a copy that is gone by the next
   login). Converting onto a disk without exclusive renames (exFAT, FAT, SMB) works too.
@@ -112,7 +112,7 @@ packaging/windows/build.sh          # → dist/McGyver-<version>-windows-x64.zip
 packaging/windows/build.sh arm64    # or x64: one of them
 ```
 
-Unzip it anywhere and run `mcgyver.exe`. It isn't signed, so SmartScreen warns the first time
+Unzip it anywhere and run `McGyver.exe`. It isn't signed, so SmartScreen warns the first time
 (More info → Run anyway). It sits in the notification area (Pause, or Resume while paused,
 Settings…, Quit), and starting it again while it runs opens its settings. Drag files in
 Explorer, hold the trigger key, and the wheel appears under the pointer, as on macOS: a
@@ -131,14 +131,22 @@ then takes the drag with Windows' own drag and drop. What differs:
   Windows Terminal, or else Command Prompt; Share needs KDE Connect's `kdeconnect-cli` on the
   PATH. The click plays from memory (`assets/sounds/click.wav`).
 - **FFmpeg** for audio and video: `winget install Gyan.FFmpeg`, or any `ffmpeg.exe` on the PATH.
-  HEIC and AVIF need libheif's `heif.dll` next to `mcgyver.exe` or on the PATH.
-- **Files:** settings in `%APPDATA%\mcgyver\settings.conf`; Start at login writes `McGyver` under
+  HEIC and AVIF need libheif's `heif.dll` next to `McGyver.exe` or on the PATH.
+- **Files:** settings in `%APPDATA%\McGyver\settings.conf` (a `mcgyver` folder from an earlier
+  version is renamed); Start at login writes `McGyver` under
   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, and asks for the zip to be unzipped
   first (opened from inside it, Explorer runs a copy that is gone later).
-- **ARM64:** the wheel is drawn with OpenGL, which Windows on ARM gets from the graphics driver
-  or from Microsoft's "OpenCL, OpenGL, and Vulkan Compatibility Pack" (Microsoft Store).
-- **Debugging:** `set MCGYVER_DEBUG=1` and start `mcgyver.exe` from a terminal: it writes what
-  happens to that terminal (after the prompt, which doesn't wait for it).
+- **OpenGL 2.0 or later:** the wheel is drawn with OpenGL. Where Windows has only its own
+  OpenGL 1.1 (a virtual machine without 3D acceleration, Remote Desktop, a PC without its
+  graphics driver), the x64 app starts again on Mesa's software OpenGL (llvmpipe), which the zip
+  carries in `opengl\`: from a hard link to itself in that folder, since Windows takes
+  `opengl32.dll` from the exe's folder only as a process starts. Windows on ARM gets OpenGL from
+  the graphics driver or from Microsoft's "OpenCL, OpenGL, and Vulkan Compatibility Pack"
+  (Microsoft Store).
+- **Log:** what goes wrong is written to `%APPDATA%\McGyver\McGyver.log`: errors, panics with
+  their backtrace, and the OpenGL version and driver the wheel got. When it can't start at all, a
+  message box says why. With `set MCGYVER_DEBUG=1`, started from a terminal, it writes to that
+  terminal instead (after the prompt, which doesn't wait for it).
 
 ### Tray and settings
 

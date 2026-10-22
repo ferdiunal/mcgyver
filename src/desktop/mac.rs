@@ -257,7 +257,7 @@ unsafe fn add_method(class: &str, name: Sel, imp: Imp, types: &str) {
         return;
     };
     let Some(class) = AnyClass::get(&class) else {
-        eprintln!("mcgyver: no {class:?} to teach");
+        eprintln!("McGyver: no {class:?} to teach");
         return;
     };
     // SAFETY: the caller vouches for `imp` and `types`; the class is registered already.
@@ -415,7 +415,7 @@ fn tap_input(shared: Arc<Mutex<Shared>>, ctx: egui::Context) -> bool {
     }
     let (made, told) = mpsc::channel();
     let spawned = std::thread::Builder::new()
-        .name("mcgyver keys".into())
+        .name("McGyver keys".into())
         .spawn(move || {
             let tap: &'static Tap = Box::leak(Box::new(Tap {
                 shared,
@@ -522,9 +522,9 @@ pub(super) fn restart() -> ! {
     match crate::settings::own_exe() {
         Ok(exe) => {
             let e = std::process::Command::new(exe).exec();
-            eprintln!("mcgyver: can't restart: {e}");
+            eprintln!("McGyver: can't restart: {e}");
         }
-        Err(e) => eprintln!("mcgyver: can't restart: {e}"),
+        Err(e) => eprintln!("McGyver: can't restart: {e}"),
     }
     std::process::exit(1)
 }

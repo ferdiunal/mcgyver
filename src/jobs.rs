@@ -206,7 +206,7 @@ fn spawn(work: Vec<(Real, Arc<Shared>)>) {
     }
     let shared: Vec<Arc<Shared>> = work.iter().map(|(_, s)| s.clone()).collect();
     let spawned = std::thread::Builder::new()
-        .name("mcgyver jobs".into())
+        .name("McGyver jobs".into())
         .spawn(move || {
             for (work, shared) in work {
                 // Cancelled while waiting its turn: not started at all.

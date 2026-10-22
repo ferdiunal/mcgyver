@@ -440,6 +440,8 @@ fn turkish(english: &str) -> Option<&'static str> {
         "{} alone is taken by another shortcut" => "{} tek başına başka bir kısayolda",
         "Restart" => "Yeniden başlat",
         "Version {}" => "Sürüm {}",
+        "{} couldn't start." => "{} açılamadı.",
+        "The details are in {}" => "Ayrıntılar şurada: {}",
         "Sponsor on GitHub" => "GitHub'da sponsor ol",
         "If {} saves you time, you can support its development." => {
             "{} işinize yarıyorsa geliştirilmesine destek olabilirsiniz."

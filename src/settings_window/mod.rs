@@ -131,12 +131,13 @@ pub fn run() -> Result<(), String> {
 /// The window at `size` points, as `run` opens it: taller shows more of it at once (for the
 /// preview's screenshots).
 pub fn run_sized(size: [f32; 2]) -> Result<(), String> {
+    // Before the lock: a file held open in the app's folder would keep it from being renamed.
+    settings::migrate();
     // One window at a time, however it was opened.
     let Some(_claim) = platform::claim() else {
         println!("The settings are open already.");
         return Ok(());
     };
-    settings::migrate();
     let settings = Settings::load();
     i18n::set(settings.language);
     crate::glass::set_dark(settings.appearance.dark());
@@ -919,7 +920,7 @@ fn labelled(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
 /// does this.)
 #[cfg(any(target_os = "macos", windows))]
 fn claim_lock_file() -> Option<Option<std::fs::File>> {
-    let Some(dir) = settings::config_home().map(|d| d.join(APP_ID)) else {
+    let Some(dir) = settings::app_dir() else {
         return Some(None);
     };
     let _ = std::fs::create_dir_all(&dir);

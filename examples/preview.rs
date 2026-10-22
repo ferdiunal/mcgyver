@@ -56,7 +56,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "mcgyver preview",
+        "McGyver preview",
         options,
         Box::new(move |cc| {
             mcgyver::glass::install_fonts(&cc.egui_ctx);

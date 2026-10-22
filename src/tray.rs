@@ -34,7 +34,7 @@ pub fn spawn(commands: Sender<Command>, trigger: Trigger) -> Option<Handle<Tray>
     match tray.assume_sni_available(true).spawn() {
         Ok(handle) => Some(handle),
         Err(e) => {
-            eprintln!("mcgyver: no tray icon: {e}");
+            eprintln!("McGyver: no tray icon: {e}");
             None
         }
     }

@@ -88,12 +88,12 @@ struct Input {
 }
 
 fn lock_file() -> Option<PathBuf> {
-    crate::settings::config_home().map(|dir| dir.join(APP_ID).join("app.lock"))
+    crate::settings::app_dir().map(|dir| dir.join("app.lock"))
 }
 
 /// Where the settings window asks the running app to restart.
 fn restart_file() -> Option<PathBuf> {
-    crate::settings::config_home().map(|dir| dir.join(APP_ID).join("restart"))
+    crate::settings::app_dir().map(|dir| dir.join("restart"))
 }
 
 /// Holds the app's lock: one app at a time. On macOS the file also says how the running app
@@ -134,9 +134,7 @@ pub fn ask_restart() -> bool {
 }
 
 fn settings_changed_at() -> Option<SystemTime> {
-    let path = crate::settings::config_home()?
-        .join(APP_ID)
-        .join("settings.conf");
+    let path = crate::settings::app_dir()?.join("settings.conf");
     std::fs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
@@ -175,7 +173,7 @@ impl Shared {
 /// the settings file is due a look.
 fn watch(shared: Arc<Mutex<Shared>>, ctx: egui::Context, heard: bool) -> std::thread::Thread {
     std::thread::Builder::new()
-        .name("mcgyver input".into())
+        .name("McGyver input".into())
         .spawn(move || {
             let mut settings_at = settings_changed_at();
             let mut looked_at = Instant::now();
@@ -260,7 +258,7 @@ impl MenuBar {
             .with_icon(icon)
             .with_tooltip(APP_NAME)
             .build()
-            .map_err(|e| eprintln!("mcgyver: no menu bar icon: {e}"))
+            .map_err(|e| eprintln!("McGyver: no menu bar icon: {e}"))
             .ok()?;
         Some(MenuBar {
             _icon: icon,
@@ -308,10 +306,15 @@ pub fn run() -> Result<(), String> {
         .with_resizable(false)
         .with_window_level(egui::WindowLevel::AlwaysOnTop)
         .with_taskbar(false);
+    // Mesa's software OpenGL may offer no pixel format with samples; egui smooths edges anyway.
+    #[cfg(windows)]
+    let software = crate::software_gl::active();
+    #[cfg(not(windows))]
+    let software = false;
     let options = eframe::NativeOptions {
         viewport: platform::viewport(viewport),
         renderer: eframe::Renderer::Glow,
-        multisampling: 4,
+        multisampling: if software { 0 } else { 4 },
         event_loop_builder: platform::event_loop(),
         ..Default::default()
     };
@@ -674,7 +677,7 @@ impl App {
                     let mut settings = Settings::load();
                     settings.welcomed = true;
                     if let Err(e) = settings.save() {
-                        eprintln!("mcgyver: can't save the settings: {e}");
+                        eprintln!("McGyver: can't save the settings: {e}");
                     }
                     if let Some(moved) = self.window.place(ctx, input.pointer) {
                         self.overlay.shift(moved);

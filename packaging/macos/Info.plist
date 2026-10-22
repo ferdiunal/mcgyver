@@ -7,7 +7,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>McGyver</string>
 	<key>CFBundleExecutable</key>
-	<string>mcgyver</string>
+	<string>McGyver</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>

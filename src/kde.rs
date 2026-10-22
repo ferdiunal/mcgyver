@@ -156,7 +156,7 @@ pub fn run() -> Result<(), String> {
             return Ok(());
         }
         Err(crate::service::Error::Bus(e)) => {
-            eprintln!("mcgyver: the session bus is unavailable ({e}); running without it");
+            eprintln!("McGyver: the session bus is unavailable ({e}); running without it");
             None
         }
     };
@@ -181,12 +181,12 @@ pub fn run() -> Result<(), String> {
             "Opens the wheel under a drag without waiting for the mouse to move".into(),
         ),
         None => eprintln!(
-            "mcgyver: tip: run once with --install so the wheel opens without waiting for \
+            "McGyver: tip: run once with --install so the wheel opens without waiting for \
              the mouse to move"
         ),
     }
     if let Some(missing) = crate::images::missing_codecs() {
-        eprintln!("mcgyver: note: {missing}");
+        eprintln!("McGyver: note: {missing}");
     }
 
     let shm = Shm::bind(&globals, &qh).map_err(|e| e.to_string())?;
@@ -200,7 +200,7 @@ pub fn run() -> Result<(), String> {
         Ok(true) => true,
         Ok(false) => {
             eprintln!(
-                "mcgyver: tip: run once with --install to open the wheel by tapping {}, with \
+                "McGyver: tip: run once with --install to open the wheel by tapping {}, with \
                  files selected in Dolphin",
                 settings.trigger.label()
             );
@@ -208,7 +208,7 @@ pub fn run() -> Result<(), String> {
         }
         Err(e) => {
             eprintln!(
-                "mcgyver: tapping {} won't work: {e}",
+                "McGyver: tapping {} won't work: {e}",
                 settings.trigger.label()
             );
             false
@@ -321,7 +321,7 @@ pub fn run() -> Result<(), String> {
     granted.ready.store(true, Ordering::Release);
     if tapping && app.clipboard.is_none() {
         eprintln!(
-            "mcgyver: tapping {} needs ext-data-control, which this compositor lacks",
+            "McGyver: tapping {} needs ext-data-control, which this compositor lacks",
             app.trigger.label()
         );
     }
@@ -369,7 +369,7 @@ pub fn run() -> Result<(), String> {
         .map_err(|e| format!("event loop: {e}"))?;
     let key = app.trigger.label();
     eprintln!(
-        "mcgyver: ready. Drag files and hold {key}, or select files in Dolphin and tap {key}."
+        "McGyver: ready. Drag files and hold {key}, or select files in Dolphin and tap {key}."
     );
     while !app.quit {
         let timeout = app.timeout();
@@ -501,7 +501,7 @@ fn write_icon() {
         return;
     }
     if let Err(e) = write_file(&path, crate::icon::SVG) {
-        eprintln!("mcgyver: no icon for the KWin entry: {e}");
+        eprintln!("McGyver: no icon for the KWin entry: {e}");
     }
 }
 
@@ -525,10 +525,10 @@ fn heal_install() {
     if current.ok() != kwin_entry().ok() {
         match write_kwin_entry() {
             Ok(path) => {
-                eprintln!("mcgyver: updated {} for this binary", path.display());
+                eprintln!("McGyver: updated {} for this binary", path.display());
                 wait_for_kwin(true);
             }
-            Err(e) => eprintln!("mcgyver: couldn't update the KWin entry: {e}"),
+            Err(e) => eprintln!("McGyver: couldn't update the KWin entry: {e}"),
         }
     }
 }
@@ -593,7 +593,7 @@ fn refresh_service_cache() {
         .status()
         .is_ok_and(|status| status.success());
     if !ok {
-        eprintln!("mcgyver: kbuildsycoca6 failed; run it yourself so KWin sees the change");
+        eprintln!("McGyver: kbuildsycoca6 failed; run it yourself so KWin sees the change");
     }
 }
 
@@ -943,7 +943,7 @@ impl App {
                 .map(drop)
         });
         if let Err(e) = spawned {
-            eprintln!("mcgyver: couldn't open the settings: {e}");
+            eprintln!("McGyver: couldn't open the settings: {e}");
         }
     }
 
@@ -964,7 +964,7 @@ impl App {
                 let trigger = self.trigger;
                 std::thread::spawn(move || {
                     if let Err(e) = crate::tap::rebind(trigger) {
-                        eprintln!("mcgyver: {e}");
+                        eprintln!("McGyver: {e}");
                     }
                 });
             }
@@ -982,7 +982,7 @@ impl App {
         let exe = match crate::settings::own_exe() {
             Ok(exe) => exe,
             Err(e) => {
-                eprintln!("mcgyver: can't restart: {e}");
+                eprintln!("McGyver: can't restart: {e}");
                 return;
             }
         };
@@ -997,7 +997,7 @@ impl App {
         }
         use std::os::unix::process::CommandExt;
         let e = std::process::Command::new(exe).exec();
-        eprintln!("mcgyver: can't restart: {e}");
+        eprintln!("McGyver: can't restart: {e}");
         self.quit = true;
     }
 
@@ -1240,7 +1240,7 @@ impl App {
                 let mut settings = Settings::load();
                 settings.welcomed = true;
                 if let Err(e) = settings.save() {
-                    eprintln!("mcgyver: can't save the settings: {e}");
+                    eprintln!("McGyver: can't save the settings: {e}");
                 }
                 self.welcome = Some(menu);
                 self.map_overlay();
@@ -1392,7 +1392,7 @@ impl App {
             match self.gl.create_surface(&wl_surface, pw, ph) {
                 Ok(gl_surface) => surface.gl_surface = Some(gl_surface),
                 Err(err) => {
-                    eprintln!("mcgyver: {err}");
+                    eprintln!("McGyver: {err}");
                     return;
                 }
             }
@@ -1401,7 +1401,7 @@ impl App {
             return;
         };
         if let Err(err) = self.gl.bind(gl_surface) {
-            eprintln!("mcgyver: {err}");
+            eprintln!("McGyver: {err}");
             return;
         }
 
@@ -1494,7 +1494,7 @@ impl App {
             }
         }
         if let Err(err) = gl_surface.swap_buffers(&self.gl.context) {
-            eprintln!("mcgyver: swap: {err}");
+            eprintln!("McGyver: swap: {err}");
         }
 
         let delay = [wants, egui_wants].into_iter().flatten().min();

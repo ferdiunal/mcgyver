@@ -95,9 +95,16 @@ in zstd and friends) checks that it compiles. Distribution beyond the build mach
 
 ## Windows
 
-`packaging/windows/build.sh`, run on Linux, builds `mcgyver.exe` for `x86_64-pc-windows-gnu` and
-`aarch64-pc-windows-gnullvm` with `cargo zigbuild` and zips each with the README and licences:
-`dist/McGyver-<version>-windows-x64.zip` and `-arm64.zip` (pass `x64` or `arm64` for one).
+`packaging/windows/build.sh`, run on Linux, builds the app for `x86_64-pc-windows-gnu` and
+`aarch64-pc-windows-gnullvm` with `cargo zigbuild` and zips each, as `McGyver.exe`, with the
+README and licences: `dist/McGyver-<version>-windows-x64.zip` and `-arm64.zip` (pass `x64` or
+`arm64` for one). `McGyver.rc` gives the exe its icon (`McGyver.ico`) and the version details
+Explorer and Task Manager show: `zig rc` compiles it, and `cargo-zigbuild rustc` links it into
+the exe alone. The x64 zip also carries Mesa's software OpenGL in `McGyver/opengl`
+(`opengl32.dll` and `libgallium_wgl.dll` from pal1000/mesa-dist-win, MIT, with
+`opengl-README.txt`), for machines with only Windows' OpenGL 1.1 (`src/software_gl.rs`): the
+script downloads the pinned release once (curl, checked by SHA-256), unpacks the two files with
+7z and keeps them in the target folder.
 unRAR's sources include `PowrProf.h` and `Wbemidl.h` as the Windows SDK spells them; MinGW's are
 in lower case, so `packaging/windows/include` forwards them, through `CXXFLAGS_<target>`. Its
 build script chose its Windows sources by the build machine, so `vendor/unrar_sys` asks for the

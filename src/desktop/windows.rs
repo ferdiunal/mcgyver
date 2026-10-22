@@ -151,7 +151,7 @@ pub(super) fn listen(shared: Arc<Mutex<Shared>>, ctx: egui::Context) -> bool {
         return false;
     }
     let waking = std::thread::Builder::new()
-        .name("mcgyver wake".into())
+        .name("McGyver wake".into())
         .spawn(move || {
             for () in woken {
                 ctx.request_repaint();
@@ -162,7 +162,7 @@ pub(super) fn listen(shared: Arc<Mutex<Shared>>, ctx: egui::Context) -> bool {
     }
     let (made, told) = mpsc::channel();
     let spawned = std::thread::Builder::new()
-        .name("mcgyver keys".into())
+        .name("McGyver keys".into())
         .spawn(move || {
             // SAFETY: the hook procedures have the signature hooks are called with; this thread
             // waits for messages from here on, which is when Windows calls them.
@@ -261,16 +261,21 @@ fn heard_mouse(message: u32, at: POINT) {
 /// Opens the settings window, a process of its own.
 pub(super) fn show_settings() {
     if let Ok(exe) = crate::settings::own_exe() {
-        let _ = std::process::Command::new(exe).arg("--settings").spawn();
+        let mut settings = std::process::Command::new(exe);
+        let _ = crate::software_gl::mark(&mut settings)
+            .arg("--settings")
+            .spawn();
     }
 }
 
 /// Starts this program over: a new process, once this one has let go of the lock.
 pub(super) fn restart() -> ! {
-    match crate::settings::own_exe().and_then(|exe| std::process::Command::new(exe).spawn()) {
+    let again = crate::settings::own_exe()
+        .and_then(|exe| crate::software_gl::mark(&mut std::process::Command::new(exe)).spawn());
+    match again {
         Ok(_) => std::process::exit(0),
         Err(e) => {
-            eprintln!("mcgyver: can't restart: {e}");
+            eprintln!("McGyver: can't restart: {e}");
             std::process::exit(1)
         }
     }

@@ -40,8 +40,9 @@ done
 
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-lipo -create -output "$app/Contents/MacOS/mcgyver" "$@"
-lipo -info "$app/Contents/MacOS/mcgyver"
+# Cargo's binary is mcgyver, as Linux has it; in the bundle it goes by the app's name.
+lipo -create -output "$app/Contents/MacOS/McGyver" "$@"
+lipo -info "$app/Contents/MacOS/McGyver"
 sed "s/@VERSION@/$version/g" "$here/Info.plist" >"$app/Contents/Info.plist"
 printf 'APPL????' >"$app/Contents/PkgInfo"
 

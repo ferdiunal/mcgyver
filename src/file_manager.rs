@@ -21,7 +21,7 @@ struct DolphinWindow {
 /// Selects all paths from one completed batch in a single existing Dolphin window.
 pub fn select_items(paths: Vec<PathBuf>) {
     let spawned = thread::Builder::new()
-        .name("mcgyver file selection".into())
+        .name("McGyver file selection".into())
         .spawn(move || {
             if let Err(error) = show_items(&paths) {
                 log::warn!(

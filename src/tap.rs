@@ -60,7 +60,7 @@ pub fn listen(tx: Sender<()>, trigger: Trigger, set_up: bool) -> zbus::Result<bo
     // Present again, on the trigger key: it may have changed while the app wasn't running.
     if !bind(trigger)? {
         eprintln!(
-            "mcgyver: {} alone is taken by another global shortcut",
+            "McGyver: {} alone is taken by another global shortcut",
             trigger.label()
         );
     }
@@ -73,7 +73,7 @@ pub fn listen(tx: Sender<()>, trigger: Trigger, set_up: bool) -> zbus::Result<bo
         .build();
     let signals = MessageIterator::for_match_rule(rule, &conn, None)?;
     std::thread::Builder::new()
-        .name("mcgyver shortcut".into())
+        .name("McGyver shortcut".into())
         .spawn(move || {
             for message in signals.flatten() {
                 let pressed = message.body().deserialize::<(String, String, i64)>();

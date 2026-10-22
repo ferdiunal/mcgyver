@@ -39,7 +39,7 @@ pub fn open_link(url: &str) {
     let url = url.to_owned();
     std::thread::spawn(move || {
         if let Err(e) = system::open_link(&url) {
-            eprintln!("mcgyver: {e}");
+            eprintln!("McGyver: {e}");
         }
     });
 }
@@ -986,14 +986,14 @@ impl Runner {
     pub fn new(read: impl Fn(u64, Menu) + Send + 'static) -> Runner {
         let (jobs, todo) = mpsc::channel::<(Job, u64)>();
         std::thread::Builder::new()
-            .name("mcgyver desk".into())
+            .name("McGyver desk".into())
             .spawn(move || {
                 for (job, number) in todo {
                     let menu = match job {
                         Job::Commands(commands, quick_apps) => {
                             for command in &commands {
                                 if let Err(e) = run(command) {
-                                    eprintln!("mcgyver: {e}");
+                                    eprintln!("McGyver: {e}");
                                 }
                             }
                             if !commands.is_empty() {
