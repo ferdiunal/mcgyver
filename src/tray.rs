@@ -1,5 +1,6 @@
 //! The tray icon (a StatusNotifierItem, which Plasma shows in its system tray): a status line,
-//! then pause (or resume), settings and quit. Clicking the icon opens the settings too.
+//! a newer version when there is one, then pause (or resume), settings and quit. Clicking the
+//! icon opens the settings too.
 
 use ksni::blocking::{Handle, TrayMethods};
 use ksni::menu::StandardItem;
@@ -78,13 +79,28 @@ impl ksni::Tray for Tray {
     }
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
-        vec![
+        let mut menu = vec![
             StandardItem {
                 label: status_line(self.paused),
                 enabled: false,
                 ..Default::default()
             }
             .into(),
+        ];
+        if let Some(version) = crate::update::available() {
+            menu.push(
+                StandardItem {
+                    label: trf("Get version {}", &[&version]),
+                    icon_name: "system-software-update".into(),
+                    activate: Box::new(|_: &mut Self| {
+                        crate::desk::open_link(crate::update::DOWNLOAD);
+                    }),
+                    ..Default::default()
+                }
+                .into(),
+            );
+        }
+        menu.extend([
             MenuItem::Separator,
             // An item with an icon like the others: Plasma lines a checkbox up apart from them.
             StandardItem {
@@ -120,7 +136,8 @@ impl ksni::Tray for Tray {
                 ..Default::default()
             }
             .into(),
-        ]
+        ]);
+        menu
     }
 }
 
@@ -159,6 +176,7 @@ mod tests {
             "Resume",
             "Settings…",
             "Quit",
+            "Get version {}",
         ] {
             assert_ne!(translate(Lang::Turkish, text), text);
         }

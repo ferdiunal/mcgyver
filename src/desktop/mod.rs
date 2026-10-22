@@ -29,7 +29,7 @@ use tray_icon::{TrayIcon, TrayIconBuilder};
 
 use crate::catalog::Mode;
 use crate::desk;
-use crate::i18n::tr;
+use crate::i18n::{tr, trf};
 use crate::overlay::{CardSpot, Overlay};
 use crate::settings::{APP_ID, APP_NAME, Settings, Trigger};
 
@@ -224,8 +224,11 @@ fn watch(shared: Arc<Mutex<Shared>>, ctx: egui::Context, heard: bool) -> std::th
 /// The menu bar or tray icon and its menu.
 struct MenuBar {
     _icon: TrayIcon,
+    menu: Menu,
     /// Greyed out: the app's name and whether it is paused.
     status: MenuItem,
+    /// A newer version, once the site names one, under the status.
+    update: Option<(MenuItem, String)>,
     /// Pause, or Resume while paused.
     pause: MenuItem,
     settings: MenuItem,
@@ -254,24 +257,51 @@ impl MenuBar {
         let size = platform::TRAY_ICON;
         let icon = tray_icon::Icon::from_rgba(crate::icon::rgba(size)?, size, size).ok()?;
         let icon = TrayIconBuilder::new()
-            .with_menu(Box::new(menu))
+            .with_menu(Box::new(menu.clone()))
             .with_icon(icon)
             .with_tooltip(APP_NAME)
             .build()
             .map_err(|e| eprintln!("McGyver: no menu bar icon: {e}"))
             .ok()?;
-        Some(MenuBar {
+        let mut bar = MenuBar {
             _icon: icon,
+            menu,
             status,
+            update: None,
             pause,
             settings,
             quit,
-        })
+        };
+        bar.offer_update();
+        Some(bar)
+    }
+
+    /// Shows a newer version under the status once the site has named one, and takes it away
+    /// if the site takes it back.
+    fn offer_update(&mut self) {
+        let version = crate::update::available();
+        if self.update.as_ref().map(|(_, shown)| shown) == version.as_ref() {
+            return;
+        }
+        if let Some((old, _)) = self.update.take() {
+            let _ = self.menu.remove(&old);
+        }
+        let Some(version) = version else {
+            return;
+        };
+        let item = MenuItem::new(trf("Get version {}", &[&version]), true, None);
+        match self.menu.insert(&item, 1) {
+            Ok(()) => self.update = Some((item, version)),
+            Err(e) => eprintln!("McGyver: couldn't show the update in the menu: {e}"),
+        }
     }
 
     /// The menu in the current language, and whether the app is paused.
     fn retitle(&self, paused: bool) {
         self.status.set_text(crate::settings::status_line(paused));
+        if let Some((item, version)) = &self.update {
+            item.set_text(trf("Get version {}", &[version]));
+        }
         self.pause
             .set_text(tr(if paused { "Resume" } else { "Pause" }));
         self.settings.set_text(tr("Settings…"));
@@ -281,6 +311,10 @@ impl MenuBar {
 
 pub fn run() -> Result<(), String> {
     crate::settings::migrate();
+    // Before anything is claimed: a copy that moved itself starts in its place.
+    if platform::offer_move() {
+        return Ok(());
+    }
     let lock = match claim() {
         Ok(lock) => lock,
         // Started again while running: show its settings, as on Linux.
@@ -342,6 +376,11 @@ pub fn run() -> Result<(), String> {
                         .push(event.id);
                     ctx.request_repaint();
                 }));
+            }
+            // A newer version wakes the window, which shows it in the menu.
+            {
+                let ctx = cc.egui_ctx.clone();
+                crate::update::start(move || ctx.request_repaint());
             }
             if std::env::var_os("MCGYVER_DEBUG").is_some() {
                 let how = if heard {
@@ -417,7 +456,7 @@ pub fn run() -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
-/// With the look like the system's, the glass follows the desktop as the desk sees it: a click
+/// With the look set to System, the glass follows the desktop as the desk sees it: a click
 /// on its Dark Mode fades the wheel across, as the desktop turns.
 fn follow_desk_dark(appearance: crate::settings::Appearance, overlay: &Overlay) {
     if appearance == crate::settings::Appearance::System
@@ -550,7 +589,13 @@ impl App {
         let Some(menu) = &self.menu else {
             return;
         };
-        if id == menu.pause.id() {
+        if menu
+            .update
+            .as_ref()
+            .is_some_and(|(item, _)| id == item.id())
+        {
+            desk::open_link(crate::update::DOWNLOAD);
+        } else if id == menu.pause.id() {
             self.paused = !self.paused;
             menu.retitle(self.paused);
             if self.paused {
@@ -816,6 +861,9 @@ impl eframe::App for App {
         }
         for id in &picked {
             self.menu_picked(id);
+        }
+        if let Some(menu) = &mut self.menu {
+            menu.offer_update();
         }
         if settings_changed {
             self.reload();

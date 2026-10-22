@@ -45,7 +45,7 @@ const TILE_ICON: f32 = 36.0;
 const SCROLL_GUTTER: i8 = 12;
 /// Who made the app, and where to find them.
 const AUTHOR: &str = "Ferdi ÜNAL";
-const EMAIL: &str = "ferdiunal@outlook.com";
+const EMAIL: &str = "mail@ferdiunal.tr";
 /// Tagged with `utm_source`, so the sites' analytics can tell visits from the app.
 const WEB: [(LinkIcon, &str, &str); 2] = [
     (
@@ -302,7 +302,7 @@ impl eframe::App for Window {
             platform::bring_forward(ui.ctx());
         }
         self.restyle(ui.ctx());
-        // Like the system: look again every second, so a switch elsewhere shows here too.
+        // System: look again every second, so a switch elsewhere shows here too.
         if self.settings.appearance == Appearance::System {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_secs(1));
@@ -497,6 +497,10 @@ impl Window {
             });
             ui.add_space(8.0);
             ui.horizontal_wrapped(|ui| {
+                if let Some(version) = crate::update::available() {
+                    let text = trf("Get version {}", &[&version]);
+                    chip(ui, LinkIcon::Download, &text, crate::update::DOWNLOAD);
+                }
                 for (icon, text, url) in WEB {
                     chip(ui, icon, text, url);
                 }
@@ -764,6 +768,8 @@ enum LinkIcon {
     Code,
     /// A globe, for a website.
     Globe,
+    /// An arrow down to a line, for a download.
+    Download,
 }
 
 /// A link as a rounded chip with an icon, opening in the browser.
@@ -805,6 +811,14 @@ fn chip(ui: &mut egui::Ui, icon: LinkIcon, text: &str, url: &str) {
                     stroke,
                 ));
                 p.line_segment([at(-6.0, 0.0), at(6.0, 0.0)], stroke);
+            }
+            LinkIcon::Download => {
+                p.line_segment([at(0.0, -6.0), at(0.0, 2.5)], stroke);
+                p.add(egui::Shape::line(
+                    vec![at(-3.5, -1.0), at(0.0, 2.5), at(3.5, -1.0)],
+                    stroke,
+                ));
+                p.line_segment([at(-5.5, 6.0), at(5.5, 6.0)], stroke);
             }
         }
     }
@@ -1062,13 +1076,14 @@ mod tests {
             "Trigger key",
             TRIGGER_HELP,
             "Start at login",
+            "Get version {}",
             "Without files",
             "Hold {} for a moment without dragging files: the wheel opens with your apps, what \
              is playing, the keyboard, the volume, the brightness and the system.",
             "Opens after",
             "Appearance",
             "Look",
-            "Like the system",
+            "System",
             "Light",
             "Dark",
             "Quick Apps",

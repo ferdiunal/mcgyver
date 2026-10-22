@@ -31,7 +31,7 @@ pub fn status_line(paused: bool) -> String {
     } else {
         "{} — ready"
     };
-    crate::i18n::trf(state, &[&APP_NAME])
+    crate::i18n::trf(state, &[&format!("{APP_NAME} {}", crate::update::VERSION)])
 }
 
 /// The modifier held during a drag to open the wheel, and tapped on its own to open it for
@@ -109,7 +109,7 @@ impl Appearance {
     /// Its name in English, for `tr`.
     pub fn label(self) -> &'static str {
         match self {
-            Appearance::System => "Like the system",
+            Appearance::System => "System",
             Appearance::Light => "Light",
             Appearance::Dark => "Dark",
         }

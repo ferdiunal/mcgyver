@@ -215,6 +215,12 @@ pub fn run() -> Result<(), String> {
         }
     };
     let tray = crate::tray::spawn(command_tx, settings.trigger);
+    let shown = tray.clone();
+    crate::update::start(move || {
+        if let Some(tray) = &shown {
+            tray.update(|_| {});
+        }
+    });
     let mut app = App {
         trigger: settings.trigger,
         hold: settings.hold,
@@ -705,7 +711,7 @@ impl OverlaySurface {
     }
 }
 
-/// With the look like the system's, the glass follows the desk's Dark Mode once it has switched
+/// With the look set to System, the glass follows the desk's Dark Mode once it has switched
 /// the desktop's colours, fading across with them. Where KWin fades the screen across itself,
 /// the glass has turned already (see `run_desk_commands`).
 fn follow_desk_dark(appearance: crate::settings::Appearance) {

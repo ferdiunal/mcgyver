@@ -22,6 +22,11 @@ use tray_icon::menu::Menu;
 use super::{Input, Shared, TOAST_MARGIN, WHEEL_AT, WINDOW};
 use crate::settings::Trigger;
 
+// Beside this file, as the other platforms' are.
+#[path = "mac_move.rs"]
+mod mac_move;
+pub(super) use mac_move::offer_move;
+
 /// macOS shows what a drag carries before it reaches the window (the drag pasteboard).
 pub(super) const SEES_DRAGGED_FILES: bool = true;
 /// The event tap may not hear a drag that comes from another app: while one is over the wheel,

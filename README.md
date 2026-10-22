@@ -1,16 +1,13 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/logo-on-dark.svg">
-  <img alt="McGyver" src="assets/logo.svg" height="96">
-</picture>
+<a href="https://mcgyver.ferdiunal.tr"><img alt="McGyver: drag a file, hold Shift, pick a wedge. A wheel of formats (PNG, WebP, AVIF, PDF…) open beside a desktop of files." src="site/src/assets/og.jpg" width="100%"></a>
 
-# McGyver (prototype)
+# McGyver
 
 A file wheel for KDE Plasma 6, macOS and Windows, written in Rust with
 [egui](https://github.com/emilk/egui). Drag files in your file manager and hold Shift: a wheel
 opens around the cursor with what those files can become: other formats, smaller, resized,
 merged, zipped, shared. Drop them on a wedge and it's done, without opening another app.
 
-**This is a prototype.** Done for real:
+Download it from [mcgyver.ferdiunal.tr](https://mcgyver.ferdiunal.tr/#download). What it does:
 - [pictures](#pictures)
 - image tools (compress, resize, square crop, rotate, strip EXIF)
 - [compressed files and folders](#compressed-files)
@@ -32,8 +29,8 @@ merged, zipped, shared. Drop them on a wedge and it's done, without opening anot
   volume, the brightness, screenshots and recordings, how busy the computer is, and switches for
   the whole computer (lock, dark mode, stay awake, the microphone, the trash, sleep)
 
-Everything the wheel offers is done for real. It runs on **KDE Plasma 6 (Wayland)**, and on
-**macOS** and **Windows** as first ports (see [macOS](#macos) and [Windows](#windows)).
+Everything the wheel offers is done for real. It runs on **KDE Plasma 6 (Wayland)**, **macOS**
+and **Windows** (see [macOS](#macos) and [Windows](#windows)).
 
 ## Run
 
@@ -48,8 +45,8 @@ Packages for the Snap Store, Debian/Ubuntu and Fedora: see [PACKAGING.md](PACKAG
 
 ### macOS
 
-A first port, in testing on Apple Silicon. Build the app on a Mac (needs Xcode's command line
-tools, `xcode-select --install`, and Rust from [rustup.rs](https://rustup.rs)):
+For macOS 11 or later, on Apple Silicon and Intel. Build the app on a Mac (needs Xcode's command
+line tools, `xcode-select --install`, and Rust from [rustup.rs](https://rustup.rs)):
 
 ```sh
 packaging/macos/build-app.sh          # → dist/McGyver.app and dist/McGyver-<version>-universal.dmg
@@ -59,8 +56,17 @@ open dist/McGyver.app
 
 The universal app holds both an Apple Silicon and an Intel build, so the same `.dmg` runs on any
 Mac with macOS 11 or later; either Mac can build it. On a Mac other than the one that built it,
-macOS refuses an app that isn't notarized: after copying it to Applications, run
-`xattr -dr com.apple.quarantine /Applications/McGyver.app` once (or Control-click it → Open).
+macOS refuses an app that isn't notarized: Control-click it → Open (from macOS 15 on, open it
+once, then System Settings → Privacy & Security → Open Anyway), or run
+`xattr -dr com.apple.quarantine /Applications/McGyver.app` once.
+
+Started from anywhere but an Applications folder (the disk image, Downloads), the app first
+offers to move itself there. **Move to Applications** copies it to `/Applications` (to
+`~/Applications` for a user who can't write the first), replaces an older McGyver there (asking
+for an administrator's password only when that copy isn't yours), ejects the disk image or puts
+the downloaded copy in the Trash, and starts it from its new place, its login item with it.
+**Do Not Move** keeps it where it is and doesn't ask again; delete
+`~/Library/Application Support/McGyver/not-moved` to be asked again.
 
 It sits in the menu bar (Pause, or Resume while paused, Settings…, Quit); there is no Dock icon,
 and opening the app again while it runs opens its settings. Drag files in Finder, hold the
@@ -102,7 +108,7 @@ an Apple Developer ID and notarization, not set up yet.
 
 ### Windows
 
-A first port, not yet run on a real Windows machine, for x64 and ARM64 PCs (Windows 10 and 11).
+For x64 and ARM64 PCs (Windows 10 and 11).
 It is built on Linux with [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) (zig
 brings MinGW's headers and libraries for both):
 
@@ -150,17 +156,19 @@ then takes the drag with Windows' own drag and drop. What differs:
 
 ### Tray and settings
 
-The app runs in the background with an icon in Plasma's system tray. Its menu has **Pause** (the
-trigger key does nothing until **Resume**, which takes its place; the icon fades), **Settings…**
-and **Quit**; clicking the icon opens the settings too. Starting the app while it runs opens its
+The app runs in the background with an icon in Plasma's system tray. Its menu starts with the
+version, then **Get version …** once a newer one is out (it opens the download page; see
+[Updates and privacy](#updates-and-privacy)), **Pause** (the trigger key does nothing until
+**Resume**, which takes its place; the icon fades), **Settings…** and **Quit**; clicking the icon
+opens the settings too. Starting the app while it runs opens its
 settings instead of a second copy (it holds the session-bus name `io.github.McGyver`), and only
 one settings window opens at a time. Quit waits for running conversions to finish.
 
 The settings window saves each change at once, to
 `~/.config/mcgyver/settings.conf`, and the running app picks it up straight away:
 
-- **Appearance:** light or dark glass, or like the system (followed as it changes, within a
-  second); the settings window follows too. Like the system, a click on the wheel's own Dark
+- **Appearance:** light or dark glass, or **System**: the system's look, followed as it changes
+  (within a second); the settings window follows too. With System, a click on the wheel's own Dark
   Mode turns the open wheel with it, as the desktop turns. A change of look fades across in
   under half a second: the glass blends, and the text fades out halfway and back in as the
   other colour, so it never sits grey on grey. On KDE, KWin fades the whole screen across when
@@ -195,6 +203,7 @@ The settings window saves each change at once, to
   tapped alone to two shortcuts at once, so "held by another shortcut" may never show there.
 - **About**, at the bottom: the version, who made McGyver with their e-mail, GitHub and website,
   and a banner to sponsor it on GitHub Sponsors. The links open in the browser (or the mail app).
+  When a newer version is out, a **Get version …** chip comes first.
 
 The rest of this README says Shift for the trigger key.
 
@@ -267,6 +276,29 @@ switches between the three modes:
   in between). The wheel opens at the pointer for those files; click an option, or click a ring
   slice to switch modes. A click anywhere else, a right click or another Shift tap closes it.
   Typing capitals and Shift-clicking don't count as taps.
+
+## Updates and privacy
+
+A minute after it starts, if it hasn't asked in the last day, and then once a day, the app asks
+[mcgyver.ferdiunal.tr](https://mcgyver.ferdiunal.tr) whether a newer version is out
+(`src/update.rs`, with the system's own `curl`). If there is one, the tray or menu bar menu and
+the settings' About offer it; nothing is downloaded or installed by itself. The last answer is
+kept in `update.conf` beside the settings.
+
+That question also carries:
+
+- the app's version, the operating system (Linux, macOS or Windows) and its version, the
+  processor type (`x86_64`, `aarch64`) and the app's language;
+- a machine ID: the system's own ID (`/etc/machine-id`, the Mac's hardware UUID, Windows'
+  `MachineGuid`) hashed with SHA-256 and a salt of the app's, which can't be turned back into it.
+
+The site also sees the IP address the question comes from and its country, and keeps them with
+that ID: when it was first and last seen, and on which days. That counts how many computers run
+McGyver, and which versions and systems to care for. No file, file name or anything done with
+the wheel ever leaves the computer. There is no setting for it; a build with debug assertions
+never asks, and neither does the app started with `MCGYVER_OFFLINE=1` in its environment (from a
+terminal, or on KDE in the autostart entry's `Exec=`, which Start at login writes again when it is
+switched; a Mac app opened from Finder doesn't see it, `launchctl setenv MCGYVER_OFFLINE 1` does).
 
 ## The wheel without files
 

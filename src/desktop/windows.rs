@@ -284,6 +284,11 @@ pub(super) fn restart() -> ! {
 /// Windows asks nothing of the app before it starts.
 pub(super) fn first_start() {}
 
+/// The app runs from wherever its zip was put.
+pub(super) fn offer_move() -> bool {
+    false
+}
+
 /// The window never takes the focus, not even when it is first shown.
 pub(super) fn viewport(viewport: egui::ViewportBuilder) -> egui::ViewportBuilder {
     viewport.with_active(false)

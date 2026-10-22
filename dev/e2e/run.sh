@@ -124,10 +124,11 @@ if [ "${1:-full}" = desk ]; then
     python3 -I "$HERE/desk_services.py" > "$OUT/desk-services.log" 2>&1 &
     PIDS+=($!)
 fi
-# MCGYVER_SOUND=0: the clicks would play on the real speakers. PipeWire and PulseAudio are
-# pointed at nothing, so the desk can't change the real volume either.
+# MCGYVER_SOUND=0: the clicks would play on the real speakers; MCGYVER_OFFLINE=1: no update
+# check reaches the site from a test. PipeWire and PulseAudio are pointed at nothing, so the
+# desk can't change the real volume either.
 # Stand-ins in out/bin come first.
-PATH="$OUT/bin:$PATH" MCGYVER_DEBUG=1 MCGYVER_SOUND=0 PIPEWIRE_REMOTE=mcgyver-e2e-none PULSE_SERVER=unix:/nonexistent \
+PATH="$OUT/bin:$PATH" MCGYVER_DEBUG=1 MCGYVER_SOUND=0 MCGYVER_OFFLINE=1 PIPEWIRE_REMOTE=mcgyver-e2e-none PULSE_SERVER=unix:/nonexistent \
     "$ROOT/target/release/mcgyver" > "$OUT/app.log" 2>&1 &
 PIDS+=($!)
 if [ "${SOURCE:-gtk}" = dolphin ]; then

@@ -1,4 +1,4 @@
-# Dark Mode from the desk: with the look like the system's (the default), the open wheel fades
+# Dark Mode from the desk: with the look set to System (the default), the open wheel fades
 # across as the desktop turns. System's wedges here: Lock, Dark Mode, Stay Awake, Empty Trash,
 # Desktop, Sleep (no microphone: PipeWire is out of reach), clockwise from the top.
 # plasma-apply-colorscheme writes the nested session's own kdeglobals (out/config); run.sh starts

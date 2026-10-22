@@ -402,6 +402,7 @@ fn turkish(english: &str) -> Option<&'static str> {
              dosyalar için açılır."
         }
         "Start at login" => "Oturum açılınca başlat",
+        "Get version {}" => "{} sürümünü indir",
         "Without files" => "Dosyasız",
         "Hold {} for a moment without dragging files: the wheel opens with your apps, what \
          is playing, the keyboard, the volume, the brightness and the system." => {
@@ -411,7 +412,6 @@ fn turkish(english: &str) -> Option<&'static str> {
         "Opens after" => "Açılma süresi",
         "Appearance" => "Görünüm",
         "Look" => "Tema",
-        "Like the system" => "Sistemdeki gibi",
         "Light" => "Açık",
         "Dark" => "Koyu",
         "On the wheel's Apps, in this order." => "Çarkın Uygulamalar kısmında, bu sırayla.",
@@ -442,6 +442,16 @@ fn turkish(english: &str) -> Option<&'static str> {
         "Version {}" => "Sürüm {}",
         "{} couldn't start." => "{} açılamadı.",
         "The details are in {}" => "Ayrıntılar şurada: {}",
+        // macOS, started from outside the Applications folder.
+        "Move to the Applications folder?" => "Uygulamalar klasörüne taşınsın mı?",
+        "McGyver runs best from the Applications folder: there it keeps working after the disk \
+         image is put away, and can start at login." => {
+            "McGyver en iyi Uygulamalar klasöründen çalışır: orada disk görüntüsü çıkarıldıktan \
+             sonra da çalışmaya devam eder ve oturum açılınca başlayabilir."
+        }
+        "Move to Applications" => "Uygulamalar'a taşı",
+        "Do Not Move" => "Taşıma",
+        "Couldn't move {} to the Applications folder" => "{} Uygulamalar klasörüne taşınamadı",
         "Sponsor on GitHub" => "GitHub'da sponsor ol",
         "If {} saves you time, you can support its development." => {
             "{} işinize yarıyorsa geliştirilmesine destek olabilirsiniz."

@@ -30,6 +30,7 @@ mod subtitles;
 mod sound;
 pub mod switcher;
 mod textures;
+pub mod update;
 pub mod wheel;
 
 #[cfg(target_os = "linux")]
