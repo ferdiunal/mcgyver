@@ -1,8 +1,9 @@
 name: release
 
+# Run by hand only: releases are built on our own machines (packaging/release.sh), and a tag
+# pushed by that script must not start a second release here. Run on a tag, it builds the snap,
+# .deb and .rpm as artifacts and publishes the snap to edge; it never touches the GitHub release.
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -56,22 +57,6 @@ jobs:
         with:
           name: rpm
           path: target/generate-rpm/*.rpm
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [snap, deb, rpm]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v8.0.2
-        with:
-          path: dist
-          merge-multiple: true
-      - uses: softprops/action-gh-release@v3.0.3
-        with:
-          files: dist/*
-          generate_release_notes: true
 
   publish-snap:
     if: startsWith(github.ref, 'refs/tags/v')

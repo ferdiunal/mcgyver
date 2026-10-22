@@ -14,7 +14,10 @@ settings are copied when McGyver has none yet, and its start-at-login entry is r
 | `snap/snapcraft.yaml` | Snap Store package (classic confinement, core24) |
 | `packaging/linux/mcgyver.desktop` | Menu entry, shared by all packages |
 | `Cargo.toml` | `[package.metadata.deb]` and `[package.metadata.generate-rpm]`, read by cargo-deb and cargo-generate-rpm |
-| `.github/workflows/release.yml` | On tag `v*`: builds snap, .deb, .rpm, attaches them to a GitHub release, publishes the snap to `edge` if the secret exists |
+| `packaging/release.sh` | Tags the version, builds what the machine can and uploads it to a draft GitHub release; `--publish` makes it the latest (see [Releases](#releases)) |
+| `packaging/linux/build.sh` | The .deb in an Ubuntu 24.04 container and the .rpm in a Fedora 43 one (podman) |
+| `packaging/notes/<version>.md` | Each release's notes |
+| `.github/workflows/release.yml` | Run by hand only: builds snap, .deb, .rpm as artifacts and, on a tag, publishes the snap to `edge` if the secret exists; it never touches the GitHub release |
 
 ## Why classic confinement
 
@@ -24,8 +27,36 @@ dirs) and launches host tools (terminal, kdialog, wl-copy, kdeconnect-cli, pw-pl
 cannot express this, so the snap is `confinement: classic`. Classic snaps need a manual store review.
 Consequence: host tools (kdialog, wl-copy, pw-play) come from the user's system, not the snap.
 
+## Releases
+
+Releases are built on our own machines, not in GitHub Actions:
+
+1. Set `version` in `Cargo.toml` (the site's version lines in `site/src` too), write
+   `packaging/notes/<version>.md`, commit and push.
+2. On Linux: `packaging/release.sh`. It tags `v<version>` on that commit and pushes the tag,
+   opens a draft release with the notes, builds the .deb and the .rpm in containers
+   (`packaging/linux/build.sh`) and the Windows zips (`packaging/windows/build.sh`), and uploads
+   them. Run again, it rebuilds and replaces them.
+3. On a Mac, from the same commit (`git fetch --tags && git checkout v<version>`):
+   `packaging/release.sh` builds the universal .dmg and uploads it to the same draft.
+4. `packaging/release.sh --publish`: the draft becomes the latest release, once it holds all five
+   files (.deb, .rpm, .dmg and both zips).
+5. Deploy the site after publishing (`cd site && npm run deploy`), with its version lines updated:
+   its download buttons hand out the latest published release, so they work only from then on.
+
+A published release's files are replaced only with `packaging/release.sh --force`.
+
+The repository is private, so the files aren't public on GitHub: the site hands them out.
+`https://mcgyver.ferdiunal.tr/download/<deb|rpm|macos|windows-x64|windows-arm64>` finds the file in
+the latest release and redirects to a short-lived link to it, with a read-only token
+(`GITHUB_TOKEN`, a secret of the site's Worker; see `site/wrangler.jsonc`). The apps' daily update
+check asks the same Worker (`/api/ping`, `/api/latest`), which reads the latest release's tag, so
+publishing is all an update takes. A draft or a pre-release is never offered.
+
 ## Build locally
 
+- **.deb and .rpm for a release:** `packaging/linux/build.sh` (podman, rootless): built in Ubuntu
+  24.04 and Fedora 43, so they ask for no newer glibc than those have → `dist/`.
 - **.deb** (Debian/Ubuntu, best on Ubuntu 24.04 so the glibc requirement stays low; a build on Fedora 44
   needs glibc 2.43 and will not run on Debian 12/Ubuntu 24.04):
   `cargo install cargo-deb && cargo build --release && cargo deb --no-build`
@@ -55,7 +86,8 @@ Consequence: host tools (kdialog, wl-copy, pw-play) come from the user's system,
    Reviewers vote; this can take days to weeks. Until approved, uploads work but cannot be released to stable.
 4. CI credentials: `snapcraft export-login --snaps mcgyver --acls package_access,package_push,package_release -`
    and store the output as the GitHub secret `SNAPCRAFT_STORE_CREDENTIALS`. The publish job is skipped without it.
-5. Tag `vX.Y.Z` -> CI builds and pushes to `edge`. Promote with `snapcraft release mcgyver <rev> stable`
+5. Run the release workflow by hand on the tag (Actions → release → Run workflow, `vX.Y.Z`): it
+   builds and pushes to `edge`. Promote with `snapcraft release mcgyver <rev> stable`
    (needs `grade: stable` in `snapcraft.yaml`).
 
 Fedora users need snapd for classic snaps: `sudo dnf install snapd && sudo ln -s /var/lib/snapd/snap /snap`
@@ -111,5 +143,5 @@ build script chose its Windows sources by the build machine, so `vendor/unrar_sy
 target instead. On Windows itself, `cargo build --release` (MSVC) needs neither.
 
 The exe is unsigned, so SmartScreen warns on first start; a code signing certificate (or Azure
-Trusted Signing) would stop that. It has no icon of its own in Explorer yet (the tray and the
-windows draw `assets/icon.svg`). Distribution would be GitHub Releases, then winget.
+Trusted Signing) would stop that. It is handed out through the site from GitHub Releases (see
+[Releases](#releases)); winget would come after.
