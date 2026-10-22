@@ -80,7 +80,9 @@ async function ping(request, env, ctx) {
   const osVersion = [...(form.get("os_version") ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim()].slice(0, 100).join("") || null;
   const arch = optional(form.get("arch"), /^[a-z0-9_]{1,16}$/);
   const lang = optional(form.get("lang"), /^[a-z-]{1,8}$/);
-  const ip = request.headers.get("CF-Connecting-IP");
+  // This zone leaves CF-Connecting-IP out (Cloudflare's "Remove visitor IP headers"); the runtime
+  // still sets X-Real-IP.
+  const ip = optional(request.headers.get("CF-Connecting-IP") ?? request.headers.get("X-Real-IP"), /^[0-9a-f:.]{2,45}$/);
   const country = request.cf?.country ?? null;
   const now = new Date().toISOString();
 
