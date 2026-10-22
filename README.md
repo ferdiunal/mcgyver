@@ -552,9 +552,17 @@ for screenshots, or the window opens on the desktop rather than under xvfb.
    `run.sh desk` holds Shift with no drag, with a stand-in player on the nested bus
    (`dev/e2e/desk_services.py`, its calls in `out/desk.log`) and three keyboard layouts in the
    nested KWin: it opens on the apps (the nested KWin's windows), switches to Media and clicks
-   Next, switches the layout to DE (`out/layout.txt` should read 2), shows System, lets go on
-   Pause, and checks that a short press opens nothing. PipeWire is pointed at nothing in every
-   run, so the volume is never touched. Every run starts after the welcome; `WELCOME=1` keeps it).
+   Next, switches the layout to DE (`out/layout.txt` should read 2), sets the volume to 50 %
+   through a stand-in `wpctl` (`out/wpctl.log`) and the brightness to 75 % through a stand-in
+   of Plasma's brightness service (`SetBrightness 7500` in `out/desk.log`), shows System, lets
+   go on Pause, and checks that a short press opens nothing, and
+   `run.sh share` drops a file on Share's Telegram bubble (a stand-in Telegram logs
+   `-sendpath` and the file to `out/telegram.log`) and on its WhatsApp bubble (the file's URI
+   is on the clipboard, `out/clipboard-whatsapp.txt`), and
+   `run.sh quickapps` moves the second of two quick apps up in the settings window, checks the
+   order saved (`out/quick-order.txt`) and that the wheel's Apps follows it. PipeWire is pointed
+   at nothing in every run, so the real volume is never touched. Every run starts after the
+   welcome; `WELCOME=1` keeps it).
 4. spectacle takes screenshots.
 
 Logs, screenshots and the files the app made go to `dev/e2e/out/`. This test caught a bug that only showed on NVIDIA:

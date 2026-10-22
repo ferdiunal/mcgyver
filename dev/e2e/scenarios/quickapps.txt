@@ -1,0 +1,35 @@
+# The quick apps' order, set in the settings and used by the wheel. run.sh makes two stand-in
+# apps, Alpha and Beta, quick apps in that order.
+log 1 a second launch opens the settings; down to the Quick Apps card
+shell $ROOT/target/release/mcgyver > $OUT/second.log 2>&1 &
+sleep 3000
+move 640 400
+sleep 200
+scroll 15
+sleep 100
+scroll 15
+sleep 100
+scroll 15
+sleep 100
+scroll 15
+sleep 500
+shot quick-1-card
+log 2 Beta's up arrow puts it first, and that is saved
+glide 751 740 10 20
+sleep 300
+press
+sleep 50
+release
+sleep 1000
+shot quick-2-moved
+shell grep quick_app $OUT/config/mcgyver/settings.conf > $OUT/quick-order.txt
+log 3 Shift held alone, off the window: the wheel's Apps has Beta before Alpha
+move 160 400
+sleep 500
+key 42 1
+sleep 1500
+wiggle 300
+shot quick-3-desk
+key 42 0
+sleep 500
+log done

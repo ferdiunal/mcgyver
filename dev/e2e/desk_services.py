@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """A stand-in for what the desk reads on a Plasma session, on the nested session's bus: a music
-player over MPRIS that is playing. (The nested KWin serves the keyboard layouts itself, from
-the kxkbrc run.sh writes.) Every call it gets is written to $OUT/desk.log, one per line."""
+player over MPRIS that is playing, and Plasma's screen brightness service with one built-in
+screen. (The nested KWin serves the keyboard layouts itself, from the kxkbrc run.sh writes.)
+Every call it gets is written to $OUT/desk.log, one per line."""
 import os
 import sys
 
@@ -29,11 +30,29 @@ MPRIS = """
 </node>
 """
 
+BRIGHTNESS = """
+<node>
+  <interface name="org.kde.ScreenBrightness">
+    <property name="DisplaysDBusNames" type="as" access="read"/>
+  </interface>
+  <interface name="org.kde.ScreenBrightness.Display">
+    <method name="SetBrightness">
+      <arg name="brightness" type="i" direction="in"/>
+      <arg name="flags" type="u" direction="in"/>
+    </method>
+    <property name="Brightness" type="i" access="read"/>
+    <property name="MaxBrightness" type="i" access="read"/>
+    <property name="IsInternal" type="b" access="read"/>
+  </interface>
+</node>
+"""
+
 state = {
     "PlaybackStatus": "Playing",
     "Shuffle": False,
     "LoopStatus": "None",
     "track": 0,
+    "brightness": 6000,
 }
 TRACKS = [("Teardrop", "Massive Attack"), ("Angel", "Massive Attack")]
 
@@ -80,6 +99,23 @@ def mpris_call(conn, sender, path, interface, method, params, invocation):
     invocation.return_value(None)
 
 
+def brightness_property(conn, sender, path, interface, name):
+    values = {
+        "DisplaysDBusNames": GLib.Variant("as", ["display0"]),
+        "Brightness": GLib.Variant("i", state["brightness"]),
+        "MaxBrightness": GLib.Variant("i", 10000),
+        "IsInternal": GLib.Variant("b", True),
+    }
+    return values.get(name)
+
+
+def brightness_call(conn, sender, path, interface, method, params, invocation):
+    value, _flags = params.unpack()
+    state["brightness"] = value
+    log(f"{method} {value}")
+    invocation.return_value(None)
+
+
 def main():
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     mpris = Gio.DBusNodeInfo.new_for_xml(MPRIS)
@@ -89,6 +125,20 @@ def main():
         )
     Gio.bus_own_name_on_connection(
         bus, "org.mpris.MediaPlayer2.e2e", Gio.BusNameOwnerFlags.NONE, None, None
+    )
+    screens = Gio.DBusNodeInfo.new_for_xml(BRIGHTNESS)
+    bus.register_object(
+        "/org/kde/ScreenBrightness", screens.interfaces[0], None, brightness_property, None
+    )
+    bus.register_object(
+        "/org/kde/ScreenBrightness/display0",
+        screens.interfaces[1],
+        brightness_call,
+        brightness_property,
+        None,
+    )
+    Gio.bus_own_name_on_connection(
+        bus, "org.kde.ScreenBrightness", Gio.BusNameOwnerFlags.NONE, None, None
     )
     log("ready")
     GLib.MainLoop().run()

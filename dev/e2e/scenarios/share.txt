@@ -1,0 +1,50 @@
+# Share's bubbles: run.sh puts Telegram and WhatsApp stand-ins in the nested session (their
+# desktop files in out/data, their programs in out/bin, logging to out/telegram.log and
+# out/whatsapp.log). The Actions wheel has 8 wedges, Share last (upper left); aimed at, it pops
+# out Phone, WhatsApp and Telegram. Telegram gets the file with -sendpath; WhatsApp takes no
+# files from outside, so the file goes on the clipboard and the app comes up.
+log 1 drag + shift, to Actions on the ring, out to Share, its Telegram bubble, drop
+move 300 300
+sleep 500
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 598 424 10 20
+sleep 700
+glide 557 317 15 20
+wiggle 400
+shot share-1-bubbles
+glide 524 215 10 20
+wiggle 300
+shot share-2-telegram
+release
+key 42 0
+sleep 1500
+shot share-3-sent
+log 2 again, to its WhatsApp bubble: the clipboard has the file
+move 300 300
+sleep 500
+press
+sleep 100
+glide 320 320 5 20
+glide 640 400 20 15
+key 42 1
+sleep 300
+wiggle 300
+glide 598 424 10 20
+sleep 700
+glide 557 317 15 20
+wiggle 400
+glide 486 246 10 20
+wiggle 300
+shot share-4-whatsapp
+release
+key 42 0
+sleep 2500
+shell wl-paste --type text/uri-list > "$OUT/clipboard-whatsapp.txt"
+shot share-5-sent
+log done

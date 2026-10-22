@@ -1,7 +1,8 @@
 # The wheel without files: hold Shift alone. desk_services.py stands in for a playing music
-# player (MPRIS; the calls it gets are in out/desk.log), and the nested KWin has three keyboard
-# layouts (EN, TR, DE; run.sh writes its kxkbrc); there is no volume (PipeWire is out of
-# reach) and no brightness here.
+# player (MPRIS) and Plasma's screen brightness (the calls they get are in out/desk.log), a
+# stand-in wpctl for the volume (out/wpctl.log; the real PipeWire is out of reach), and the
+# nested KWin has three keyboard layouts (EN, TR, DE; run.sh writes its kxkbrc). Everyday's
+# wedges: Keyboard, Volume, Brightness, Screenshot, Record, Monitor, clockwise from the top.
 # The pointer rests at (640, 400); the desk opens around it on the apps. The ring has four
 # slices, clockwise from the top: APPS, MEDIA (right), EVERYDAY (below), SYSTEM (left). Media's
 # wedges: Pause, Next, Repeat, the player, Shuffle, Previous, clockwise from the top.
@@ -45,17 +46,37 @@ sleep 50
 release
 sleep 400
 shell gdbus call --session --dest org.kde.keyboard --object-path /Layouts --method org.kde.KeyboardLayouts.getLayout > "$OUT/layout.txt"
-log 5 a click on the ring's SYSTEM slice shows its switches
+log 5 the volume pops its levels out, and a click on 50% sets it
+glide 742 341 10 20
+wiggle 400
+glide 829 291 10 20
+wiggle 300
+shot desk-7-volume
+press
+sleep 50
+release
+sleep 600
+log 6 the brightness pops its levels out, and a click on 75% sets it
+glide 742 459 10 20
+wiggle 400
+glide 800 548 10 20
+wiggle 300
+shot desk-8-brightness
+press
+sleep 50
+release
+sleep 600
+log 7 a click on the ring's SYSTEM slice shows its switches
 glide 592 400 10 20
 press
 sleep 50
 release
 sleep 1500
-shot desk-7-system
+shot desk-9-system
 key 42 0
 sleep 800
-shot desk-8-closed
-log 6 held again, to MEDIA, and let go on Pause: that pauses
+shot desk-10-closed
+log 8 held again, to MEDIA, and let go on Pause: that pauses
 move 640 400
 sleep 300
 key 42 1
@@ -70,13 +91,13 @@ glide 640 282 10 20
 wiggle 300
 key 42 0
 sleep 800
-shot desk-9-paused
-log 7 a short press opens nothing
+shot desk-11-paused
+log 9 a short press opens nothing
 shell grep -c "desk opened" "$OUT/app.log" > "$OUT/desks-before-tap.txt"
 key 42 1
 sleep 200
 key 42 0
 sleep 1000
 shell grep -c "desk opened" "$OUT/app.log" > "$OUT/desks-after-tap.txt"
-shot desk-10-tap
+shot desk-12-tap
 log done

@@ -57,9 +57,39 @@ if [ "${WELCOME:-}" != 1 ]; then
     mkdir -p "$OUT/config/mcgyver"
     printf 'welcomed = yes\n' > "$OUT/config/mcgyver/settings.conf"
 fi
-# The desk scenario switches between keyboard layouts, which KWin serves.
+# The desk scenario switches between keyboard layouts, which KWin serves, speaks English (so
+# it has no Language wedge), and turns a stand-in wpctl's volume, which logs to out/wpctl.log.
 if [ "${1:-full}" = desk ]; then
     printf '[Layout]\nDisplayNames=,,\nLayoutList=us,tr,de\nUse=true\nVariantList=,,\n' > "$OUT/config/kxkbrc"
+    printf '[Translations]\nLANGUAGE=en_US\n' > "$OUT/config/plasma-localerc"
+    mkdir -p "$OUT/bin"
+    printf '#!/bin/sh\necho "$*" >> "%s/wpctl.log"\n[ "$1" = get-volume ] && echo "Volume: 0.40"\nexit 0\n' \
+        "$OUT" > "$OUT/bin/wpctl"
+    chmod +x "$OUT/bin/wpctl"
+fi
+# The quick apps scenario: two stand-in apps, Alpha and Beta, both quick apps in that order.
+if [ "${1:-full}" = quickapps ]; then
+    mkdir -p "$OUT/data/applications" "$OUT/config/mcgyver"
+    for app in Alpha Beta; do
+        printf '[Desktop Entry]\nType=Application\nName=%s\nExec=/bin/true\n' "$app" \
+            > "$OUT/data/applications/$(echo "$app" | tr '[:upper:]' '[:lower:]').desktop"
+    done
+    printf 'welcomed = yes\nquick_app = alpha.desktop\nquick_app = beta.desktop\n' \
+        > "$OUT/config/mcgyver/settings.conf"
+fi
+# The share scenario's messaging apps: Telegram and WhatsApp stand-ins that log how they were
+# started to out/telegram.log and out/whatsapp.log.
+if [ "${1:-full}" = share ]; then
+    mkdir -p "$OUT/bin" "$OUT/data/applications"
+    for app in Telegram WhatsApp; do
+        lower=$(echo "$app" | tr '[:upper:]' '[:lower:]')
+        printf '#!/bin/sh\necho "$*" >> "%s/%s.log"\n' "$OUT" "$lower" > "$OUT/bin/$app"
+        chmod +x "$OUT/bin/$app"
+    done
+    printf '[Desktop Entry]\nType=Application\nName=Telegram Desktop\nExec=%s/bin/Telegram -- %%u\n' \
+        "$OUT" > "$OUT/data/applications/org.telegram.desktop.desktop"
+    printf '[Desktop Entry]\nType=Application\nName=WhatsApp\nExec=%s/bin/WhatsApp %%U\n' \
+        "$OUT" > "$OUT/data/applications/whatsapp-for-linux.desktop"
 fi
 env $CHECKS kwin_wayland --no-lockscreen --virtual \
     --width 1280 --height 800 --socket "$SOCKET" > "$OUT/kwin.log" 2>&1 &
@@ -91,7 +121,8 @@ if [ "${1:-full}" = desk ]; then
 fi
 # MCGYVER_SOUND=0: the clicks would play on the real speakers. PipeWire and PulseAudio are
 # pointed at nothing, so the desk can't change the real volume either.
-MCGYVER_DEBUG=1 MCGYVER_SOUND=0 PIPEWIRE_REMOTE=mcgyver-e2e-none PULSE_SERVER=unix:/nonexistent \
+# Stand-ins in out/bin come first.
+PATH="$OUT/bin:$PATH" MCGYVER_DEBUG=1 MCGYVER_SOUND=0 PIPEWIRE_REMOTE=mcgyver-e2e-none PULSE_SERVER=unix:/nonexistent \
     "$ROOT/target/release/mcgyver" > "$OUT/app.log" 2>&1 &
 PIDS+=($!)
 if [ "${SOURCE:-gtk}" = dolphin ]; then

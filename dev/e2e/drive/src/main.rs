@@ -70,6 +70,8 @@ fn main() {
                 }
                 fi.pointer_motion_absolute(pos.0, pos.1);
             }
+            // `scroll DY`: the wheel, DY points down (negative: up).
+            Some("scroll") => fi.axis(0, num(1)),
             Some("press") => fi.button(BTN_LEFT, 1),
             Some("release") => fi.button(BTN_LEFT, 0),
             Some("key") => fi.keyboard_key(num(1) as u32, num(2) as u32),
