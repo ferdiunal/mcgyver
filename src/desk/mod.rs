@@ -1,13 +1,18 @@
-//! The wheel without files, for the trigger key held on its own: the player that is playing,
-//! everyday settings (keyboard layout, volume, brightness), and the quick apps picked in the
-//! settings. Also sharing files with messaging apps, which needs the same knowledge of what is
-//! installed. What the system has and does is in `linux`, `mac` and `windows`.
+//! The wheel without files, for the trigger key held on its own: the apps open (to switch to)
+//! and the quick apps picked in the settings, the player that is playing, everyday settings
+//! (keyboard layout, language, volume, brightness, screenshots, how busy the computer is) and
+//! the system (lock, dark mode, staying awake, the microphone, the trash, sleep). Also sharing
+//! files with messaging apps, which needs the same knowledge of what is installed. What the
+//! system has and does is in `linux`, `mac` and `windows`.
 
 use std::path::PathBuf;
 use std::sync::mpsc;
 
 use crate::catalog::Mode;
 use crate::i18n::{tr, trf};
+
+mod languages;
+mod monitor;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -23,6 +28,12 @@ mod windows;
 use windows as system;
 
 pub use system::installed_apps;
+
+/// The icon an app's desktop file names (a theme icon's name or a path), for `icons`.
+#[cfg(target_os = "linux")]
+pub(crate) fn icon_name(id: &str) -> Option<String> {
+    linux::icon_of(id)
+}
 
 /// What is playing, as the player tells it.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -93,6 +104,15 @@ pub enum MediaKey {
     Raise,
 }
 
+/// What a screenshot or a recording takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Shot {
+    /// A part picked with the pointer.
+    Region,
+    Screen,
+    Window,
+}
+
 /// Something a wedge or a bubble does.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Command {
@@ -108,13 +128,82 @@ pub enum Command {
         player: String,
         to: Repeat,
     },
+    /// Types with this keyboard layout; one not set up yet (its id starts with `+`) is added.
     Layout(String),
     Volume(f32),
     Mute(bool),
     Brightness(f32),
     Launch(App),
+    /// Brings a window (`switcher::Window::id`) forward.
+    Activate(String),
+    Screenshot(Shot),
+    Record(Shot),
+    /// Makes this the language the computer speaks, from the next login.
+    Language(String),
+    MuteMic(bool),
+    DarkMode(bool),
+    StayAwake(bool),
+    Lock,
+    Sleep,
+    EmptyTrash,
+    ShowDesktop,
+    /// Opens the system's monitor app.
+    Monitor,
     /// Opens the settings, to pick quick apps.
     Settings,
+}
+
+impl Command {
+    /// Whether only a click does it, not letting go of the key on it: what can't be undone, or
+    /// changes the system's settings for good.
+    pub fn needs_click(&self) -> bool {
+        match self {
+            Command::EmptyTrash | Command::Sleep | Command::Language(_) => true,
+            Command::Layout(id) => id.starts_with('+'),
+            _ => false,
+        }
+    }
+
+    /// Whether it opens or changes something the wheel would be in the way of, so the wheel
+    /// closes first (and a screenshot waits for it to have gone).
+    pub fn leaves(&self) -> bool {
+        matches!(
+            self,
+            Command::Launch(_)
+                | Command::Activate(_)
+                | Command::Settings
+                | Command::Media {
+                    key: MediaKey::Raise,
+                    ..
+                }
+                | Command::Screenshot(_)
+                | Command::Record(_)
+                | Command::Lock
+                | Command::Sleep
+                | Command::ShowDesktop
+                | Command::Monitor
+        )
+    }
+}
+
+/// A language the computer can speak.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Language {
+    /// How the system names it ("tr_TR", "en-US").
+    pub id: String,
+    /// "TR", "EN".
+    pub short: String,
+    /// Its own name: "Türkçe", "English".
+    pub name: String,
+}
+
+/// How busy the computer is, each 0 → 1.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Usage {
+    pub processor: f32,
+    pub memory: f32,
+    /// The disk the system is on.
+    pub disk: f32,
 }
 
 /// What the system has now, read when the wheel opens and again after each command.
@@ -124,21 +213,42 @@ pub struct Menu {
     pub layouts: Vec<Layout>,
     /// Which of `layouts` is in use.
     pub layout: Option<usize>,
+    /// Layouts not set up yet that the computer's languages would want (ids start with `+`).
+    pub more_layouts: Vec<Layout>,
+    /// The languages the computer may speak, and which it speaks now.
+    pub languages: Vec<Language>,
+    pub language: Option<usize>,
     pub volume: Option<Volume>,
     /// 0 → 1.
     pub brightness: Option<f32>,
+    /// Whether the microphone is muted, where that can be read.
+    pub mic_muted: Option<bool>,
+    /// Whether the desktop is dark, where that can be switched.
+    pub dark: Option<bool>,
+    /// Whether the computer is kept awake, where it can be.
+    pub awake: Option<bool>,
+    /// What screenshots and recordings can be taken of; with one, there is nothing to pick.
+    pub shots: Vec<Shot>,
+    pub records: Vec<Shot>,
+    pub usage: Option<Usage>,
+    /// Other apps' windows, the one used last first.
+    pub windows: Vec<crate::switcher::Window>,
     /// The quick apps, in the order the settings keep them.
     pub apps: Vec<App>,
 }
 
 /// One wedge: its label, the caption while it is aimed at, what it does when picked (if
 /// anything; some only hold options), and the options that pop out around it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Item {
     pub label: String,
     pub caption: String,
     pub command: Option<Command>,
     pub subs: Vec<Sub>,
+    /// The app whose icon it shows (as `icons::app` takes it).
+    pub icon: Option<String>,
+    /// A switch: on or off.
+    pub on: Option<bool>,
 }
 
 /// One option popping out of a wedge, as a bubble.
@@ -149,11 +259,40 @@ pub struct Sub {
     pub command: Command,
     /// What is in use now: the layout typed with, the level nearest the one set.
     pub on: bool,
+    /// The app whose icon it shows instead of its label.
+    pub icon: Option<String>,
+    /// A gauge around it, full at 1.
+    pub gauge: Option<f32>,
 }
+
+impl Sub {
+    fn new(label: impl Into<String>, caption: impl Into<String>, command: Command) -> Sub {
+        Sub {
+            label: label.into(),
+            caption: caption.into(),
+            command,
+            on: false,
+            icon: None,
+            gauge: None,
+        }
+    }
+
+    fn on(self, on: bool) -> Sub {
+        Sub { on, ..self }
+    }
+}
+
+/// How often the desk is read again while it shows what changes by itself: how busy the
+/// computer is, and the switches.
+pub const LIVE: std::time::Duration = std::time::Duration::from_secs(1);
 
 /// Volume and brightness levels offered as bubbles.
 const VOLUME_STEPS: [f32; 4] = [0.25, 0.5, 0.75, 1.0];
 const BRIGHTNESS_STEPS: [f32; 5] = [0.1, 0.25, 0.5, 0.75, 1.0];
+/// More wedges than this get too narrow to aim at.
+const MOST_WEDGES: usize = 8;
+/// Wedges kept for quick apps that aren't open, when that many are.
+const QUICK_ROOM: usize = 3;
 
 fn percent(level: f32) -> String {
     format!("{}%", (level * 100.0).round() as i32)
@@ -170,7 +309,35 @@ fn nearest(steps: &[f32], level: f32) -> usize {
         .unwrap_or(0)
 }
 
+/// What an app id comes to for telling whether a window is that app's: its last path part,
+/// without `.desktop`, in lower case.
+fn app_key(id: &str) -> String {
+    let id = id.trim_end_matches(".desktop");
+    id.rsplit(['/', '\\']).next().unwrap_or(id).to_lowercase()
+}
+
 impl Menu {
+    /// This menu with what changes by itself read again (how busy the computer is, the volume,
+    /// the brightness, the switches), the rest as it was: for a desk left open.
+    pub fn read_live(&self) -> Menu {
+        std::thread::scope(|s| {
+            let volume = s.spawn(system::volume);
+            let brightness = s.spawn(system::brightness);
+            let mic = s.spawn(system::mic_muted);
+            let dark = s.spawn(system::dark);
+            let usage = s.spawn(monitor::usage);
+            Menu {
+                volume: volume.join().ok().flatten(),
+                brightness: brightness.join().ok().flatten(),
+                mic_muted: mic.join().ok().flatten(),
+                dark: dark.join().ok().flatten(),
+                awake: system::awake(),
+                usage: usage.join().ok().flatten(),
+                ..self.clone()
+            }
+        })
+    }
+
     /// Reads what the system has, with the quick apps the settings name (those still installed),
     /// the parts side by side. The layouts are read on this thread: macOS wants them read on
     /// the main one, and this may be it.
@@ -179,30 +346,50 @@ impl Menu {
             let player = s.spawn(system::player);
             let volume = s.spawn(system::volume);
             let brightness = s.spawn(system::brightness);
+            let languages = s.spawn(system::languages);
+            let mic = s.spawn(system::mic_muted);
+            let dark = s.spawn(system::dark);
+            let windows = s.spawn(crate::switcher::windows);
+            let usage = s.spawn(monitor::usage);
             let apps = s.spawn(|| quick_apps.iter().filter_map(|id| system::app(id)).collect());
             let (layouts, layout) = system::layouts();
+            let (languages, language) = languages.join().unwrap_or_default();
+            let more_layouts = more_layouts(&layouts, language.and_then(|i| languages.get(i)));
+            let (shots, records) = system::captures();
             Menu {
                 player: player.join().ok().flatten(),
                 layouts,
                 layout,
+                more_layouts,
+                languages,
+                language,
                 volume: volume.join().ok().flatten(),
                 brightness: brightness.join().ok().flatten(),
+                mic_muted: mic.join().ok().flatten(),
+                dark: dark.join().ok().flatten(),
+                awake: system::awake(),
+                shots,
+                records,
+                usage: usage.join().ok().flatten(),
+                windows: windows.join().unwrap_or_default(),
                 apps: apps.join().unwrap_or_default(),
             }
         })
     }
 
-    /// The modes it offers, in ring order: the player only while something plays or is paused,
-    /// and the apps always (with a way to pick some when there are none yet).
+    /// The modes it offers, in ring order: the apps (open ones to switch to, and the quick
+    /// ones), the player only while something plays or is paused, everyday settings and the
+    /// system.
     pub fn modes(&self) -> Vec<Mode> {
-        let mut modes = Vec::new();
+        let mut modes = vec![Mode::Apps];
         if self.player.is_some() {
             modes.push(Mode::Media);
         }
-        if !self.items(Mode::Everyday).is_empty() {
-            modes.push(Mode::Everyday);
+        for mode in [Mode::Everyday, Mode::System] {
+            if !self.items(mode).is_empty() {
+                modes.push(mode);
+            }
         }
-        modes.push(Mode::Apps);
         modes
     }
 
@@ -210,22 +397,8 @@ impl Menu {
         match mode {
             Mode::Media => self.player.as_ref().map(media).unwrap_or_default(),
             Mode::Everyday => self.everyday(),
-            Mode::Apps if self.apps.is_empty() => vec![Item {
-                label: tr("Choose apps…").into(),
-                caption: tr("Pick quick apps in the settings").into(),
-                command: Some(Command::Settings),
-                subs: Vec::new(),
-            }],
-            Mode::Apps => self
-                .apps
-                .iter()
-                .map(|app| Item {
-                    label: app.name.clone(),
-                    caption: trf("Open {}", &[&app.name]),
-                    command: Some(Command::Launch(app.clone())),
-                    subs: Vec::new(),
-                })
-                .collect(),
+            Mode::Apps => self.dock(),
+            Mode::System => self.system(),
             Mode::Convert | Mode::Tools | Mode::Actions => Vec::new(),
         }
     }
@@ -241,6 +414,7 @@ impl Menu {
                 .map(|l| l.short.clone())
                 .or_else(|| self.volume.map(|v| percent(v.level)))
                 .unwrap_or_default(),
+            (Mode::System, _) => tr("System").into(),
             _ => tr("Apps").into(),
         }
     }
@@ -259,6 +433,8 @@ impl Menu {
                 }
                 parts.join(" · ")
             }
+            (Mode::System, _) => self.usage.map(usage_caption).unwrap_or_default(),
+            _ if !self.windows.is_empty() => tr("Switch to an app").into(),
             _ => tr("Quick Apps").into(),
         }
     }
@@ -290,6 +466,11 @@ impl Menu {
                     self.layout = Some(i);
                 }
             }
+            Command::Language(id) => {
+                if let Some(i) = self.languages.iter().position(|l| &l.id == id) {
+                    self.language = Some(i);
+                }
+            }
             Command::Volume(level) => {
                 self.volume = Some(Volume {
                     level: *level,
@@ -306,56 +487,185 @@ impl Menu {
                     self.brightness = Some(*level);
                 }
             }
-            Command::Media { .. } | Command::Launch(_) | Command::Settings => {}
+            Command::MuteMic(on) => self.mic_muted = Some(*on),
+            Command::DarkMode(on) => self.dark = Some(*on),
+            Command::StayAwake(on) => self.awake = Some(*on),
+            _ => {}
         }
+    }
+
+    /// The open apps to switch to, the one used last first and the one in front last, each
+    /// with its windows as bubbles when it has several; then the quick apps that aren't open.
+    fn dock(&self) -> Vec<Item> {
+        let mut groups: Vec<(String, Vec<&crate::switcher::Window>)> = Vec::new();
+        for window in &self.windows {
+            let key = if window.app_id.is_empty() {
+                window.app.to_lowercase()
+            } else {
+                app_key(&window.app_id)
+            };
+            match groups.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, windows)) => windows.push(window),
+                None => groups.push((key, vec![window])),
+            }
+        }
+        // The app in front is where you are; the others are where you'd go.
+        groups.sort_by_key(|(_, windows)| windows.iter().any(|w| w.active));
+        // Room is kept for a few quick apps that aren't open.
+        let closed = self
+            .apps
+            .iter()
+            .filter(|app| {
+                let key = app_key(&app.id);
+                !groups
+                    .iter()
+                    .any(|(k, w)| *k == key || w[0].app.eq_ignore_ascii_case(&app.name))
+            })
+            .count();
+        // Past that, the one in front goes first (it is where you are), then those used least
+        // lately.
+        groups.truncate(MOST_WEDGES - closed.min(QUICK_ROOM));
+        let mut items: Vec<Item> = groups
+            .iter()
+            .map(|(_, windows)| {
+                let first = windows[0];
+                let subs = if windows.len() > 1 {
+                    windows
+                        .iter()
+                        .enumerate()
+                        .map(|(i, w)| {
+                            Sub::new(
+                                (i + 1).to_string(),
+                                w.title.clone(),
+                                Command::Activate(w.id.clone()),
+                            )
+                            .on(w.active)
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                Item {
+                    label: first.app.clone(),
+                    caption: first.title.clone(),
+                    command: Some(Command::Activate(first.id.clone())),
+                    subs,
+                    icon: Some(first.app_id.clone()).filter(|id| !id.is_empty()),
+                    on: None,
+                }
+            })
+            .collect();
+        let open: Vec<String> = groups.iter().map(|(key, _)| key.clone()).collect();
+        let names: Vec<String> = items.iter().map(|i| i.label.to_lowercase()).collect();
+        for app in &self.apps {
+            if open.contains(&app_key(&app.id)) || names.contains(&app.name.to_lowercase()) {
+                continue;
+            }
+            items.push(Item {
+                label: app.name.clone(),
+                caption: trf("Open {}", &[&app.name]),
+                command: Some(Command::Launch(app.clone())),
+                icon: Some(app.id.clone()),
+                ..Item::default()
+            });
+        }
+        items.truncate(MOST_WEDGES);
+        if items.is_empty() {
+            items.push(Item {
+                label: tr("Choose apps…").into(),
+                caption: tr("Pick quick apps in the settings").into(),
+                command: Some(Command::Settings),
+                ..Item::default()
+            });
+        }
+        items
     }
 
     fn everyday(&self) -> Vec<Item> {
         let mut items = Vec::new();
-        if self.layouts.len() > 1 {
+        let switchable = self.layouts.len() + self.more_layouts.len();
+        if switchable > 1 {
             let current = self.layout.and_then(|i| self.layouts.get(i));
             let next = self.layout.map_or(0, |i| (i + 1) % self.layouts.len());
+            let mut subs: Vec<Sub> = self
+                .layouts
+                .iter()
+                .enumerate()
+                .map(|(i, l)| {
+                    Sub::new(
+                        l.short.clone(),
+                        l.name.clone(),
+                        Command::Layout(l.id.clone()),
+                    )
+                    .on(self.layout == Some(i))
+                })
+                .collect();
+            subs.extend(self.more_layouts.iter().map(|l| {
+                Sub::new(
+                    l.short.clone(),
+                    trf("Add {}", &[&l.name]),
+                    Command::Layout(l.id.clone()),
+                )
+            }));
             items.push(Item {
                 label: tr("Keyboard").into(),
                 caption: current.map_or_else(String::new, |l| l.name.clone()),
-                command: Some(Command::Layout(self.layouts[next].id.clone())),
+                command: (self.layouts.len() > 1)
+                    .then(|| Command::Layout(self.layouts[next].id.clone())),
+                subs,
+                ..Item::default()
+            });
+        }
+        if self.languages.len() > 1 {
+            let current = self.language.and_then(|i| self.languages.get(i));
+            items.push(Item {
+                label: tr("Language").into(),
+                caption: current.map_or_else(String::new, |l| l.name.clone()),
                 subs: self
-                    .layouts
+                    .languages
                     .iter()
                     .enumerate()
-                    .map(|(i, l)| Sub {
-                        label: l.short.clone(),
-                        caption: l.name.clone(),
-                        command: Command::Layout(l.id.clone()),
-                        on: self.layout == Some(i),
+                    .map(|(i, l)| {
+                        let caption = if self.language == Some(i) {
+                            l.name.clone()
+                        } else {
+                            trf("{} after you log in again", &[&l.name])
+                        };
+                        Sub::new(l.short.clone(), caption, Command::Language(l.id.clone()))
+                            .on(self.language == Some(i))
                     })
                     .collect(),
+                ..Item::default()
             });
         }
         if let Some(volume) = self.volume {
-            let mut subs = vec![Sub {
-                label: tr(if volume.muted { "Unmute" } else { "Mute" }).into(),
-                caption: tr(if volume.muted {
-                    "Turn the sound back on"
-                } else {
-                    "Turn the sound off"
-                })
-                .into(),
-                command: Command::Mute(!volume.muted),
-                on: volume.muted,
-            }];
+            let mut subs = vec![
+                Sub::new(
+                    tr(if volume.muted { "Unmute" } else { "Mute" }),
+                    tr(if volume.muted {
+                        "Turn the sound back on"
+                    } else {
+                        "Turn the sound off"
+                    }),
+                    Command::Mute(!volume.muted),
+                )
+                .on(volume.muted),
+            ];
             let near = nearest(&VOLUME_STEPS, volume.level);
-            subs.extend(VOLUME_STEPS.iter().enumerate().map(|(i, &level)| Sub {
-                label: percent(level),
-                caption: trf("Volume {}", &[&percent(level)]),
-                command: Command::Volume(level),
-                on: !volume.muted && i == near,
+            subs.extend(VOLUME_STEPS.iter().enumerate().map(|(i, &level)| {
+                Sub::new(
+                    percent(level),
+                    trf("Volume {}", &[&percent(level)]),
+                    Command::Volume(level),
+                )
+                .on(!volume.muted && i == near)
             }));
             items.push(Item {
                 label: tr("Volume").into(),
                 caption: volume_caption(volume),
                 command: Some(Command::Mute(!volume.muted)),
                 subs,
+                ..Item::default()
             });
         }
         if let Some(now) = self.brightness {
@@ -363,20 +673,156 @@ impl Menu {
             items.push(Item {
                 label: tr("Brightness").into(),
                 caption: trf("Brightness {}", &[&percent(now)]),
-                command: None,
                 subs: BRIGHTNESS_STEPS
                     .iter()
                     .enumerate()
-                    .map(|(i, &level)| Sub {
-                        label: percent(level),
-                        caption: trf("Brightness {}", &[&percent(level)]),
-                        command: Command::Brightness(level),
-                        on: i == near,
+                    .map(|(i, &level)| {
+                        Sub::new(
+                            percent(level),
+                            trf("Brightness {}", &[&percent(level)]),
+                            Command::Brightness(level),
+                        )
+                        .on(i == near)
                     })
                     .collect(),
+                ..Item::default()
+            });
+        }
+        let pick = |shot: Shot| match shot {
+            Shot::Region => ("Area", "Pick an area"),
+            Shot::Screen => ("Screen", "The whole screen"),
+            Shot::Window => ("Window", "The window in front"),
+        };
+        let choices = |shots: &[Shot], command: fn(Shot) -> Command| -> Vec<Sub> {
+            if shots.len() < 2 {
+                return Vec::new();
+            }
+            shots
+                .iter()
+                .map(|&shot| {
+                    let (label, caption) = pick(shot);
+                    Sub::new(tr(label), tr(caption), command(shot))
+                })
+                .collect()
+        };
+        if let Some(&first) = self.shots.first() {
+            items.push(Item {
+                label: tr("Screenshot").into(),
+                caption: tr(pick(first).1).into(),
+                command: Some(Command::Screenshot(first)),
+                subs: choices(&self.shots, Command::Screenshot),
+                ..Item::default()
+            });
+        }
+        if let Some(&first) = self.records.first() {
+            items.push(Item {
+                label: tr("Record").into(),
+                caption: tr("Record the screen").into(),
+                command: Some(Command::Record(first)),
+                subs: choices(&self.records, Command::Record),
+                ..Item::default()
+            });
+        }
+        if let Some(usage) = self.usage {
+            let gauge = |label: &str, caption: &str, level: f32| Sub {
+                gauge: Some(level),
+                ..Sub::new(
+                    format!("{}\n{}", tr(label), percent(level)),
+                    trf(caption, &[&percent(level)]),
+                    Command::Monitor,
+                )
+            };
+            items.push(Item {
+                label: tr("Monitor").into(),
+                caption: usage_caption(usage),
+                command: Some(Command::Monitor),
+                subs: vec![
+                    gauge("CPU", "Processor {}", usage.processor),
+                    gauge("RAM", "Memory {}", usage.memory),
+                    gauge("Disk", "Disk {} full", usage.disk),
+                ],
+                ..Item::default()
             });
         }
         items
+    }
+
+    /// Switches (shown on or off) and actions for the whole computer.
+    fn system(&self) -> Vec<Item> {
+        let switch = |label: &str, on: bool, command: Command| {
+            let state = tr(if on { "On" } else { "Off" });
+            Item {
+                label: tr(label).into(),
+                caption: format!("{} · {state}", tr(label)),
+                command: Some(command),
+                on: Some(on),
+                ..Item::default()
+            }
+        };
+        let action = |label: &str, caption: &str, command: Command| Item {
+            label: tr(label).into(),
+            caption: tr(caption).into(),
+            command: Some(command),
+            ..Item::default()
+        };
+        let mut items = vec![action("Lock", "Lock the screen", Command::Lock)];
+        if let Some(dark) = self.dark {
+            items.push(switch("Dark Mode", dark, Command::DarkMode(!dark)));
+        }
+        if let Some(awake) = self.awake {
+            items.push(switch("Stay Awake", awake, Command::StayAwake(!awake)));
+        }
+        if let Some(muted) = self.mic_muted {
+            let mut mic = switch("Microphone", !muted, Command::MuteMic(!muted));
+            mic.caption = tr(if muted {
+                "The microphone is muted"
+            } else {
+                "The microphone is on"
+            })
+            .into();
+            items.push(mic);
+        }
+        items.push(action(
+            "Empty Trash",
+            "Empty the trash",
+            Command::EmptyTrash,
+        ));
+        if cfg!(not(target_os = "macos")) {
+            items.push(action("Desktop", "Show the desktop", Command::ShowDesktop));
+        }
+        items.push(action("Sleep", "Put the computer to sleep", Command::Sleep));
+        items
+    }
+}
+
+/// "CPU 12% · Memory 48% · Disk 70%".
+fn usage_caption(usage: Usage) -> String {
+    [
+        trf("Processor {}", &[&percent(usage.processor)]),
+        trf("Memory {}", &[&percent(usage.memory)]),
+        trf("Disk {} full", &[&percent(usage.disk)]),
+    ]
+    .join(" · ")
+}
+
+/// The keyboard layout the language the computer speaks would want, if it isn't set up yet.
+fn more_layouts(layouts: &[Layout], language: Option<&Language>) -> Vec<Layout> {
+    if !system::ADDS_LAYOUTS {
+        return Vec::new();
+    }
+    let Some(language) = language else {
+        return Vec::new();
+    };
+    let code = languages::code(&language.id);
+    match languages::layout_for(&code) {
+        Some(layout) if !layouts.iter().any(|l| l.short.eq_ignore_ascii_case(layout)) => {
+            vec![Layout {
+                id: format!("+{layout}"),
+                short: layout.to_uppercase(),
+                name: language.name.clone(),
+            }]
+        }
+        _ => Vec::new(),
     }
 }
 
@@ -410,14 +856,14 @@ fn media(player: &Player) -> Vec<Item> {
         label: tr(if player.playing { "Pause" } else { "Play" }).into(),
         caption: playing.clone(),
         command: Some(key(MediaKey::PlayPause)),
-        subs: Vec::new(),
+        ..Item::default()
     }];
     if player.can_next {
         items.push(Item {
             label: tr("Next").into(),
             caption: tr("Next track").into(),
             command: Some(key(MediaKey::Next)),
-            subs: Vec::new(),
+            ..Item::default()
         });
     }
     if let Some(repeat) = player.repeat {
@@ -433,14 +879,15 @@ fn media(player: &Player) -> Vec<Item> {
                 player: id.clone(),
                 to: repeat.next(),
             }),
-            subs: Vec::new(),
+            on: Some(repeat != Repeat::Off),
+            ..Item::default()
         });
     }
     items.push(Item {
         label: player.name.clone(),
         caption: trf("Open {}", &[&player.name]),
         command: Some(key(MediaKey::Raise)),
-        subs: Vec::new(),
+        ..Item::default()
     });
     if let Some(on) = player.shuffle {
         items.push(Item {
@@ -455,7 +902,8 @@ fn media(player: &Player) -> Vec<Item> {
                 player: id.clone(),
                 on: !on,
             }),
-            subs: Vec::new(),
+            on: Some(on),
+            ..Item::default()
         });
     }
     if player.can_previous {
@@ -463,10 +911,16 @@ fn media(player: &Player) -> Vec<Item> {
             label: tr("Previous").into(),
             caption: tr("Previous track").into(),
             command: Some(key(MediaKey::Previous)),
-            subs: Vec::new(),
+            ..Item::default()
         });
     }
     items
+}
+
+/// Whether files are selected in the file manager in front: holding Shift over them is for
+/// selecting more, not for the wheel.
+pub fn selecting() -> bool {
+    system::selecting()
 }
 
 /// Lists the apps and reads what is slow to read ahead, on a thread, so the first wheel
@@ -483,6 +937,11 @@ pub fn warm() {
 pub fn run(command: &Command) -> Result<(), String> {
     match command {
         Command::Settings => Err("the settings are opened by the app".into()),
+        Command::Screenshot(_) | Command::Record(_) => {
+            // Not with the wheel in the picture: it has folded away by then.
+            std::thread::sleep(std::time::Duration::from_millis(350));
+            system::run(command)
+        }
         command => system::run(command),
     }
 }
@@ -495,25 +954,41 @@ const SETTLE_AFTER_COMMAND: std::time::Duration = std::time::Duration::from_mill
 /// number, larger than the last; the reading comes back with it, so a reading for a wheel that
 /// has closed since can be told apart.
 pub struct Runner {
-    jobs: mpsc::Sender<(Vec<Command>, Vec<String>, u64)>,
+    jobs: mpsc::Sender<(Job, u64)>,
     next: u64,
+}
+
+/// What the desk's thread is asked to do.
+enum Job {
+    /// Run these, then read the system with these quick apps.
+    Commands(Vec<Command>, Vec<String>),
+    /// Read again what changes by itself on this menu (see `Menu::read_live`).
+    Live(Box<Menu>),
 }
 
 impl Runner {
     /// `read` gets each batch's number and what the system has after it.
     pub fn new(read: impl Fn(u64, Menu) + Send + 'static) -> Runner {
-        let (jobs, todo) = mpsc::channel::<(Vec<Command>, Vec<String>, u64)>();
+        let (jobs, todo) = mpsc::channel::<(Job, u64)>();
         std::thread::Builder::new()
             .name("mcgyver desk".into())
             .spawn(move || {
-                for (commands, quick_apps, number) in todo {
-                    for command in &commands {
-                        if let Err(e) = run(command) {
-                            eprintln!("mcgyver: {e}");
+                for (job, number) in todo {
+                    let menu = match job {
+                        Job::Commands(commands, quick_apps) => {
+                            for command in &commands {
+                                if let Err(e) = run(command) {
+                                    eprintln!("mcgyver: {e}");
+                                }
+                            }
+                            if !commands.is_empty() {
+                                std::thread::sleep(SETTLE_AFTER_COMMAND);
+                            }
+                            Menu::read(&quick_apps)
                         }
-                    }
-                    std::thread::sleep(SETTLE_AFTER_COMMAND);
-                    read(number, Menu::read(&quick_apps));
+                        Job::Live(menu) => menu.read_live(),
+                    };
+                    read(number, menu);
                 }
             })
             .expect("the desk's thread starts");
@@ -527,9 +1002,18 @@ impl Runner {
 
     /// Queues `commands`; returns the batch's number.
     pub fn run(&mut self, commands: Vec<Command>, quick_apps: Vec<String>) -> u64 {
+        self.queue(Job::Commands(commands, quick_apps))
+    }
+
+    /// Queues reading again what changes by itself on `menu`; returns the reading's number.
+    pub fn live(&mut self, menu: Menu) -> u64 {
+        self.queue(Job::Live(Box::new(menu)))
+    }
+
+    fn queue(&mut self, job: Job) -> u64 {
         let number = self.next;
         self.next += 1;
-        let _ = self.jobs.send((commands, quick_apps, number));
+        let _ = self.jobs.send((job, number));
         number
     }
 }
@@ -580,6 +1064,11 @@ impl Messenger {
         system::messenger(self).is_some()
     }
 
+    /// The app, if installed.
+    pub fn app(self) -> Option<App> {
+        system::messenger(self)
+    }
+
     /// Hands it `files`. Telegram opens its "share with" window for them; the others have no
     /// way in for files, so they are put on the clipboard and the app comes up to paste them in.
     /// Says what happened.
@@ -616,12 +1105,12 @@ mod tests {
     #[test]
     fn the_player_shows_only_while_there_is_one() {
         let quiet = Menu::default();
-        assert_eq!(quiet.modes(), vec![Mode::Apps]);
+        assert_eq!(quiet.modes(), vec![Mode::Apps, Mode::System]);
         let playing = Menu {
             player: Some(player(true)),
             ..Menu::default()
         };
-        assert_eq!(playing.modes(), vec![Mode::Media, Mode::Apps]);
+        assert_eq!(playing.modes(), vec![Mode::Apps, Mode::Media, Mode::System]);
         let items = playing.items(Mode::Media);
         let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
         assert_eq!(
@@ -712,6 +1201,130 @@ mod tests {
         let play_pause = menu.items(Mode::Media)[0].command.clone().unwrap();
         menu.apply(&play_pause);
         assert_eq!(menu.items(Mode::Media)[0].label, "Play");
+    }
+
+    #[test]
+    fn the_apps_wedges_switch_to_open_apps_the_one_in_front_last() {
+        let window = |id: &str, app: &str, app_id: &str, active: bool| crate::switcher::Window {
+            id: id.into(),
+            title: format!("{app} {id}"),
+            app: app.into(),
+            app_id: app_id.into(),
+            active,
+        };
+        let menu = Menu {
+            windows: vec![
+                window("1", "Konsole", "org.kde.konsole", true),
+                window("2", "Firefox", "org.mozilla.firefox", false),
+                window("3", "Konsole", "org.kde.konsole", false),
+                window("4", "Dolphin", "org.kde.dolphin", false),
+            ],
+            apps: vec![
+                App {
+                    id: "org.mozilla.firefox.desktop".into(),
+                    name: "Firefox".into(),
+                },
+                App {
+                    id: "org.gnome.Calculator.desktop".into(),
+                    name: "Calculator".into(),
+                },
+            ],
+            ..Menu::default()
+        };
+        let items = menu.items(Mode::Apps);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(labels, ["Firefox", "Dolphin", "Konsole", "Calculator"]);
+        assert_eq!(items[0].command, Some(Command::Activate("2".into())));
+        assert_eq!(items[0].icon.as_deref(), Some("org.mozilla.firefox"));
+        // Konsole's two windows pop out, the one in front marked.
+        let konsole = &items[2];
+        assert_eq!(konsole.subs.len(), 2);
+        assert!(konsole.subs[0].on && !konsole.subs[1].on);
+        assert_eq!(konsole.subs[1].command, Command::Activate("3".into()));
+        // A quick app not open starts.
+        assert!(matches!(items[3].command, Some(Command::Launch(_))));
+        assert_eq!(menu.summary(Mode::Apps), "Switch to an app");
+    }
+
+    #[test]
+    fn the_system_wedges_show_their_switches() {
+        let menu = Menu {
+            dark: Some(true),
+            awake: Some(false),
+            mic_muted: Some(true),
+            ..Menu::default()
+        };
+        let items = menu.items(Mode::System);
+        let find = |label: &str| items.iter().find(|i| i.label == label).unwrap();
+        assert_eq!(items[0].command, Some(Command::Lock));
+        assert_eq!(find("Dark Mode").on, Some(true));
+        assert_eq!(find("Dark Mode").command, Some(Command::DarkMode(false)));
+        assert_eq!(find("Stay Awake").command, Some(Command::StayAwake(true)));
+        // Muted, the microphone's switch is off; a click turns it on.
+        assert_eq!(find("Microphone").on, Some(false));
+        assert_eq!(find("Microphone").command, Some(Command::MuteMic(false)));
+        assert!(Command::EmptyTrash.needs_click() && !Command::Lock.needs_click());
+        // What changes the system's settings for good takes a click too.
+        assert!(Command::Language("tr_TR".into()).needs_click());
+        assert!(Command::Layout("+de".into()).needs_click());
+        assert!(!Command::Layout("1".into()).needs_click());
+        let mut menu = menu;
+        menu.apply(&Command::DarkMode(false));
+        assert_eq!(menu.dark, Some(false));
+    }
+
+    #[test]
+    fn only_the_language_spoken_suggests_its_layout() {
+        let us = Layout {
+            id: "0".into(),
+            short: "us".into(),
+            name: "English (US)".into(),
+        };
+        let turkish = languages::language("tr_TR");
+        let english = languages::language("en_US");
+        let more = more_layouts(std::slice::from_ref(&us), Some(&turkish));
+        if system::ADDS_LAYOUTS {
+            assert_eq!(more.len(), 1);
+            assert_eq!((more[0].id.as_str(), more[0].short.as_str()), ("+tr", "TR"));
+        } else {
+            assert!(more.is_empty());
+        }
+        assert!(more_layouts(std::slice::from_ref(&us), Some(&english)).is_empty());
+        assert!(more_layouts(&[us], None).is_empty());
+    }
+
+    #[test]
+    fn many_open_apps_leave_room_for_quick_apps() {
+        let windows = (0..12)
+            .map(|i| crate::switcher::Window {
+                id: i.to_string(),
+                title: format!("Window {i}"),
+                app: format!("App {i}"),
+                app_id: format!("app{i}"),
+                active: i == 0,
+            })
+            .collect();
+        let apps = (0..5)
+            .map(|i| App {
+                id: format!("quick{i}.desktop"),
+                name: format!("Quick {i}"),
+            })
+            .collect();
+        let menu = Menu {
+            windows,
+            apps,
+            ..Menu::default()
+        };
+        let labels: Vec<String> = menu
+            .items(Mode::Apps)
+            .into_iter()
+            .map(|i| i.label)
+            .collect();
+        assert_eq!(labels.len(), MOST_WEDGES);
+        // Five open apps, the one in front left out; then three quick apps.
+        assert_eq!(&labels[..2], ["App 1", "App 2"]);
+        assert!(!labels.contains(&"App 0".to_owned()));
+        assert_eq!(&labels[5..], ["Quick 0", "Quick 1", "Quick 2"]);
     }
 
     #[test]

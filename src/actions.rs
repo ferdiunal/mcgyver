@@ -44,10 +44,10 @@ impl Action {
         Action::CopyPath,
         Action::Terminal,
         Action::Share,
-        Action::Send(Messenger::Telegram),
         Action::Send(Messenger::WhatsApp),
-        Action::Send(Messenger::Teams),
+        Action::Send(Messenger::Telegram),
         Action::Send(Messenger::Slack),
+        Action::Send(Messenger::Teams),
     ];
 
     pub fn label(self) -> &'static str {
@@ -73,6 +73,14 @@ impl Action {
             Action::Share => "to your phone",
             Action::Send(_) => "to a chat",
         }
+    }
+
+    /// Where Share sends files: the phone (KDE Connect), and the messaging apps installed.
+    pub fn shares() -> Vec<Action> {
+        Action::ALL
+            .into_iter()
+            .filter(|a| matches!(a, Action::Share | Action::Send(_)) && a.available())
+            .collect()
     }
 
     pub fn from_label(label: &str) -> Option<Action> {
@@ -113,6 +121,7 @@ pub fn preview(files: &[PathBuf], action: Action) -> String {
             "Terminal in {}",
             &[&catalog::display_name(&work_dir(files))],
         ),
+        Action::Share if !Action::Share.available() => trf("Send {} with…", &[&subject]),
         Action::Share => trf("Send {} to your phone", &[&subject]),
         Action::Send(messenger) => trf("Send {} with {}", &[&subject, &messenger.name()]),
     }

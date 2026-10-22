@@ -52,6 +52,8 @@ use platform::NativeWindow;
 const WINDOW: Vec2 = Vec2::new(560.0, 700.0);
 /// Where in the window the wheel sits, under the pointer (unless near a screen edge).
 const WHEEL_AT: Vec2 = Vec2::new(280.0, 440.0);
+/// Room between the cards and the screen's bottom right corner (or the Dock, or the taskbar).
+const TOAST_MARGIN: f32 = 16.0;
 /// How often the keys and the pointer are read while the wheel is up, and otherwise.
 const POLL_FAST: Duration = Duration::from_millis(10);
 const POLL_IDLE: Duration = Duration::from_millis(30);
@@ -71,8 +73,6 @@ const LOOK_FOR_DRAG: Duration = Duration::from_secs(1);
 const NOTHING_OFFERED_AFTER: f32 = 16.0;
 /// …within this long, or it isn't files, and the drag goes through to what is below.
 const NOTHING_OFFERED_WAIT: Duration = Duration::from_millis(300);
-/// How long the trigger key is held alone before the desk opens.
-const HOLD: Duration = Duration::from_millis(400);
 
 /// The keys, the button and the pointer, as the window needs them.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -291,6 +291,7 @@ pub fn run() -> Result<(), String> {
     };
     let settings = Settings::load();
     crate::i18n::set(settings.language);
+    crate::glass::set_dark(settings.appearance.dark());
     platform::first_start();
     if settings.hold {
         desk::warm();
@@ -346,6 +347,18 @@ pub fn run() -> Result<(), String> {
                 eprintln!("keys and mouse: {how}");
             }
             let (desk_tx, desk_rx) = mpsc::channel();
+            // The first time: the wheel shows itself, and how to open it.
+            if !settings.welcomed {
+                let (apps, read, ctx) = (
+                    settings.quick_apps.clone(),
+                    desk_tx.clone(),
+                    cc.egui_ctx.clone(),
+                );
+                std::thread::spawn(move || {
+                    let _ = read.send(DeskRead::Welcome(desk::Menu::read(&apps)));
+                    ctx.request_repaint();
+                });
+            }
             let runner = {
                 let (read, ctx) = (desk_tx.clone(), cc.egui_ctx.clone());
                 desk::Runner::new(move |number, menu| {
@@ -355,12 +368,16 @@ pub fn run() -> Result<(), String> {
             };
             Ok(Box::new(App {
                 hold: settings.hold,
+                hold_time: settings.hold_time(),
+                appearance: settings.appearance,
                 quick_apps: settings.quick_apps.clone(),
                 hold_since: None,
                 holds: 0,
                 desk_keys: None,
                 runner,
                 desk_from: 0,
+                live_at: None,
+                live_read: None,
                 desk: None,
                 desk_tx,
                 desk_rx,
@@ -401,12 +418,17 @@ enum DeskRead {
     Open(u64, desk::Menu),
     /// After the batch of commands with this number.
     Again(u64, desk::Menu),
+    /// For the welcome, the first time the app starts.
+    Welcome(desk::Menu),
 }
 
 struct App {
-    /// Holding the key alone opens the desk, with these quick apps.
+    /// Holding the key alone this long opens the desk, with these quick apps.
     hold: bool,
+    hold_time: Duration,
     quick_apps: Vec<String>,
+    /// Light or dark glass, looked at each time a wheel opens.
+    appearance: crate::settings::Appearance,
     /// The key went down alone, and the other keys' count then.
     hold_since: Option<(Instant, u32)>,
     /// Holds so far: a reading for an earlier one is dropped.
@@ -417,6 +439,10 @@ struct App {
     /// The first batch of commands for the desk open now: readings after earlier ones are for
     /// a desk gone since.
     desk_from: u64,
+    /// While the desk shows what changes by itself (the computer's load, the switches): when
+    /// to read it again, and the reading asked for and not back yet.
+    live_at: Option<Instant>,
+    live_read: Option<u64>,
     /// The desk is open, with this count of other keys: another key closes it.
     desk: Option<u32>,
     desk_tx: mpsc::Sender<DeskRead>,
@@ -528,6 +554,8 @@ impl App {
         let settings = Settings::load();
         crate::i18n::set(settings.language);
         self.hold = settings.hold;
+        self.hold_time = settings.hold_time();
+        self.appearance = settings.appearance;
         self.quick_apps = settings.quick_apps;
         {
             let mut s = self.shared.lock().unwrap_or_else(|e| e.into_inner());
@@ -540,7 +568,7 @@ impl App {
         }
     }
 
-    /// The key held alone: once it has been `HOLD` with no button and no other key, reads the
+    /// The key held alone: once it has been `hold_time` with no button and no other key, reads the
     /// desk on a thread and opens it under the pointer. While it is open another key closes it,
     /// and letting go of the trigger does what it aims at. (Its clicks are taken in `ui`.)
     fn hold_for_desk(&mut self, ctx: &egui::Context, input: Input, now: Instant) {
@@ -571,7 +599,7 @@ impl App {
         if let Some((at, keys)) = self.hold_since {
             if broken(keys) {
                 self.hold_since = None;
-            } else if now >= at + HOLD {
+            } else if now >= at + self.hold_time {
                 self.hold_since = None;
                 self.desk_keys = Some((self.holds, keys));
                 self.log("trigger held alone, reading the desk");
@@ -582,11 +610,20 @@ impl App {
                     self.holds,
                 );
                 std::thread::spawn(move || {
-                    let _ = read.send(DeskRead::Open(hold, desk::Menu::read(&apps)));
-                    ctx.request_repaint();
+                    // Shift held over files selected in the file manager is for selecting more.
+                    // Asked alongside the reading, which it would otherwise hold up.
+                    let menu = std::thread::scope(|s| {
+                        let selecting = s.spawn(desk::selecting);
+                        let menu = desk::Menu::read(&apps);
+                        (!selecting.join().unwrap_or(false)).then_some(menu)
+                    });
+                    if let Some(menu) = menu {
+                        let _ = read.send(DeskRead::Open(hold, menu));
+                        ctx.request_repaint();
+                    }
                 });
             } else {
-                ctx.request_repaint_after(at + HOLD - now);
+                ctx.request_repaint_after(at + self.hold_time - now);
             }
         }
         if self.desk_keys.is_some_and(|(_, keys)| broken(keys)) {
@@ -603,17 +640,44 @@ impl App {
                     self.take_drag(ctx, input.pointer);
                     let local = self.window.local(input.pointer);
                     let window = Rect::from_min_size(Pos2::ZERO, WINDOW);
+                    crate::glass::set_dark(self.appearance.dark());
                     self.overlay.open_desk(menu, local, window, now);
                     self.desk = Some(keys_now);
                     self.desk_from = self.runner.next();
                     self.log(format!("desk opened at {local:?} in the window"));
                 }
-                DeskRead::Again(number, menu) if number >= self.desk_from => {
-                    self.overlay.refresh_desk(menu, now);
+                DeskRead::Again(number, menu) => {
+                    if self.live_read.is_some_and(|asked| number >= asked) {
+                        self.live_read = None;
+                    }
+                    if number >= self.desk_from {
+                        self.overlay.refresh_desk(menu, now);
+                    }
                 }
-                DeskRead::Again(..) => {}
+                DeskRead::Welcome(menu) => {
+                    if self.paused || self.active || !self.overlay.is_idle() {
+                        continue;
+                    }
+                    let mut settings = Settings::load();
+                    settings.welcomed = true;
+                    if let Err(e) = settings.save() {
+                        eprintln!("mcgyver: can't save the settings: {e}");
+                    }
+                    if let Some(moved) = self.window.place(ctx, input.pointer) {
+                        self.overlay.shift(moved);
+                    }
+                    let hint = crate::i18n::trf(
+                        "Hold {} for your apps and settings, or while dragging files",
+                        &[&trigger.unwrap_or(Trigger::Shift).label()],
+                    );
+                    let window = Rect::from_min_size(Pos2::ZERO, WINDOW);
+                    crate::glass::set_dark(self.appearance.dark());
+                    self.overlay.welcome(menu, window, hint, now);
+                    self.log("welcome");
+                }
             }
         }
+        self.read_live(ctx, now);
         if let Some(keys) = self.desk {
             if !self.overlay.desk_open() {
                 self.desk = None;
@@ -632,6 +696,34 @@ impl App {
         }
     }
 
+    /// While the desk shows the computer's load or its switches, reads it again every
+    /// `desk::LIVE` (once the last reading is back).
+    fn read_live(&mut self, ctx: &egui::Context, now: Instant) {
+        let live = self.desk.is_some()
+            && matches!(
+                self.overlay.desk_mode(),
+                Some(crate::catalog::Mode::Everyday | crate::catalog::Mode::System)
+            );
+        if !live {
+            self.live_at = None;
+            return;
+        }
+        match self.live_at {
+            None => {
+                self.live_at = Some(now + desk::LIVE);
+                ctx.request_repaint_after(desk::LIVE);
+            }
+            Some(at) if now >= at && self.live_read.is_none() => {
+                self.live_at = None;
+                if let Some(menu) = self.overlay.desk_menu() {
+                    self.live_read = Some(self.runner.live(menu));
+                }
+            }
+            Some(at) if now >= at => self.live_at = None,
+            Some(at) => ctx.request_repaint_after(at - now),
+        }
+    }
+
     /// Hands what the desk was asked to do to its thread, which reads the system again after;
     /// the settings this app opens itself.
     fn run_desk_commands(&mut self) {
@@ -644,7 +736,8 @@ impl App {
             commands.remove(at);
             platform::show_settings();
         }
-        self.runner.run(commands, self.quick_apps.clone());
+        // Readings asked before these would undo what the click shows at once.
+        self.desk_from = self.runner.run(commands, self.quick_apps.clone());
     }
 
     /// Where the system can't tell beforehand that files are dragged: once the pointer has moved
@@ -735,11 +828,7 @@ impl eframe::App for App {
         // The key went down during a drag of files: take it under the pointer. Looked at again
         // as the pointer moves for a moment, in case the drag hadn't begun yet.
         // (Not a card being moved: Windows would take that for a drag.)
-        if input.trigger_down
-            && !self.last.trigger_down
-            && input.button_down
-            && !self.overlay.holding_card()
-        {
+        if input.trigger_down && !self.last.trigger_down && input.button_down {
             self.pressed_at = Some(now);
         }
         if !input.trigger_down || !input.button_down || self.held {
@@ -810,14 +899,21 @@ impl eframe::App for App {
         if self.active && !self.overlay.wants_input() && (!self.held || !input.button_down) {
             self.let_through(ctx);
         }
-        // No drag: the window takes clicks only where a card is, to move or close it.
+        // No wheel, only cards: the window goes where they show, at the screen's corner.
+        if !self.active
+            && self.overlay.only_cards()
+            && let Some(moved) = self.window.place_corner(ctx)
+        {
+            self.overlay.shift(moved);
+        }
+        self.overlay.set_corner(self.window.toast_corner());
+        // No drag: the window takes clicks only where a card is, to close it.
         if !self.active {
             let over = self.window.placed()
-                && (self.overlay.holding_card()
-                    || self
-                        .overlay
-                        .card_spot(self.window.local(input.pointer))
-                        .is_some());
+                && self
+                    .overlay
+                    .card_spot(self.window.local(input.pointer))
+                    .is_some();
             if over != self.on_card {
                 self.window.let_through(ctx, !over);
                 self.on_card = over;
@@ -881,6 +977,7 @@ impl eframe::App for App {
         {
             let window = Rect::from_min_size(Pos2::ZERO, WINDOW);
             self.log(format!("wheel opened at {local:?} in the window"));
+            crate::glass::set_dark(self.appearance.dark());
             self.overlay
                 .open(hovered, local, window, Mode::Convert, now);
         }
@@ -968,7 +1065,7 @@ impl App {
         }
     }
 
-    /// A card under the pointer: holding it moves it, its close button cancels or puts it away.
+    /// A card under the pointer: its close button cancels or puts it away.
     fn cards(&mut self, ui: &egui::Ui, local: Pos2, now: Instant) {
         self.overlay.card_hover(self.on_card.then_some(local));
         if !self.on_card {
@@ -984,14 +1081,10 @@ impl App {
             // The click may have made this app the active one; give the keyboard back.
             self.window.give_back_focus();
         }
-        ui.ctx().set_cursor_icon(if self.overlay.holding_card() {
-            egui::CursorIcon::Grabbing
-        } else {
-            match self.overlay.card_spot(local) {
+        ui.ctx()
+            .set_cursor_icon(match self.overlay.card_spot(local) {
                 Some(CardSpot::Close) => egui::CursorIcon::PointingHand,
-                Some(CardSpot::Body) => egui::CursorIcon::Grab,
-                None => egui::CursorIcon::Default,
-            }
-        });
+                _ => egui::CursorIcon::Default,
+            });
     }
 }

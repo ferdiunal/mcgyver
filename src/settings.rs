@@ -75,14 +75,67 @@ impl Trigger {
     }
 }
 
+/// Light or dark glass, or whichever the desktop uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Appearance {
+    System,
+    Light,
+    Dark,
+}
+
+impl Appearance {
+    pub const ALL: [Appearance; 3] = [Appearance::System, Appearance::Light, Appearance::Dark];
+
+    /// How the settings file names it.
+    pub fn code(self) -> &'static str {
+        match self {
+            Appearance::System => "system",
+            Appearance::Light => "light",
+            Appearance::Dark => "dark",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Appearance> {
+        Appearance::ALL.into_iter().find(|a| a.code() == code)
+    }
+
+    /// Its name in English, for `tr`.
+    pub fn label(self) -> &'static str {
+        match self {
+            Appearance::System => "Like the system",
+            Appearance::Light => "Light",
+            Appearance::Dark => "Dark",
+        }
+    }
+
+    /// Whether it comes out dark now.
+    pub fn dark(self) -> bool {
+        match self {
+            Appearance::System => system_dark(),
+            Appearance::Light => false,
+            Appearance::Dark => true,
+        }
+    }
+}
+
+/// How long the trigger key is held alone before the desk opens, by default, and the range the
+/// settings offer.
+pub const HOLD_MS: u32 = 450;
+pub const HOLD_RANGE: std::ops::RangeInclusive<u32> = 200..=1500;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
     pub language: Lang,
     pub trigger: Trigger,
-    /// Holding the trigger key without files opens the desk (see `desk`).
+    /// Holding the trigger key without files opens the desk (see `desk`),
     pub hold: bool,
+    /// once it has been held this long (milliseconds).
+    pub hold_ms: u32,
     /// The desk's quick apps, in order, by the id `desk` knows them by.
     pub quick_apps: Vec<String>,
+    pub appearance: Appearance,
+    /// The welcome has played (see `Overlay::welcome`).
+    pub welcomed: bool,
 }
 
 impl Default for Settings {
@@ -91,8 +144,22 @@ impl Default for Settings {
             language: Lang::from_env(),
             trigger: Trigger::Shift,
             hold: true,
+            hold_ms: HOLD_MS,
             quick_apps: Vec::new(),
+            appearance: Appearance::System,
+            welcomed: false,
         }
+    }
+}
+
+impl Settings {
+    /// How long the trigger key is held alone before the desk opens.
+    pub fn hold_time(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(
+            self.hold_ms
+                .clamp(*HOLD_RANGE.start(), *HOLD_RANGE.end())
+                .into(),
+        )
     }
 }
 
@@ -124,6 +191,17 @@ impl Settings {
                 }
                 ("hold", "on") => settings.hold = true,
                 ("hold", "off") => settings.hold = false,
+                ("hold_ms", ms) => {
+                    if let Ok(ms) = ms.parse::<u32>() {
+                        settings.hold_ms = ms.clamp(*HOLD_RANGE.start(), *HOLD_RANGE.end());
+                    }
+                }
+                ("appearance", code) => {
+                    if let Some(appearance) = Appearance::from_code(code) {
+                        settings.appearance = appearance;
+                    }
+                }
+                ("welcomed", "yes") => settings.welcomed = true,
                 ("quick_app", id)
                     if !id.is_empty() && !settings.quick_apps.iter().any(|a| a == id) =>
                 {
@@ -137,10 +215,14 @@ impl Settings {
 
     pub fn to_text(&self) -> String {
         let mut text = format!(
-            "# {APP_NAME} settings\nlanguage = {}\ntrigger = {}\nhold = {}\n",
+            "# {APP_NAME} settings\nlanguage = {}\ntrigger = {}\nhold = {}\nhold_ms = {}\n\
+             appearance = {}\nwelcomed = {}\n",
             self.language.code(),
             self.trigger.code(),
             if self.hold { "on" } else { "off" },
+            self.hold_ms,
+            self.appearance.code(),
+            if self.welcomed { "yes" } else { "no" },
         );
         for id in &self.quick_apps {
             text.push_str(&format!("quick_app = {id}\n"));
@@ -179,6 +261,116 @@ pub fn migrate() {
     if old_autostart.exists() && set_start_at_login(true).is_ok() {
         let _ = std::fs::remove_file(old_autostart);
     }
+}
+
+/// When the desktop was last looked at, and whether it was dark; and a look under way.
+static LOOKED_DARK: std::sync::Mutex<Option<(std::time::Instant, bool)>> =
+    std::sync::Mutex::new(None);
+static LOOKING_DARK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the desktop is dark, as last looked at; looked at again behind the scenes once that
+/// is a few seconds old (asking can take a moment, and wheels open on the thread asking).
+pub fn system_dark() -> bool {
+    use std::sync::atomic::Ordering;
+    let looked = *LOOKED_DARK.lock().unwrap_or_else(|e| e.into_inner());
+    let Some((at, dark)) = looked else {
+        return system_dark_now();
+    };
+    if at.elapsed() >= std::time::Duration::from_secs(5)
+        && !LOOKING_DARK.swap(true, Ordering::AcqRel)
+    {
+        std::thread::spawn(|| {
+            system_dark_now();
+            LOOKING_DARK.store(false, Ordering::Release);
+        });
+    }
+    dark
+}
+
+/// Whether the desktop is dark, looked at again now (after the desk switched it).
+pub fn system_dark_now() -> bool {
+    let dark = desktop_dark();
+    *LOOKED_DARK.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some((std::time::Instant::now(), dark));
+    dark
+}
+
+/// KDE says so through the desktop portal (`color-scheme` 1 is dark); without it, its colours
+/// say so: a dark window background.
+#[cfg(target_os = "linux")]
+fn desktop_dark() -> bool {
+    let portal = || -> Option<u32> {
+        let bus = zbus::blocking::connection::Builder::session()
+            .ok()?
+            .method_timeout(std::time::Duration::from_millis(300))
+            .build()
+            .ok()?;
+        let reply = bus
+            .call_method(
+                Some("org.freedesktop.portal.Desktop"),
+                "/org/freedesktop/portal/desktop",
+                Some("org.freedesktop.portal.Settings"),
+                "ReadOne",
+                &("org.freedesktop.appearance", "color-scheme"),
+            )
+            .ok()?;
+        let value: zbus::zvariant::OwnedValue = reply.body().deserialize().ok()?;
+        u32::try_from(value).ok()
+    };
+    if let Some(scheme) = portal() {
+        return scheme == 1;
+    }
+    let colours = config_home()
+        .and_then(|dir| std::fs::read_to_string(dir.join("kdeglobals")).ok())
+        .unwrap_or_default();
+    let mut in_window = false;
+    for line in colours.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_window = line == "[Colors:Window]";
+        } else if in_window && let Some(rgb) = line.strip_prefix("BackgroundNormal=") {
+            let parts: Vec<f32> = rgb
+                .split(',')
+                .filter_map(|v| v.trim().parse().ok())
+                .collect();
+            if let [r, g, b, ..] = parts[..] {
+                return 0.299 * r + 0.587 * g + 0.114 * b < 128.0;
+            }
+        }
+    }
+    false
+}
+
+#[cfg(target_os = "macos")]
+fn desktop_dark() -> bool {
+    std::process::Command::new("defaults")
+        .args(["read", "-g", "AppleInterfaceStyle"])
+        .stderr(std::process::Stdio::null())
+        .output()
+        .is_ok_and(|out| String::from_utf8_lossy(&out.stdout).trim() == "Dark")
+}
+
+/// Apps are dark when `AppsUseLightTheme` is 0.
+#[cfg(windows)]
+fn desktop_dark() -> bool {
+    use windows_sys::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
+    let key = wide(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+    let name = wide("AppsUseLightTheme");
+    let mut value: u32 = 1;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    // SAFETY: reads a DWORD into `value`, of the size given.
+    let found = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            key.as_ptr(),
+            name.as_ptr(),
+            RRF_RT_REG_DWORD,
+            std::ptr::null_mut(),
+            (&mut value as *mut u32).cast(),
+            &mut size,
+        )
+    } == 0;
+    found && value == 0
 }
 
 /// `$XDG_CONFIG_HOME`, or `~/.config` (`~/Library/Application Support` on macOS, `%APPDATA%`
@@ -442,12 +634,20 @@ mod tests {
             language: Lang::Turkish,
             trigger: Trigger::Ctrl,
             hold: false,
+            hold_ms: 700,
             quick_apps: vec!["firefox.desktop".into(), r"C:\Apps\Kate.lnk".into()],
+            appearance: Appearance::Dark,
+            welcomed: true,
         };
         assert_eq!(Settings::parse(&settings.to_text()), settings);
         // Older files say nothing of these.
         let old = Settings::parse("language = tr\ntrigger = ctrl\n");
-        assert!(old.hold && old.quick_apps.is_empty());
+        assert!(old.hold && old.quick_apps.is_empty() && !old.welcomed);
+        assert_eq!((old.hold_ms, old.appearance), (HOLD_MS, Appearance::System));
+        assert_eq!(
+            Settings::parse("hold_ms = 5\n").hold_ms,
+            *HOLD_RANGE.start()
+        );
     }
 
     /// Under a name of its own, so McGyver's own line is left alone.

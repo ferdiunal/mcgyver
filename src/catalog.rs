@@ -16,15 +16,17 @@ pub enum Mode {
     Media,
     /// the keyboard layout, volume and brightness,
     Everyday,
-    /// and the quick apps.
+    /// the apps open and the quick apps,
     Apps,
+    /// and switches and actions for the whole computer.
+    System,
 }
 
 impl Mode {
     /// The modes of a wheel of files.
     pub const ALL: [Mode; 3] = [Mode::Convert, Mode::Tools, Mode::Actions];
-    /// The modes of the wheel without files.
-    pub const DESK: [Mode; 3] = [Mode::Media, Mode::Everyday, Mode::Apps];
+    /// The modes of the wheel without files, in ring order.
+    pub const DESK: [Mode; 4] = [Mode::Apps, Mode::Media, Mode::Everyday, Mode::System];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -34,6 +36,7 @@ impl Mode {
             Mode::Media => "MEDIA",
             Mode::Everyday => "EVERYDAY",
             Mode::Apps => "APPS",
+            Mode::System => "SYSTEM",
         }
     }
 }
@@ -283,15 +286,35 @@ pub fn modes(files: &[PathBuf]) -> Vec<Mode> {
         .collect()
 }
 
+/// The options a choice pops out as bubbles: where Share can send the files.
+pub fn subs(choice: Choice) -> Vec<Choice> {
+    if choice.mode != Mode::Actions || Action::from_label(choice.label) != Some(Action::Share) {
+        return Vec::new();
+    }
+    Action::shares()
+        .into_iter()
+        .map(|a| Choice {
+            mode: Mode::Actions,
+            label: a.label(),
+            hint: a.hint(),
+        })
+        .collect()
+}
+
 pub fn choices(files: &[PathBuf], mode: Mode) -> Vec<Choice> {
     let known: Vec<(String, Kind)> = files
         .iter()
         .filter_map(|f| kind_of(f).map(|k| (ext_of(f), k)))
         .collect();
     match mode {
+        // The messaging apps pop out of Share (see `subs`).
         Mode::Actions => Action::ALL
             .into_iter()
-            .filter(|a| a.available())
+            .filter(|a| match a {
+                Action::Send(_) => false,
+                Action::Share => !Action::shares().is_empty(),
+                a => a.available(),
+            })
             .map(|a| Choice {
                 mode,
                 label: a.label(),
@@ -339,7 +362,7 @@ pub fn choices(files: &[PathBuf], mode: Mode) -> Vec<Choice> {
                 .map(|&(label, hint)| Choice { mode, label, hint })
                 .collect()
         }
-        Mode::Media | Mode::Everyday | Mode::Apps => Vec::new(),
+        Mode::Media | Mode::Everyday | Mode::Apps | Mode::System => Vec::new(),
     }
 }
 

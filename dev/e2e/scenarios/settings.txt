@@ -8,7 +8,7 @@ shell $ROOT/target/release/mcgyver > $OUT/second.log 2>&1 &
 sleep 3000
 shot settings-open
 log 2 trigger Ctrl, in Turkish
-shell mkdir -p $OUT/config/mcgyver && printf 'language = tr\ntrigger = ctrl\n' > $OUT/config/mcgyver/settings.conf
+shell mkdir -p $OUT/config/mcgyver && printf 'language = tr\ntrigger = ctrl\nwelcomed = yes\n' > $OUT/config/mcgyver/settings.conf
 shell dbus-send --session --print-reply --dest=io.github.McGyver /io/github/McGyver io.github.McGyver.Reload > $OUT/reload.log 2>&1
 sleep 500
 shell gdbus call --session --dest org.kde.kglobalaccel --object-path /kglobalaccel --method org.kde.KGlobalAccel.shortcut "['mcgyver','open-wheel','McGyver','Open the wheel for the files selected in Dolphin']" > $OUT/shortcut.txt 2>&1

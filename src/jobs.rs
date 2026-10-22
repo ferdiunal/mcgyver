@@ -144,7 +144,7 @@ impl Job {
 pub fn applies(file: &Path, choice: Choice) -> bool {
     match choice.mode {
         Mode::Actions => true,
-        Mode::Media | Mode::Everyday | Mode::Apps => false,
+        Mode::Media | Mode::Everyday | Mode::Apps | Mode::System => false,
         Mode::Tools => catalog::kind_of(file).is_some(),
         Mode::Convert => {
             catalog::kind_of(file).is_some() && catalog::ext_of(file).to_uppercase() != choice.label
@@ -337,7 +337,7 @@ pub fn outcome(file: &Path, choice: Choice) -> String {
             _ => "floating",
         })
         .into(),
-        Mode::Media | Mode::Everyday | Mode::Apps => String::new(),
+        Mode::Media | Mode::Everyday | Mode::Apps | Mode::System => String::new(),
     }
 }
 

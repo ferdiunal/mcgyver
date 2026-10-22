@@ -4,7 +4,7 @@
 use std::fs::File;
 use std::time::Duration;
 
-use crate::glass::{GREEN, TEXT_MUTED};
+use crate::glass::GREEN;
 use crate::i18n::tr;
 use crate::settings::Trigger;
 
@@ -50,7 +50,7 @@ impl Permissions {
         ui.label(
             egui::RichText::new(tr(NOTHING_TO_ALLOW))
                 .size(12.5)
-                .color(TEXT_MUTED),
+                .color(super::muted()),
         );
     }
 }

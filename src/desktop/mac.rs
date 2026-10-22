@@ -16,10 +16,10 @@ use objc2::MainThreadMarker;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, Sel};
 use objc2::{Encode, msg_send, sel};
-use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSView, NSWindow};
+use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSScreen, NSView, NSWindow};
 use tray_icon::menu::Menu;
 
-use super::{Input, Shared, WHEEL_AT, WINDOW};
+use super::{Input, Shared, TOAST_MARGIN, WHEEL_AT, WINDOW};
 use crate::settings::Trigger;
 
 /// macOS shows what a drag carries before it reaches the window (the drag pasteboard).
@@ -630,6 +630,51 @@ impl NativeWindow {
         }
         ctx.send_viewport_cmd(ViewportCommand::OuterPosition(origin));
         self.origin.replace(origin).map(|before| before - origin)
+    }
+
+    /// Moves the window into the bottom right corner of the display it is on, for the cards.
+    /// How far it moved, in its points.
+    pub(super) fn place_corner(&mut self, ctx: &egui::Context) -> Option<Vec2> {
+        let area = self.work_area()?;
+        let origin = (area.max - WINDOW).max(area.min);
+        if self.origin == Some(origin) {
+            return None;
+        }
+        ctx.send_viewport_cmd(ViewportCommand::OuterPosition(origin));
+        self.origin.replace(origin).map(|before| before - origin)
+    }
+
+    /// Where the newest card's bottom right corner goes, in the window's points: the display's
+    /// bottom right, clear of the Dock.
+    pub(super) fn toast_corner(&self) -> Pos2 {
+        let corner = match (self.work_area(), self.origin) {
+            (Some(area), Some(origin)) => area.max - origin.to_vec2(),
+            _ => WINDOW.to_pos2(),
+        };
+        corner - Vec2::splat(TOAST_MARGIN)
+    }
+
+    /// The part of the display the window is on that apps may use: without the menu bar and
+    /// the Dock. (AppKit counts from the main display's bottom left, Quartz from its top left.)
+    fn work_area(&self) -> Option<Rect> {
+        let display = self.display?;
+        let mtm = MainThreadMarker::new()?;
+        let screens = NSScreen::screens(mtm);
+        let main_height = screens.firstObject()?.frame().size.height;
+        let flip = |r: objc2_foundation::NSRect| {
+            Rect::from_min_size(
+                pos2(
+                    r.origin.x as f32,
+                    (main_height - r.origin.y - r.size.height) as f32,
+                ),
+                vec2(r.size.width as f32, r.size.height as f32),
+            )
+        };
+        screens
+            .iter()
+            .find(|screen| (flip(screen.frame()).center() - display.center()).length() < 2.0)
+            .map(|screen| flip(screen.visibleFrame()))
+            .or(Some(display))
     }
 
     /// Whether the window has been put anywhere yet.

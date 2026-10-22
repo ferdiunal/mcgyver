@@ -6,12 +6,13 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use egui::{Color32, CornerRadius, Frame, Margin, RichText, Stroke, Vec2};
+use egui::{Align, Color32, CornerRadius, Frame, Layout, Margin, RichText, Sense, Stroke, Vec2};
 
 use crate::desk::{self, App};
-use crate::glass::{ACCENT, TEXT, TEXT_MUTED};
+use crate::glass::ACCENT;
 use crate::i18n::{self, Lang, tr, trf};
-use crate::settings::{self, APP_ID, APP_NAME, Settings, Trigger};
+use crate::settings::{self, APP_ID, APP_NAME, Appearance, HOLD_RANGE, Settings, Trigger};
+use crate::textures::Textures;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -33,10 +34,55 @@ use platform::{CHECK_EVERY, Permissions, TRIGGER_HELP};
 const AMBER: Color32 = Color32::from_rgb(226, 146, 18);
 /// How long "Saved" stays up.
 const NOTE_FOR: Duration = Duration::from_secs(3);
-const BACKGROUND: Color32 = Color32::from_rgb(242, 243, 245);
-const CARD: Color32 = Color32::WHITE;
 /// More quick apps than this crowd the wheel.
 const MOST_QUICK_APPS: usize = 8;
+/// The quick apps' icons, and the tiles to add one from.
+const ROW_ICON: f32 = 26.0;
+const TILE: Vec2 = Vec2::new(86.0, 82.0);
+const TILE_ICON: f32 = 36.0;
+
+/// The window's colours in light or dark.
+struct Look {
+    background: Color32,
+    card: Color32,
+    /// Hairlines around cards and controls.
+    edge: Color32,
+    text: Color32,
+    muted: Color32,
+    /// Buttons, fields and rows at rest, and under the pointer.
+    control: Color32,
+    hover: Color32,
+}
+
+const LIGHT: Look = Look {
+    background: Color32::from_rgb(242, 243, 245),
+    card: Color32::WHITE,
+    edge: Color32::from_rgba_premultiplied(0, 0, 0, 20),
+    text: Color32::from_rgb(29, 29, 31),
+    muted: Color32::from_rgb(112, 112, 120),
+    control: Color32::from_rgb(242, 243, 245),
+    hover: Color32::from_rgb(232, 233, 237),
+};
+
+const DARK: Look = Look {
+    background: Color32::from_rgb(24, 24, 28),
+    card: Color32::from_rgb(36, 36, 42),
+    edge: Color32::from_rgba_premultiplied(18, 18, 18, 18),
+    text: Color32::from_rgb(238, 238, 242),
+    muted: Color32::from_rgb(150, 150, 160),
+    control: Color32::from_rgb(48, 48, 56),
+    hover: Color32::from_rgb(60, 60, 70),
+};
+
+fn look() -> &'static Look {
+    if crate::glass::dark() { &DARK } else { &LIGHT }
+}
+
+/// Muted text, for the platforms' permission rows.
+#[cfg(not(target_os = "macos"))]
+fn muted() -> Color32 {
+    look().muted
+}
 
 pub fn run() -> Result<(), String> {
     // One window at a time, however it was opened.
@@ -47,11 +93,12 @@ pub fn run() -> Result<(), String> {
     settings::migrate();
     let settings = Settings::load();
     i18n::set(settings.language);
+    crate::glass::set_dark(settings.appearance.dark());
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(title())
         .with_app_id(APP_ID)
-        .with_inner_size([440.0, 680.0])
-        .with_min_inner_size([380.0, 360.0]);
+        .with_inner_size([470.0, 720.0])
+        .with_min_inner_size([400.0, 360.0]);
     if let Some(rgba) = crate::icon::rgba(64) {
         viewport = viewport.with_icon(egui::IconData {
             rgba,
@@ -70,7 +117,7 @@ pub fn run() -> Result<(), String> {
         Box::new(move |cc| {
             crate::glass::install_fonts(&cc.egui_ctx);
             style(&cc.egui_ctx);
-            Ok(Box::new(Window::new(settings)))
+            Ok(Box::new(Window::new(settings, &cc.egui_ctx)))
         }),
     )
     .map_err(|e| e.to_string())
@@ -80,19 +127,41 @@ fn title() -> String {
     format!("{} — {APP_NAME}", tr("Settings"))
 }
 
+/// The look of every widget, light or dark as the glass is.
 fn style(ctx: &egui::Context) {
-    ctx.set_theme(egui::Theme::Light);
+    let look = look();
+    let dark = crate::glass::dark();
+    ctx.set_theme(if dark {
+        egui::Theme::Dark
+    } else {
+        egui::Theme::Light
+    });
     ctx.all_styles_mut(|style| {
         style.spacing.item_spacing = Vec2::new(8.0, 8.0);
         style.spacing.button_padding = Vec2::new(14.0, 6.0);
+        style.spacing.slider_width = 220.0;
         let v = &mut style.visuals;
-        v.panel_fill = BACKGROUND;
-        v.override_text_color = Some(TEXT);
+        v.dark_mode = dark;
+        v.panel_fill = look.background;
+        v.window_fill = look.card;
+        v.extreme_bg_color = look.control;
+        v.override_text_color = Some(look.text);
         v.selection.bg_fill = ACCENT;
         v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
-        v.widgets.inactive.corner_radius = CornerRadius::same(8);
-        v.widgets.hovered.corner_radius = CornerRadius::same(8);
-        v.widgets.active.corner_radius = CornerRadius::same(8);
+        v.slider_trailing_fill = true;
+        for (widgets, fill) in [
+            (&mut v.widgets.inactive, look.control),
+            (&mut v.widgets.hovered, look.hover),
+            (&mut v.widgets.active, look.hover),
+        ] {
+            widgets.corner_radius = CornerRadius::same(8);
+            widgets.bg_fill = fill;
+            widgets.weak_bg_fill = fill;
+            widgets.bg_stroke = Stroke::new(1.0, look.edge);
+            widgets.fg_stroke = Stroke::new(1.5, look.text);
+        }
+        v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, look.edge);
+        v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, look.text);
     });
 }
 
@@ -106,19 +175,29 @@ struct Window {
     note: Option<(String, Instant)>,
     /// The installed apps, once a thread has listed them (that can take a moment on Windows).
     apps: Arc<Mutex<Option<Vec<App>>>>,
-    /// What the list of apps to add is narrowed to.
+    /// What the apps to add are narrowed to.
     filter: String,
+    icons: Textures,
+    /// The app's own icon, for the header.
+    logo: Option<egui::TextureHandle>,
+    /// Whether the window is dark now, to restyle it when the system's look changes.
+    dark: bool,
 }
 
 impl Window {
-    fn new(settings: Settings) -> Self {
+    fn new(settings: Settings, ctx: &egui::Context) -> Self {
         let apps = Arc::new(Mutex::new(None));
         let listed = apps.clone();
         std::thread::spawn(move || {
             let found = desk::installed_apps();
             *listed.lock().unwrap_or_else(|e| e.into_inner()) = Some(found);
         });
+        let logo = crate::icon::rgba(96).map(|rgba| {
+            let image = egui::ColorImage::from_rgba_unmultiplied([96, 96], &rgba);
+            ctx.load_texture("logo", image, egui::TextureOptions::LINEAR)
+        });
         Window {
+            dark: settings.appearance.dark(),
             settings,
             start_at_login: settings::starts_at_login(),
             permissions: Permissions::new(),
@@ -126,6 +205,8 @@ impl Window {
             note: None,
             apps,
             filter: String::new(),
+            icons: Textures::new(64),
+            logo,
         }
     }
 
@@ -146,6 +227,16 @@ impl Window {
     fn note(&mut self, said: String) {
         self.note = Some((said, Instant::now()));
     }
+
+    /// Follows the appearance chosen, or the system's as it changes.
+    fn restyle(&mut self, ctx: &egui::Context) {
+        let dark = self.settings.appearance.dark();
+        if dark != self.dark {
+            self.dark = dark;
+            crate::glass::set_dark(dark);
+            style(ctx);
+        }
+    }
 }
 
 impl eframe::App for Window {
@@ -153,14 +244,20 @@ impl eframe::App for Window {
         if std::mem::take(&mut self.first_frame) {
             platform::bring_forward(ui.ctx());
         }
+        self.restyle(ui.ctx());
         let before = self.settings.clone();
         egui::CentralPanel::default()
-            .frame(Frame::new().fill(BACKGROUND).inner_margin(Margin::same(18)))
+            .frame(
+                Frame::new()
+                    .fill(look().background)
+                    .inner_margin(Margin::same(18)),
+            )
             .show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| self.cards(ui));
             });
         if self.settings != before {
             self.changed();
+            self.restyle(ui.ctx());
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::Title(title()));
         }
@@ -178,16 +275,25 @@ impl Window {
         let all_granted = self.permissions.all_granted();
         let trigger = self.settings.trigger;
 
-        ui.label(RichText::new(tr("Settings")).size(22.0).strong());
-        ui.add_space(6.0);
+        self.header(ui);
         if !all_granted {
             card(ui, tr("Permissions"), None, |ui| {
                 self.permissions.card(ui, trigger)
             });
         }
 
-        card(ui, tr("Language"), None, |ui| {
-            ui.horizontal(|ui| {
+        card(ui, tr("Appearance"), None, |ui| {
+            labelled(ui, tr("Look"), |ui| {
+                for appearance in Appearance::ALL {
+                    segment(
+                        ui,
+                        &mut self.settings.appearance,
+                        appearance,
+                        tr(appearance.label()),
+                    );
+                }
+            });
+            labelled(ui, tr("Language"), |ui| {
                 for lang in Lang::ALL {
                     segment(ui, &mut self.settings.language, lang, lang.name());
                 }
@@ -203,12 +309,34 @@ impl Window {
         });
 
         let held = trf(
-            "Hold {} for a moment without dragging files: the wheel opens with what is playing, \
-             the keyboard layout, the volume, the brightness and your quick apps.",
+            "Hold {} for a moment without dragging files: the wheel opens with your apps, what \
+             is playing, the keyboard, the volume, the brightness and the system.",
             &[&trigger.label()],
         );
         card(ui, tr("Without files"), Some(&held), |ui| {
             toggle(ui, &mut self.settings.hold);
+            if self.settings.hold {
+                ui.add_space(2.0);
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(tr("Opens after")).color(look().muted));
+                    let seconds = |ms: f64| match i18n::current() {
+                        Lang::Turkish => format!("{:.2} sn", ms / 1000.0).replace('.', ","),
+                        Lang::English => format!("{:.2} s", ms / 1000.0),
+                    };
+                    ui.add(
+                        egui::Slider::new(&mut self.settings.hold_ms, HOLD_RANGE)
+                            .step_by(50.0)
+                            .custom_formatter(move |ms, _| seconds(ms))
+                            .custom_parser(|text| {
+                                text.trim_end_matches(|c: char| c.is_alphabetic() || c == ' ')
+                                    .replace(',', ".")
+                                    .parse::<f64>()
+                                    .ok()
+                                    .map(|s| s * 1000.0)
+                            }),
+                    );
+                });
+            }
         });
 
         if self.settings.hold {
@@ -244,52 +372,71 @@ impl Window {
                 self.note = None;
             } else {
                 ui.add_space(4.0);
-                ui.label(RichText::new(said.as_str()).color(TEXT_MUTED));
+                ui.label(RichText::new(said.as_str()).color(look().muted));
                 ui.ctx().request_repaint_after(left);
             }
         }
     }
-}
 
-impl Window {
-    /// The quick apps in order, each with buttons to move it or take it off, and a list to add
-    /// more from.
+    /// The app's icon and name over the cards.
+    fn header(&self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if let Some(logo) = &self.logo {
+                ui.add(egui::Image::new((logo.id(), Vec2::splat(40.0))));
+            }
+            ui.vertical(|ui| {
+                ui.add_space(1.0);
+                ui.label(RichText::new(APP_NAME).size(20.0).strong());
+                ui.label(RichText::new(tr("Settings")).size(13.0).color(look().muted));
+            });
+        });
+        ui.add_space(8.0);
+    }
+
+    /// The quick apps in order, each with its icon and buttons to move it or take it off, then
+    /// the installed apps as tiles to add one from, narrowed as you type.
     fn quick_apps(&mut self, ui: &mut egui::Ui) {
         let apps = self.apps.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let name_of = |id: &str| {
             apps.as_ref()
                 .and_then(|apps| apps.iter().find(|a| a.id == id))
-                .map_or_else(|| id.to_owned(), |a| a.name.clone())
+                .map_or_else(|| pretty_id(id), |a| a.name.clone())
         };
-        let picked = &mut self.settings.quick_apps;
-        let count = picked.len();
+        let count = self.settings.quick_apps.len();
         let mut change = None;
-        for (i, id) in picked.iter().enumerate() {
-            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                ui.label(RichText::new(format!("{}.", i + 1)).color(TEXT_MUTED));
-                ui.label(name_of(id));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if small_button(ui, Glyph::Remove, tr("Remove")).clicked() {
-                        change = Some(Change::Remove(i));
-                    }
-                    let down = i + 1 < count;
-                    if ui
-                        .add_enabled_ui(down, |ui| small_button(ui, Glyph::Down, tr("Move down")))
-                        .inner
-                        .clicked()
-                    {
-                        change = Some(Change::Swap(i, i + 1));
-                    }
-                    if ui
-                        .add_enabled_ui(i > 0, |ui| small_button(ui, Glyph::Up, tr("Move up")))
-                        .inner
-                        .clicked()
-                    {
-                        change = Some(Change::Swap(i - 1, i));
-                    }
+        for i in 0..count {
+            let id = self.settings.quick_apps[i].clone();
+            let name = name_of(&id);
+            let icon = self.icons.get(ui.ctx(), &id);
+            Frame::new()
+                .fill(look().control)
+                .corner_radius(CornerRadius::same(10))
+                .inner_margin(Margin::symmetric(8, 5))
+                .show(ui, |ui| {
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(ui.available_width(), ROW_ICON + 4.0),
+                        Layout::left_to_right(Align::Center),
+                        |ui| {
+                            app_icon(ui, icon, &name, ROW_ICON);
+                            ui.label(RichText::new(name).size(14.0));
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                if small_button(ui, Glyph::Remove, tr("Remove"), true).clicked() {
+                                    change = Some(Change::Remove(i));
+                                }
+                                if small_button(ui, Glyph::Down, tr("Move down"), i + 1 < count)
+                                    .clicked()
+                                {
+                                    change = Some(Change::Swap(i, i + 1));
+                                }
+                                if small_button(ui, Glyph::Up, tr("Move up"), i > 0).clicked() {
+                                    change = Some(Change::Swap(i - 1, i));
+                                }
+                            });
+                        },
+                    );
                 });
-            });
         }
+        let picked = &mut self.settings.quick_apps;
         match change {
             Some(Change::Remove(i)) => {
                 picked.remove(i);
@@ -301,16 +448,16 @@ impl Window {
             ui.label(
                 RichText::new(trf("The wheel holds {} apps.", &[&MOST_QUICK_APPS]))
                     .size(12.5)
-                    .color(TEXT_MUTED),
+                    .color(look().muted),
             );
             return;
         }
 
-        ui.add_space(4.0);
+        ui.add_space(6.0);
         let Some(apps) = apps else {
             ui.horizontal(|ui| {
                 ui.spinner();
-                ui.label(RichText::new(tr("Looking for apps…")).color(TEXT_MUTED));
+                ui.label(RichText::new(tr("Looking for apps…")).color(look().muted));
             });
             ui.ctx().request_repaint_after(Duration::from_millis(100));
             return;
@@ -318,32 +465,107 @@ impl Window {
         ui.add(
             egui::TextEdit::singleline(&mut self.filter)
                 .hint_text(tr("Add an app…"))
+                .margin(Margin::symmetric(10, 7))
                 .desired_width(f32::INFINITY),
         );
         let words = self.filter.to_lowercase();
         let offered: Vec<&App> = apps
             .iter()
-            .filter(|a| !picked.contains(&a.id))
+            .filter(|a| !self.settings.quick_apps.contains(&a.id))
             .filter(|a| words.is_empty() || a.name.to_lowercase().contains(&words))
             .collect();
         if offered.is_empty() {
-            ui.label(RichText::new(tr("No app has that name")).color(TEXT_MUTED));
+            ui.label(RichText::new(tr("No app has that name")).color(look().muted));
             return;
         }
+        let mut added = None;
         egui::ScrollArea::vertical()
             .id_salt("apps to add")
-            .max_height(180.0)
+            .max_height(TILE.y * 2.7)
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                for app in offered {
-                    let row = egui::Button::new(app.name.as_str())
-                        .frame(false)
-                        .min_size(Vec2::new(ui.available_width(), 24.0));
-                    if ui.add(row).on_hover_text(&app.id).clicked() {
-                        picked.push(app.id.clone());
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
+                    for app in offered {
+                        let (rect, response) = ui.allocate_exact_size(TILE, Sense::click());
+                        // Only the tiles in view look their icons up.
+                        if !ui.is_rect_visible(rect) {
+                            continue;
+                        }
+                        if response.hovered() {
+                            ui.painter()
+                                .rect_filled(rect, CornerRadius::same(10), look().hover);
+                        }
+                        let icon = self.icons.get(ui.ctx(), &app.id);
+                        let at = rect.center_top() + Vec2::new(0.0, 8.0 + TILE_ICON / 2.0);
+                        draw_icon(ui, icon, &app.name, at, TILE_ICON);
+                        let text = ui.painter().layout(
+                            app.name.clone(),
+                            egui::FontId::proportional(11.5),
+                            look().text,
+                            TILE.x - 8.0,
+                        );
+                        let top = rect.top() + 14.0 + TILE_ICON;
+                        let x = rect.center().x - text.size().x / 2.0;
+                        ui.painter().with_clip_rect(rect).galley(
+                            egui::pos2(x, top),
+                            text,
+                            look().text,
+                        );
+                        if response.on_hover_text(&app.name).clicked() {
+                            added = Some(app.id.clone());
+                        }
                     }
-                }
+                });
             });
+        if let Some(id) = added {
+            self.settings.quick_apps.push(id);
+        }
+    }
+}
+
+/// An app id as a name, when the app's own name isn't known (yet): "org.kde.dolphin.desktop"
+/// → "dolphin".
+fn pretty_id(id: &str) -> String {
+    let base = std::path::Path::new(id)
+        .file_stem()
+        .map_or_else(|| id.to_owned(), |s| s.to_string_lossy().into_owned());
+    base.rsplit('.').next().unwrap_or(&base).to_owned()
+}
+
+/// An app's icon of `size` points in the layout, or its initial on a tile while there is none.
+fn app_icon(ui: &mut egui::Ui, icon: Option<egui::TextureId>, name: &str, size: f32) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
+    draw_icon(ui, icon, name, rect.center(), size);
+}
+
+fn draw_icon(ui: &egui::Ui, icon: Option<egui::TextureId>, name: &str, at: egui::Pos2, size: f32) {
+    let rect = egui::Rect::from_center_size(at, Vec2::splat(size));
+    match icon {
+        Some(texture) => {
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            ui.painter().image(texture, rect, uv, Color32::WHITE);
+        }
+        None => {
+            ui.painter().rect_filled(
+                rect,
+                CornerRadius::same((size / 4.0) as u8),
+                ACCENT.gamma_multiply(0.85),
+            );
+            let initial: String = name
+                .chars()
+                .next()
+                .into_iter()
+                .flat_map(char::to_uppercase)
+                .collect();
+            ui.painter().text(
+                at,
+                egui::Align2::CENTER_CENTER,
+                initial,
+                egui::FontId::proportional(size * 0.5),
+                Color32::WHITE,
+            );
+        }
     }
 }
 
@@ -360,19 +582,27 @@ enum Glyph {
     Remove,
 }
 
-fn small_button(ui: &mut egui::Ui, glyph: Glyph, hint: &str) -> egui::Response {
-    let response = ui
-        .add(egui::Button::new("").min_size(Vec2::new(28.0, 24.0)))
-        .on_hover_text(hint);
-    let color = if ui.is_enabled() {
-        TEXT
+/// A small round button with a drawn glyph, only a circle under the pointer.
+fn small_button(ui: &mut egui::Ui, glyph: Glyph, hint: &str, enabled: bool) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(26.0), Sense::click());
+    let response = if enabled {
+        response.on_hover_text(hint)
     } else {
-        TEXT_MUTED.gamma_multiply(0.5)
+        response
+    };
+    let p = ui.painter();
+    if enabled && response.hovered() {
+        p.circle_filled(rect.center(), 13.0, look().hover);
+    }
+    let color = if !enabled {
+        look().muted.gamma_multiply(0.4)
+    } else if matches!(glyph, Glyph::Remove) && response.hovered() {
+        crate::glass::RED
+    } else {
+        look().text
     };
     let stroke = Stroke::new(1.6, color);
-    let c = response.rect.center();
-    let p = ui.painter();
-    let at = |x: f32, y: f32| c + Vec2::new(x, y);
+    let at = |x: f32, y: f32| rect.center() + Vec2::new(x, y);
     match glyph {
         Glyph::Up | Glyph::Down => {
             let k = if matches!(glyph, Glyph::Up) {
@@ -389,7 +619,22 @@ fn small_button(ui: &mut egui::Ui, glyph: Glyph, hint: &str) -> egui::Response {
             p.line_segment([at(-4.0, 4.0), at(4.0, -4.0)], stroke);
         }
     }
-    response
+    if enabled {
+        response
+    } else {
+        response.on_hover_cursor(egui::CursorIcon::Default)
+    }
+}
+
+/// A row with a label on the left and its controls.
+fn labelled(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
+    ui.horizontal_wrapped(|ui| {
+        ui.add_sized(
+            Vec2::new(70.0, 32.0),
+            egui::Label::new(RichText::new(label).color(look().muted)),
+        );
+        add(ui);
+    });
 }
 
 /// One settings window at a time, however it was opened: the guard holds a lock on a file in
@@ -443,7 +688,7 @@ fn row(ui: &mut egui::Ui, row: &Row) -> Option<usize> {
     ui.indent(row.title, |ui| {
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new(row.status).size(12.5).color(row.color));
-            ui.label(RichText::new(row.help).size(12.5).color(TEXT_MUTED));
+            ui.label(RichText::new(row.help).size(12.5).color(look().muted));
         });
         if row.buttons.is_empty() {
             return;
@@ -466,29 +711,29 @@ fn row(ui: &mut egui::Ui, row: &Row) -> Option<usize> {
 /// A white panel with a heading, an optional line under it, and the controls.
 fn card(ui: &mut egui::Ui, heading: &str, help: Option<&str>, add: impl FnOnce(&mut egui::Ui)) {
     Frame::new()
-        .fill(CARD)
-        .corner_radius(CornerRadius::same(12))
-        .stroke(Stroke::new(1.0, Color32::from_black_alpha(18)))
-        .inner_margin(Margin::same(14))
+        .fill(look().card)
+        .corner_radius(CornerRadius::same(14))
+        .stroke(Stroke::new(1.0, look().edge))
+        .inner_margin(Margin::same(16))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.label(RichText::new(heading).size(15.0).strong());
             if let Some(help) = help {
-                ui.label(RichText::new(help).size(12.5).color(TEXT_MUTED));
+                ui.label(RichText::new(help).size(12.5).color(look().muted));
             }
             ui.add_space(2.0);
             add(ui);
         });
-    ui.add_space(4.0);
+    ui.add_space(6.0);
 }
 
 /// One button of a row where exactly one is on.
 fn segment<T: PartialEq + Copy>(ui: &mut egui::Ui, value: &mut T, this: T, text: &str) {
     let on = *value == this;
-    let label = RichText::new(text).color(if on { Color32::WHITE } else { TEXT });
+    let label = RichText::new(text).color(if on { Color32::WHITE } else { look().text });
     let button = egui::Button::new(label)
-        .fill(if on { ACCENT } else { BACKGROUND })
-        .min_size(Vec2::new(84.0, 32.0));
+        .fill(if on { ACCENT } else { look().control })
+        .min_size(Vec2::new(78.0, 32.0));
     if ui.add(button).clicked() {
         *value = this;
     }
@@ -503,13 +748,13 @@ fn toggle(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
         response.mark_changed();
     }
     let t = ui.ctx().animate_bool_responsive(response.id, *on);
-    let track = BACKGROUND.lerp_to_gamma(ACCENT, t);
+    let track = look().control.lerp_to_gamma(ACCENT, t);
     let painter = ui.painter();
     painter.rect(
         rect,
         CornerRadius::same(12),
         track,
-        Stroke::new(1.0, Color32::from_black_alpha(25)),
+        Stroke::new(1.0, look().edge),
         egui::StrokeKind::Inside,
     );
     let x = egui::lerp(rect.left() + 12.0..=rect.right() - 12.0, t);
@@ -536,8 +781,14 @@ mod tests {
             TRIGGER_HELP,
             "Start at login",
             "Without files",
-            "Hold {} for a moment without dragging files: the wheel opens with what is playing, \
-             the keyboard layout, the volume, the brightness and your quick apps.",
+            "Hold {} for a moment without dragging files: the wheel opens with your apps, what \
+             is playing, the keyboard, the volume, the brightness and the system.",
+            "Opens after",
+            "Appearance",
+            "Look",
+            "Like the system",
+            "Light",
+            "Dark",
             "Quick Apps",
             "On the wheel's Apps, in this order.",
             "Move up",

@@ -10,14 +10,18 @@
 //! out of the hub one after another (again when the mode switches), the wedge aimed at moves
 //! out and reaches into a lobe the frame swells into around it, and the hub's text slides over
 //! to the new one. A wedge with options (a keyboard layout, a volume level) pops them out past
-//! its lobe as bubbles while it is aimed at.
+//! its lobe as bubbles while it is aimed at. Before the disc grows out of the hub, a droplet
+//! comes round the hub and merges into it (see `paint_droplet`); a click flicks the hub toward
+//! it, and it springs back.
 
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
-use egui::{Color32, FontId, Mesh, Painter, Pos2, Rect, Shape, Stroke, Vec2, pos2, vec2};
+use egui::{
+    Color32, FontId, Mesh, Painter, Pos2, Rect, Shape, Stroke, TextureId, Vec2, pos2, vec2,
+};
 
 use crate::catalog::Mode;
-use crate::glass::{self, ACCENT, ACCENT_LIGHT, TEXT, TEXT_MUTED};
+use crate::glass::{self, ACCENT, ACCENT_LIGHT, RED, palette};
 use crate::i18n::tr;
 
 pub const HUB_R: f32 = 62.0;
@@ -55,11 +59,14 @@ pub const CAPTION_GAP: f32 = 14.0;
 /// Room kept clear around a wedge's label, and how small a long label may get to fit.
 const LABEL_PAD: f32 = 12.0;
 const MIN_LABEL: f32 = 11.0;
-
-const WEDGE: Color32 = Color32::from_rgb(248, 248, 250);
-const WEDGE_SHADE: Color32 = Color32::from_rgb(236, 236, 240);
-/// The mode band, like the track of a segmented control; the current mode is raised white.
-const TRACK: Color32 = Color32::from_rgb(230, 230, 235);
+/// An app's icon on a wedge, and how far above the middle; its name goes below.
+const WEDGE_ICON: f32 = 30.0;
+const ICON_RISE: f32 = 11.0;
+const ICON_LABEL_DROP: f32 = 18.0;
+/// The droplet that comes round the hub as the wheel opens: its radius, and how far out past
+/// the hub it starts.
+const DROPLET_R: f32 = 7.5;
+const DROPLET_OUT: f32 = 18.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hit {
@@ -183,7 +190,15 @@ pub struct View<'a> {
     pub unfold: &'a [f32],
     /// Per wedge, how far it swells toward the pointer (0 → 1, past it and back on the way).
     pub swell: &'a [f32],
+    /// Per wedge, an app's icon to show over its label.
+    pub icons: &'a [Option<TextureId>],
+    /// Per wedge, a switch's state: a dot under the label, lit while on.
+    pub on: &'a [Option<bool>],
     pub hub: Hub<'a>,
+    /// The hub's size, which grows apart from the disc's as the wheel opens.
+    pub hub_scale: f32,
+    /// How far the hub is flicked toward a click, springing back.
+    pub hub_offset: Vec2,
 }
 
 /// What the hub says: the name of what is aimed at in bold, or the files' size or count; while
@@ -225,7 +240,38 @@ pub fn paint(p: &Painter, center: Pos2, v: &View) {
         glass::frame_shaped(p, center, radius, v.open_t);
     }
     paint_wedges(p, center, s, v);
-    paint_hub(p, center, s, v);
+    paint_hub(p, center + v.hub_offset, v.hub_scale, v);
+}
+
+/// The opening: a droplet comes round the hub (of scale `s`) clockwise and merges into it,
+/// `t` 0 → 1 of the way. Returns where it was drawn, for the backdrop blur.
+pub fn paint_droplet(p: &Painter, center: Pos2, s: f32, t: f32, alpha: f32) -> Option<(Pos2, f32)> {
+    if !(0.0..1.0).contains(&t) {
+        return None;
+    }
+    let along = ease_in_out(t);
+    // It closes in on the hub as it comes round, and shrinks into it at the end.
+    let angle = -FRAC_PI_2 + 0.45 + 1.5 * along;
+    let reach = HUB_R + DROPLET_OUT * (1.0 - along * along);
+    let merge = ((t - 0.7) / 0.3).clamp(0.0, 1.0);
+    let r = DROPLET_R * (1.0 - ease_in_out(merge)) * s;
+    if r < 0.5 {
+        return None;
+    }
+    let at = center + Vec2::angled(angle) * (reach - DROPLET_R * merge) * s;
+    let a = alpha * (t / 0.15).min(1.0);
+    glass::capsule(p, Rect::from_center_size(at, Vec2::splat(2.0 * r)), a);
+    p.circle_stroke(
+        at,
+        r,
+        Stroke::new(1.0, Color32::WHITE.gamma_multiply(0.35 * a)),
+    );
+    Some((at, r))
+}
+
+fn ease_in_out(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 /// How far out past the disc the frame reaches at `angle`, around the wedges swelling as `swell`
@@ -291,7 +337,14 @@ fn paint_wedges(p: &Painter, center: Pos2, s: f32, v: &View) {
     if v.labels.is_empty() {
         let at = center + vec2(0.0, -(RING_R0 + RING_R1) / 2.0 * s);
         let hint = tr("Nothing to do with these");
-        glass::text(p, at, hint, 13.0, TEXT_MUTED.gamma_multiply(a), false);
+        glass::text(
+            p,
+            at,
+            hint,
+            13.0,
+            palette().text_muted.gamma_multiply(a),
+            false,
+        );
         return;
     }
 
@@ -315,8 +368,8 @@ fn paint_wedges(p: &Painter, center: Pos2, s: f32, v: &View) {
             )
         } else {
             (
-                WEDGE.lerp_to_gamma(ACCENT_LIGHT, h),
-                WEDGE_SHADE.lerp_to_gamma(ACCENT, h),
+                palette().wedge.lerp_to_gamma(ACCENT_LIGHT, h),
+                palette().wedge_shade.lerp_to_gamma(ACCENT, h),
             )
         };
         let shade_at = |pos: Pos2| {
@@ -327,7 +380,8 @@ fn paint_wedges(p: &Painter, center: Pos2, s: f32, v: &View) {
         p.add(strip(&outer, &inner, shade_at));
         let mut outline = outer.clone();
         outline.extend(inner.iter().rev());
-        let edge = Color32::BLACK
+        let edge = palette()
+            .edge
             .lerp_to_gamma(ACCENT, h)
             .gamma_multiply((0.1 + 0.1 * h) * a);
         p.add(Shape::closed_line(outline, Stroke::new(1.0, edge)));
@@ -335,7 +389,10 @@ fn paint_wedges(p: &Painter, center: Pos2, s: f32, v: &View) {
         let mid = (a0 + a1) / 2.0;
         let r_mid = (RING_R0 + RING_R1) / 2.0;
         let at = center + Vec2::angled(mid) * (r_mid + LABEL_SWELL * swell) * k;
-        let color = TEXT.lerp_to_gamma(Color32::WHITE, h).gamma_multiply(a);
+        let color = palette()
+            .text
+            .lerp_to_gamma(Color32::WHITE, h)
+            .gamma_multiply(a);
         // Laid out at full size, so it keeps its lines as the wedge unfolds: across the wedge
         // where it points up or down, along it where it points sideways.
         // One wedge goes all the way round: nothing beside it to keep clear of.
@@ -346,12 +403,45 @@ fn paint_wedges(p: &Painter, center: Pos2, s: f32, v: &View) {
         };
         let along = (RING_R1 - RING_R0) * s;
         let room = 1.0 / ((mid.cos() / along).powi(2) + (mid.sin() / across).powi(2)).sqrt();
-        wedge_label(p, at, label, 15.0 + h, color, room - LABEL_PAD * s, k / s);
+        // How far below `at` the label ends.
+        let below = match v.icons.get(i).copied().flatten() {
+            Some(icon) => {
+                let size = (WEDGE_ICON + 4.0 * h) * k;
+                let rect = Rect::from_center_size(at - vec2(0.0, ICON_RISE * k), Vec2::splat(size));
+                let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+                p.image(icon, rect, uv, Color32::WHITE.gamma_multiply(a));
+                let name_at = at + vec2(0.0, ICON_LABEL_DROP * k);
+                ICON_LABEL_DROP * k
+                    + wedge_label(
+                        p,
+                        name_at,
+                        label,
+                        11.5 + h,
+                        color,
+                        room - LABEL_PAD * s,
+                        k / s,
+                    )
+            }
+            None => wedge_label(p, at, label, 15.0 + h, color, room - LABEL_PAD * s, k / s),
+        };
+        if let Some(on) = v.on.get(i).copied().flatten() {
+            let dot = if on {
+                ACCENT.lerp_to_gamma(Color32::WHITE, h)
+            } else {
+                palette().text_muted.gamma_multiply(0.45)
+            };
+            p.circle_filled(
+                at + vec2(0.0, below + 7.0 * k),
+                3.0 * k,
+                dot.gamma_multiply(a),
+            );
+        }
     }
 }
 
 /// A wedge's label within `room` points: on one line, or on two split at the space nearest
 /// its middle, and only then smaller, down to `MIN_LABEL`; then drawn `zoom` times that size.
+/// Returns how far below `at` its last line ends.
 fn wedge_label(
     p: &Painter,
     at: Pos2,
@@ -360,11 +450,11 @@ fn wedge_label(
     color: Color32,
     room: f32,
     zoom: f32,
-) {
+) -> f32 {
     let width = |s: &str, size: f32| glass::text_width(p, s, size, true);
     if width(label, size) <= room {
         glass::text(p, at, label, size * zoom, color, true);
-        return;
+        return size * zoom * 0.5;
     }
     let middle = label.len() / 2;
     let split = label
@@ -393,6 +483,7 @@ fn wedge_label(
             true,
         );
     }
+    step * (lines.len() - 1) as f32 / 2.0 + size * zoom * 0.5
 }
 
 fn paint_hub(p: &Painter, center: Pos2, s: f32, v: &View) {
@@ -405,11 +496,11 @@ fn paint_hub(p: &Painter, center: Pos2, s: f32, v: &View) {
     );
     if ring {
         let r = HUB_R * s;
-        p.circle_filled(center, r, TRACK.gamma_multiply(0.97 * a));
+        p.circle_filled(center, r, palette().track.gamma_multiply(0.97 * a));
         p.circle_stroke(
             center,
             r,
-            Stroke::new(1.0, Color32::BLACK.gamma_multiply(0.07 * a)),
+            Stroke::new(1.0, palette().edge.gamma_multiply(0.07 * a)),
         );
     }
 
@@ -424,9 +515,9 @@ fn paint_hub(p: &Painter, center: Pos2, s: f32, v: &View) {
             let (outer, inner) =
                 rounded_sector(center, r0, r1, a0, a1, MODE_GAP * s, MODE_CORNER * s);
             let fill = if current {
-                Color32::WHITE
+                palette().raised
             } else {
-                TRACK.lerp_to_gamma(Color32::WHITE, 0.5)
+                palette().track.lerp_to_gamma(palette().raised, 0.5)
             };
             if current {
                 // A soft shadow under the raised slice.
@@ -442,7 +533,11 @@ fn paint_hub(p: &Painter, center: Pos2, s: f32, v: &View) {
             p.add(strip(&outer, &inner, |_| fill.gamma_multiply(a)));
         }
         // Labels bend with the ring and read left to right.
-        let color = if current { TEXT } else { TEXT_MUTED };
+        let color = if current {
+            palette().text
+        } else {
+            palette().text_muted
+        };
         glass::text_on_arc(
             p,
             center,
@@ -458,15 +553,11 @@ fn paint_hub(p: &Painter, center: Pos2, s: f32, v: &View) {
     // The centre: what is aimed at, or what is being dragged.
     // Without a ring the centre takes the whole hub.
     let centre_r = if ring { INFO_R } else { HUB_R };
-    p.circle_filled(
-        center,
-        centre_r * s,
-        Color32::from_rgb(252, 252, 253).gamma_multiply(a),
-    );
+    p.circle_filled(center, centre_r * s, palette().hub.gamma_multiply(a));
     p.circle_stroke(
         center,
         centre_r * s,
-        Stroke::new(1.0, Color32::BLACK.gamma_multiply(0.07 * a)),
+        Stroke::new(1.0, palette().edge.gamma_multiply(0.07 * a)),
     );
     // The text that goes slides up and fades as the new one comes up from below.
     let room = (centre_r * 2.0 - 10.0) * s;
@@ -474,7 +565,14 @@ fn paint_hub(p: &Painter, center: Pos2, s: f32, v: &View) {
         let size = 13.0 * s;
         let size = size * (room / glass::text_width(p, text, size, bold)).min(1.0);
         let at = center + vec2(0.0, dy * s);
-        glass::text(p, at, text, size, TEXT.gamma_multiply(a * alpha), bold);
+        glass::text(
+            p,
+            at,
+            text,
+            size,
+            palette().text.gamma_multiply(a * alpha),
+            bold,
+        );
     };
     let t = ease_out(v.hub.t.clamp(0.0, 1.0));
     let (going, coming) = hub_fade(v.hub.t);
@@ -489,9 +587,14 @@ fn paint_hub(p: &Painter, center: Pos2, s: f32, v: &View) {
 
 /// One option popping out of the wedge aimed at.
 pub struct Bubble<'a> {
+    /// One line, or two (the second bold).
     pub label: &'a str,
     /// A speaker instead of the label, crossed out if `true`: what the sound will be.
     pub speaker: Option<bool>,
+    /// An app's icon instead of the label.
+    pub icon: Option<TextureId>,
+    /// A ring around it, full at 1: how busy the computer is.
+    pub gauge: Option<f32>,
     /// What is in use now: the layout, the level nearest.
     pub on: bool,
     pub hovered: bool,
@@ -529,19 +632,75 @@ pub fn paint_bubbles(
                 Stroke::new(1.8 * s, ACCENT.gamma_multiply(a)),
             );
         }
-        let color = if b.hovered { Color32::WHITE } else { TEXT };
-        match b.speaker {
-            Some(muted) => speaker(p, at, r * 0.36, muted, color.gamma_multiply(a)),
-            None => {
-                let room = 2.0 * r - 9.0 * s;
-                let size = 12.0 * b.pop.max(0.0) * s;
-                let size = size * (room / glass::text_width(p, b.label, size, true)).min(1.0);
-                glass::text(p, at, b.label, size, color.gamma_multiply(a), true);
+        let color = if b.hovered {
+            Color32::WHITE
+        } else {
+            palette().text
+        };
+        if let Some(level) = b.gauge {
+            gauge(p, at, r - 3.0 * s, level, s, a);
+        }
+        match (b.speaker, b.icon) {
+            (Some(muted), _) => speaker(p, at, r * 0.36, muted, color.gamma_multiply(a)),
+            (None, Some(icon)) => {
+                let rect = Rect::from_center_size(at, Vec2::splat(r * 1.3));
+                let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+                p.image(icon, rect, uv, Color32::WHITE.gamma_multiply(a));
             }
+            (None, None) => bubble_label(p, at, r, b.label, b.pop, s, color.gamma_multiply(a)),
         }
         drawn.push((at, r));
     }
     drawn
+}
+
+/// A bubble's label: one line, or a small first line over a bold second ("CPU" over "12%").
+fn bubble_label(p: &Painter, at: Pos2, r: f32, label: &str, pop: f32, s: f32, color: Color32) {
+    let room = 2.0 * r - 9.0 * s;
+    let fit = |text: &str, size: f32, bold: bool| {
+        size * (room / glass::text_width(p, text, size, bold)).min(1.0)
+    };
+    match label.split_once('\n') {
+        None => {
+            let size = fit(label, 12.0 * pop.max(0.0) * s, true);
+            glass::text(p, at, label, size, color, true);
+        }
+        Some((top, bottom)) => {
+            let small = fit(top, 8.5 * pop.max(0.0) * s, false);
+            let big = fit(bottom, 11.0 * pop.max(0.0) * s, true);
+            glass::text(
+                p,
+                at - vec2(0.0, 6.0 * s),
+                top,
+                small,
+                color.gamma_multiply(0.75),
+                false,
+            );
+            glass::text(p, at + vec2(0.0, 5.0 * s), bottom, big, color, true);
+        }
+    }
+}
+
+/// A ring just inside a bubble, filled clockwise from the top to `level`, red when nearly full.
+fn gauge(p: &Painter, c: Pos2, r: f32, level: f32, s: f32, alpha: f32) {
+    p.circle_stroke(
+        c,
+        r,
+        Stroke::new(2.5 * s, palette().edge.gamma_multiply(0.12 * alpha)),
+    );
+    let level = level.clamp(0.0, 1.0);
+    let sweep = level * TAU;
+    let steps = ((sweep * r / 3.0).ceil() as usize).max(2);
+    let points: Vec<Pos2> = (0..=steps)
+        .map(|i| c + Vec2::angled(-FRAC_PI_2 + sweep * i as f32 / steps as f32) * r)
+        .collect();
+    let color = if level > 0.85 { RED } else { ACCENT };
+    if level > 0.005 {
+        p.add(Shape::line(
+            points,
+            Stroke::new(2.5 * s, color.gamma_multiply(alpha)),
+        ));
+    }
 }
 
 /// A speaker `u` points tall either side of `c`, with sound coming out or crossed out.
@@ -701,7 +860,7 @@ pub fn caption(
     rise: f32,
     bottom: f32,
 ) -> Rect {
-    let galley = p.layout_no_wrap(text.to_owned(), FontId::proportional(12.5), TEXT);
+    let galley = p.layout_no_wrap(text.to_owned(), FontId::proportional(12.5), palette().text);
     let size = galley.size() + vec2(28.0, 14.0);
     let below = center.y + (DISC_R + CAPTION_GAP + drop) * s;
     let top = if below + size.y <= bottom {
@@ -716,7 +875,7 @@ pub fn caption(
         rect.center(),
         text,
         12.5,
-        TEXT.gamma_multiply(alpha),
+        palette().text.gamma_multiply(alpha),
         false,
     );
     rect

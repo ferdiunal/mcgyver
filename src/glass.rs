@@ -1,11 +1,12 @@
-//! The overlay's material: light grey and white frosted glass over a compositor-blurred
-//! backdrop, with dark text and one orange accent.
+//! The overlay's material: frosted glass over a compositor-blurred backdrop, light grey and
+//! white with dark text or (see `set_dark`) smoky with light text, and one orange accent.
 //!
 //! Painting only covers what we draw; the blur behind it comes from the platform, which reads
 //! the [`GlassShape`]s the overlay collected while painting.
 
 use std::f32::consts::{FRAC_PI_2, TAU};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use egui::epaint::TextShape;
 use egui::{
@@ -13,17 +14,88 @@ use egui::{
     Shape, Stroke, StrokeKind, Vec2, vec2,
 };
 
-pub const TEXT: Color32 = Color32::from_rgb(29, 29, 31);
-pub const TEXT_MUTED: Color32 = Color32::from_rgb(112, 112, 120);
 pub const ACCENT: Color32 = Color32::from_rgb(244, 96, 18);
 pub const ACCENT_LIGHT: Color32 = Color32::from_rgb(255, 136, 56);
 pub const GREEN: Color32 = Color32::from_rgb(52, 178, 84);
 pub const RED: Color32 = Color32::from_rgb(222, 64, 52);
 
-const FRAME: Color32 = Color32::from_rgb(222, 222, 227);
-const FRAME_ALPHA: f32 = 0.82;
-const PANEL: Color32 = Color32::from_rgb(246, 246, 248);
-const PANEL_ALPHA: f32 = 0.9;
+/// The overlay's colours in light or dark.
+pub struct Palette {
+    pub text: Color32,
+    pub text_muted: Color32,
+    /// The wheel's frosted disc, and how opaque it is.
+    pub frame: Color32,
+    pub frame_alpha: f32,
+    /// The captions' and cards' frosted panel, and how opaque it is.
+    pub panel: Color32,
+    pub panel_alpha: f32,
+    /// A wedge at rest, lit from above: `wedge` at the top, `wedge_shade` at the bottom.
+    pub wedge: Color32,
+    pub wedge_shade: Color32,
+    /// The mode band's track, and the slice raised on it for the mode shown.
+    pub track: Color32,
+    pub raised: Color32,
+    /// The hub's centre.
+    pub hub: Color32,
+    /// Hairline edges: dark on light glass, light on dark.
+    pub edge: Color32,
+    /// How bright the lit rim is.
+    pub rim: f32,
+}
+
+pub const LIGHT_GLASS: Palette = Palette {
+    text: Color32::from_rgb(29, 29, 31),
+    text_muted: Color32::from_rgb(112, 112, 120),
+    frame: Color32::from_rgb(222, 222, 227),
+    frame_alpha: 0.82,
+    panel: Color32::from_rgb(246, 246, 248),
+    panel_alpha: 0.9,
+    wedge: Color32::from_rgb(248, 248, 250),
+    wedge_shade: Color32::from_rgb(236, 236, 240),
+    track: Color32::from_rgb(230, 230, 235),
+    raised: Color32::WHITE,
+    hub: Color32::from_rgb(252, 252, 253),
+    edge: Color32::BLACK,
+    rim: 0.8,
+};
+
+pub const DARK_GLASS: Palette = Palette {
+    text: Color32::from_rgb(242, 242, 246),
+    text_muted: Color32::from_rgb(160, 160, 170),
+    frame: Color32::from_rgb(38, 38, 44),
+    frame_alpha: 0.86,
+    panel: Color32::from_rgb(42, 42, 48),
+    panel_alpha: 0.92,
+    wedge: Color32::from_rgb(66, 66, 74),
+    wedge_shade: Color32::from_rgb(52, 52, 60),
+    track: Color32::from_rgb(28, 28, 33),
+    raised: Color32::from_rgb(78, 78, 88),
+    hub: Color32::from_rgb(58, 58, 66),
+    edge: Color32::WHITE,
+    rim: 0.35,
+};
+
+static DARK: AtomicBool = AtomicBool::new(false);
+
+/// Draws everything from now on dark, or light.
+pub fn set_dark(dark: bool) {
+    DARK.store(dark, Ordering::Relaxed);
+}
+
+/// Whether everything is drawn dark now.
+pub fn dark() -> bool {
+    DARK.load(Ordering::Relaxed)
+}
+
+/// The colours to draw with now.
+pub fn palette() -> &'static Palette {
+    if DARK.load(Ordering::Relaxed) {
+        &DARK_GLASS
+    } else {
+        &LIGHT_GLASS
+    }
+}
+
 /// Light comes from the top left.
 const LIGHT: f32 = -2.3;
 
@@ -113,13 +185,14 @@ pub fn frame(p: &Painter, c: Pos2, r: f32, alpha: f32) {
             Color32::BLACK.gamma_multiply(0.018 * alpha),
         );
     }
-    p.circle_filled(c, r, FRAME.gamma_multiply(FRAME_ALPHA * alpha));
+    let glass = palette();
+    p.circle_filled(c, r, glass.frame.gamma_multiply(glass.frame_alpha * alpha));
     p.circle_stroke(
         c,
         r,
-        Stroke::new(1.0, Color32::BLACK.gamma_multiply(0.10 * alpha)),
+        Stroke::new(1.0, glass.edge.gamma_multiply(0.10 * alpha)),
     );
-    rim(p, c, |_| r - 1.5, 1.5, 0.8 * alpha);
+    rim(p, c, |_| r - 1.5, 1.5, glass.rim * alpha);
 }
 
 /// The frame with its edge at `radius(angle)` instead of round, as where it swells toward the
@@ -144,13 +217,18 @@ pub fn frame_shaped(p: &Painter, c: Pos2, radius: impl Fn(f32) -> f32, alpha: f3
             Color32::BLACK.gamma_multiply(0.018 * alpha),
         ));
     }
+    let glass = palette();
     let outline = edge(0.0);
-    p.add(fan(c, &outline, FRAME.gamma_multiply(FRAME_ALPHA * alpha)));
+    p.add(fan(
+        c,
+        &outline,
+        glass.frame.gamma_multiply(glass.frame_alpha * alpha),
+    ));
     p.add(Shape::closed_line(
         outline,
-        Stroke::new(1.0, Color32::BLACK.gamma_multiply(0.10 * alpha)),
+        Stroke::new(1.0, glass.edge.gamma_multiply(0.10 * alpha)),
     ));
-    rim(p, c, |a| radius(a) - 1.5, 1.5, 0.8 * alpha);
+    rim(p, c, |a| radius(a) - 1.5, 1.5, glass.rim * alpha);
 }
 
 /// A filled shape that every point of `ring` sees `center` from (as a swollen disc does).
@@ -196,11 +274,16 @@ pub fn capsule(p: &Painter, rect: Rect, alpha: f32) {
             Color32::BLACK.gamma_multiply(0.02 * alpha),
         );
     }
-    p.rect_filled(rect, radius, PANEL.gamma_multiply(PANEL_ALPHA * alpha));
+    let glass = palette();
+    p.rect_filled(
+        rect,
+        radius,
+        glass.panel.gamma_multiply(glass.panel_alpha * alpha),
+    );
     p.rect_stroke(
         rect,
         radius,
-        Stroke::new(1.0, Color32::BLACK.gamma_multiply(0.09 * alpha)),
+        Stroke::new(1.0, glass.edge.gamma_multiply(0.09 * alpha)),
         StrokeKind::Inside,
     );
 }

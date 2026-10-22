@@ -4,7 +4,7 @@
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
-use crate::glass::{GREEN, RED, TEXT_MUTED};
+use crate::glass::{GREEN, RED};
 use crate::i18n::{tr, trf};
 use crate::service;
 use crate::settings::{APP_NAME, Settings, Trigger};
@@ -243,7 +243,7 @@ impl Permissions {
 
     pub(super) fn card(&mut self, ui: &mut egui::Ui, trigger: Trigger) {
         let Some(check) = self.check else {
-            ui.label(egui::RichText::new(tr("Checking…")).color(TEXT_MUTED));
+            ui.label(egui::RichText::new(tr("Checking…")).color(super::muted()));
             return;
         };
         let rows = [
@@ -287,16 +287,16 @@ impl Permissions {
         // Until a restart this window asked for is over, the app's answers are about to change.
         let restarting = self.restarting() && state != State::Granted;
         let (color, status) = match state {
-            _ if restarting => (TEXT_MUTED, tr("Restarting…").to_owned()),
+            _ if restarting => (super::muted(), tr("Restarting…").to_owned()),
             State::Granted => (GREEN, tr("On").to_owned()),
             State::NotSetUp => (RED, tr("Not set up").to_owned()),
             State::NeedsRestart => (AMBER, tr("Needs a restart").to_owned()),
             State::Refused => (RED, tr("Still not allowed").to_owned()),
             State::Unsupported => (
-                TEXT_MUTED,
+                super::muted(),
                 tr("This desktop can't share Dolphin's selection").to_owned(),
             ),
-            State::NotRunning => (TEXT_MUTED, trf("{} isn't running", &[&APP_NAME])),
+            State::NotRunning => (super::muted(), trf("{} isn't running", &[&APP_NAME])),
             State::KeyTaken => (
                 RED,
                 trf("{} alone is taken by another shortcut", &[&trigger.label()]),

@@ -45,7 +45,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WS_EX_TRANSPARENT,
 };
 
-use super::{Input, Shared, WHEEL_AT, WINDOW};
+use super::{Input, Shared, TOAST_MARGIN, WHEEL_AT, WINDOW};
 use crate::settings::Trigger;
 
 /// Windows shows what a drag carries only to the window under it.
@@ -297,8 +297,9 @@ pub(super) struct NativeWindow {
     hwnd: HWND,
     /// The window's top left on screen, in pixels, once it has been put somewhere.
     origin: Option<(i32, i32)>,
-    /// The screen it was last put on, in pixels.
+    /// The screen it was last put on, in pixels, and the part of it without the taskbar.
     screen: Option<(i32, i32, i32, i32)>,
+    work: Option<(i32, i32, i32, i32)>,
     /// Clicks and drags go through to what is below.
     through: bool,
 }
@@ -317,6 +318,7 @@ impl NativeWindow {
             hwnd,
             origin: None,
             screen: None,
+            work: None,
             through: true,
         };
         window.keep();
@@ -344,7 +346,14 @@ impl NativeWindow {
             let monitor = MonitorFromPoint(at, MONITOR_DEFAULTTONEAREST);
             let mut info: MONITORINFO = std::mem::zeroed();
             info.cbSize = size_of::<MONITORINFO>() as u32;
-            let screen = (GetMonitorInfoW(monitor, &mut info) != 0).then_some(info.rcMonitor);
+            let found = GetMonitorInfoW(monitor, &mut info) != 0;
+            let screen = found.then_some(info.rcMonitor);
+            self.work = found.then_some((
+                info.rcWork.left,
+                info.rcWork.top,
+                info.rcWork.right,
+                info.rcWork.bottom,
+            ));
             let (mut dpi, mut dpi_y) = (0, 0);
             let found = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi, &mut dpi_y) == 0;
             (
@@ -382,6 +391,44 @@ impl NativeWindow {
         }
         let before = self.origin.replace(origin)?;
         Some(vec2((before.0 - origin.0) as f32, (before.1 - origin.1) as f32) / self.scale())
+    }
+
+    /// Moves the window into the bottom right corner of the screen it is on, above the
+    /// taskbar, for the cards. How far it moved, in its points.
+    pub(super) fn place_corner(&mut self, _ctx: &egui::Context) -> Option<Vec2> {
+        let (left, top, right, bottom) = self.work?;
+        let scale = self.scale();
+        let origin = (
+            (right - (WINDOW.x * scale) as i32).max(left),
+            (bottom - (WINDOW.y * scale) as i32).max(top),
+        );
+        if self.origin == Some(origin) {
+            return None;
+        }
+        // SAFETY: the overlay's own window; only its place changes.
+        unsafe {
+            SetWindowPos(
+                self.hwnd,
+                HWND_TOPMOST,
+                origin.0,
+                origin.1,
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+        }
+        let before = self.origin.replace(origin)?;
+        Some(vec2((before.0 - origin.0) as f32, (before.1 - origin.1) as f32) / scale)
+    }
+
+    /// Where the newest card's bottom right corner goes, in the window's points: the screen's
+    /// bottom right, above the taskbar.
+    pub(super) fn toast_corner(&self) -> Pos2 {
+        let corner = match self.work {
+            Some((_, _, right, bottom)) => self.local(pos2(right as f32, bottom as f32)),
+            None => WINDOW.to_pos2(),
+        };
+        corner - Vec2::splat(TOAST_MARGIN)
     }
 
     /// Whether the window has been put anywhere yet.

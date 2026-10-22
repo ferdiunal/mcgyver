@@ -3,11 +3,12 @@
 //! apps in the Applications folders. macOS has no public way to set a screen's brightness, so
 //! there is no Brightness wedge.
 
-use std::ffi::{CStr, c_char, c_void};
+use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
-use std::process::{Command as Process, Stdio};
+use std::process::{Child, Command as Process, Stdio};
+use std::sync::Mutex;
 
-use super::{App, Command, Layout, MediaKey, Messenger, Player, Volume};
+use super::{App, Command, Language, Layout, MediaKey, Messenger, Player, Shot, Volume};
 
 /// Players AppleScript can drive, by process name.
 const PLAYERS: [&str; 2] = ["Spotify", "Music"];
@@ -84,6 +85,23 @@ pub fn player() -> Option<Player> {
         .collect();
     players.sort_by_key(|p| !p.playing);
     players.into_iter().next()
+}
+
+/// Finder is in front with files selected. (`lsappinfo` names the app in front without asking
+/// for any permission; Finder is asked only when it is that app.)
+pub fn selecting() -> bool {
+    let front = Process::new("lsappinfo")
+        .args(["info", "-only", "name", "front"])
+        .stderr(Stdio::null())
+        .output()
+        .map(|out| String::from_utf8_lossy(&out.stdout).into_owned())
+        .unwrap_or_default();
+    if !front.contains("\"Finder\"") {
+        return false;
+    }
+    osascript(&["tell application \"Finder\" to return (count of (get selection)) as string"])
+        .and_then(|count| count.trim().parse::<u32>().ok())
+        .is_some_and(|count| count > 0)
 }
 
 pub fn volume() -> Option<Volume> {
@@ -297,8 +315,223 @@ pub fn run(command: &Command) -> Result<(), String> {
         Command::Mute(on) => script(&[&format!("set volume output muted {on}")]),
         Command::Brightness(_) => Err("macOS can't set the brightness here".into()),
         Command::Launch(app) => open(&[&app.id]),
+        Command::Activate(id) => crate::switcher::activate(id),
+        Command::Screenshot(shot) => screenshot(*shot),
+        // The Screenshot app's bar, where recording a part or all of the screen is picked.
+        Command::Record(_) => {
+            open(&["-b", "com.apple.screenshot.launcher"]).or_else(|_| open(&["-a", "Screenshot"]))
+        }
+        Command::Language(id) => set_language(id),
+        Command::MuteMic(on) => mute_mic(*on),
+        Command::DarkMode(on) => script(&[&format!(
+            "tell application \"System Events\" to tell appearance preferences to set dark mode to {on}"
+        )]),
+        Command::StayAwake(on) => stay_awake(*on),
+        Command::Lock => lock(),
+        Command::Sleep => quietly("pmset", &["sleepnow"]),
+        Command::EmptyTrash => script(&["tell application \"Finder\" to empty trash"]),
+        Command::ShowDesktop => Err("macOS shows the desktop with its own gesture".into()),
+        Command::Monitor => open(&["-a", "Activity Monitor"]),
         Command::Settings => unreachable!("the settings are opened by `desk::run`"),
     }
+}
+
+/// Runs `program` and waits for it; an error if it fails.
+fn quietly(program: &str, args: &[&str]) -> Result<(), String> {
+    let status = Process::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| format!("{program}: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("{program} failed"))
+    }
+}
+
+/// Locks the screen as the menu bar's Lock Screen does, with the call it makes (in login's
+/// private framework). Without it, the screen goes to sleep, which locks when macOS asks for the
+/// password at once (as it does unless told otherwise).
+fn lock() -> Result<(), String> {
+    unsafe extern "C" {
+        fn dlopen(path: *const c_char, mode: c_int) -> *mut c_void;
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    }
+    const RTLD_LAZY: c_int = 1;
+    let path = c"/System/Library/PrivateFrameworks/login.framework/Versions/Current/login";
+    // SAFETY: a NUL-terminated path and symbol; the library stays loaded (never closed).
+    let call = unsafe {
+        let library = dlopen(path.as_ptr(), RTLD_LAZY);
+        if library.is_null() {
+            std::ptr::null_mut()
+        } else {
+            dlsym(library, c"SACLockScreenImmediate".as_ptr())
+        }
+    };
+    if call.is_null() {
+        return quietly("pmset", &["displaysleepnow"]);
+    }
+    // SAFETY: `SACLockScreenImmediate` takes nothing and returns an int.
+    let call: extern "C" fn() -> c_int = unsafe { std::mem::transmute(call) };
+    call();
+    Ok(())
+}
+
+/// What a program prints, if it succeeds.
+fn said(program: &str, args: &[&str]) -> Option<String> {
+    let out = Process::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+}
+
+/// macOS adds input sources in its own settings.
+pub const ADDS_LAYOUTS: bool = false;
+
+/// `screencapture` takes all three; recording goes through the Screenshot app's bar.
+pub fn captures() -> (Vec<Shot>, Vec<Shot>) {
+    (
+        vec![Shot::Region, Shot::Screen, Shot::Window],
+        vec![Shot::Region],
+    )
+}
+
+/// Takes a screenshot where macOS keeps them (the Desktop unless changed), named as it names
+/// them. (macOS asks once for McGyver to be let record the screen.)
+fn screenshot(shot: Shot) -> Result<(), String> {
+    let folder = said("defaults", &["read", "com.apple.screencapture", "location"])
+        .filter(|f| !f.is_empty())
+        .map(|f| match f.strip_prefix("~/") {
+            Some(rest) => PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(rest),
+            None => PathBuf::from(f),
+        })
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Desktop")))
+        .ok_or("no folder for screenshots")?;
+    let stamp = said("date", &["+%Y-%m-%d %H.%M.%S"]).unwrap_or_default();
+    let file = folder.join(format!("{} {stamp}.png", crate::i18n::tr("Screenshot")));
+    let mode: &[&str] = match shot {
+        Shot::Region => &["-i", "-s"],
+        Shot::Screen => &[],
+        Shot::Window => &["-i", "-w"],
+    };
+    let mut child = Process::new("screencapture")
+        .args(mode)
+        .arg(&file)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("screencapture: {e}"))?;
+    std::thread::spawn(move || child.wait());
+    Ok(())
+}
+
+/// The languages macOS may speak, the one spoken first; English is always there to go back to.
+pub fn languages() -> (Vec<Language>, Option<usize>) {
+    let listed = apple_languages();
+    let mut found: Vec<Language> = Vec::new();
+    for id in listed.iter().map(String::as_str).chain(["en-US"]) {
+        let language = super::languages::language(id);
+        if !found.iter().any(|l| l.short == language.short) {
+            found.push(language);
+        }
+    }
+    let current = (!found.is_empty()).then_some(0);
+    (found, current)
+}
+
+/// The languages macOS may speak, as it lists them.
+fn apple_languages() -> Vec<String> {
+    said("defaults", &["read", "-g", "AppleLanguages"])
+        .map(|text| super::languages::defaults_list(&text))
+        .unwrap_or_default()
+}
+
+/// Puts `id` first in macOS's languages, the others kept as they were; apps speak it when they
+/// start again.
+fn set_language(id: &str) -> Result<(), String> {
+    let mut list = apple_languages();
+    list.retain(|l| l != id);
+    list.insert(0, id.to_owned());
+    let mut args = vec!["write", "-g", "AppleLanguages", "-array"];
+    args.extend(list.iter().map(String::as_str));
+    quietly("defaults", &args)
+}
+
+/// The input volume the microphone had before it was muted here.
+static MIC_LEVEL: Mutex<Option<u32>> = Mutex::new(None);
+
+/// macOS has no mute for the microphone; it is muted with its volume at 0.
+pub fn mic_muted() -> Option<bool> {
+    let level: u32 = osascript(&["return input volume of (get volume settings)"])?
+        .trim()
+        .parse()
+        .ok()?;
+    Some(level == 0)
+}
+
+fn mute_mic(on: bool) -> Result<(), String> {
+    let mut kept = MIC_LEVEL.lock().unwrap_or_else(|e| e.into_inner());
+    let level = if on {
+        let now = osascript(&["return input volume of (get volume settings)"])
+            .and_then(|l| l.trim().parse::<u32>().ok())
+            .filter(|&l| l > 0);
+        if now.is_some() {
+            *kept = now;
+        }
+        0
+    } else {
+        kept.take().unwrap_or(75)
+    };
+    osascript(&[&format!("set volume input volume {level}")])
+        .map(drop)
+        .ok_or_else(|| "AppleScript failed".to_owned())
+}
+
+/// Whether macOS is dark.
+pub fn dark() -> Option<bool> {
+    Some(crate::settings::system_dark_now())
+}
+
+/// `caffeinate` keeping the screen and the computer awake, for as long as it runs (and no
+/// longer than McGyver: it watches McGyver's process).
+static AWAKE: Mutex<Option<Child>> = Mutex::new(None);
+
+pub fn awake() -> Option<bool> {
+    let mut held = AWAKE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(child) = held.as_mut()
+        && !matches!(child.try_wait(), Ok(None))
+    {
+        *held = None;
+    }
+    Some(held.is_some())
+}
+
+fn stay_awake(on: bool) -> Result<(), String> {
+    let mut held = AWAKE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(mut child) = held.take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    if on {
+        let child = Process::new("caffeinate")
+            .args(["-d", "-i", "-w", &std::process::id().to_string()])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("caffeinate: {e}"))?;
+        *held = Some(child);
+    }
+    Ok(())
 }
 
 fn open(args: &[&str]) -> Result<(), String> {

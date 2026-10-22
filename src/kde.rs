@@ -117,9 +117,6 @@ const STALE_TAP: Duration = Duration::from_secs(2);
 /// KGlobalAccel reports the key release that ends a drag as a tap too, about when keystate
 /// reports the release; taps this soon after one are ignored.
 const TAP_AFTER_DRAG: Duration = Duration::from_millis(300);
-/// How long the trigger key is held with no drag before the desk opens: past a capital or two
-/// typed with Shift.
-const HOLD: Duration = Duration::from_millis(500);
 
 const BTN_LEFT: u32 = 0x110;
 /// Height of the bands that approximate round glass in the blur region.
@@ -145,6 +142,7 @@ pub fn run() -> Result<(), String> {
     crate::settings::migrate();
     let settings = Settings::load();
     crate::i18n::set(settings.language);
+    crate::glass::set_dark(settings.appearance.dark());
     let (command_tx, command_rx) = channel::channel::<Command>();
     // One app at a time: launching it again opens the settings of the one running.
     let granted = Arc::new(crate::service::Granted::new());
@@ -218,6 +216,8 @@ pub fn run() -> Result<(), String> {
     let mut app = App {
         trigger: settings.trigger,
         hold: settings.hold,
+        hold_time: settings.hold_time(),
+        appearance: settings.appearance,
         quick_apps: settings.quick_apps.clone(),
         paused: false,
         quit: false,
@@ -273,7 +273,10 @@ pub fn run() -> Result<(), String> {
             })
         },
         desk_from: 0,
-        desk_read: desk_tx,
+        live_at: None,
+        live_read: None,
+        welcome: None,
+        desk_read: desk_tx.clone(),
         key_saw_drag: false,
         taps_ignored_until: None,
         selecting: Arc::new(AtomicBool::new(false)),
@@ -319,6 +322,14 @@ pub fn run() -> Result<(), String> {
             "mcgyver: tapping {} needs ext-data-control, which this compositor lacks",
             app.trigger.label()
         );
+    }
+
+    // The first time: the wheel shows itself, and how to open it.
+    if !settings.welcomed {
+        let apps = settings.quick_apps.clone();
+        std::thread::spawn(move || {
+            let _ = desk_tx.send(DeskRead::Welcome(Menu::read(&apps)));
+        });
     }
 
     let mut event_loop: EventLoop<App> = EventLoop::try_new().map_err(|e| e.to_string())?;
@@ -659,6 +670,8 @@ enum DeskRead {
     Open(u64, Menu),
     /// After the batch of commands with this number.
     Again(u64, Menu),
+    /// For the welcome, the first time the app starts.
+    Welcome(Menu),
 }
 
 struct App {
@@ -674,9 +687,12 @@ struct App {
     clipboard: Option<Clipboard>,
     /// The key held for a drag and tapped for Dolphin's selection.
     trigger: Trigger,
-    /// Holding the key alone opens the desk, with these quick apps.
+    /// Holding the key alone this long opens the desk, with these quick apps.
     hold: bool,
+    hold_time: Duration,
     quick_apps: Vec<String>,
+    /// Light or dark glass, looked at each time a wheel opens.
+    appearance: crate::settings::Appearance,
     /// From the tray: the trigger key does nothing until resumed.
     paused: bool,
     quit: bool,
@@ -732,6 +748,12 @@ struct App {
     /// The first batch of commands for the desk open now: readings after earlier ones are for
     /// a desk gone since.
     desk_from: u64,
+    /// While the desk shows what changes by itself (the computer's load, the switches): when
+    /// to read it again, and the reading asked for and not back yet.
+    live_at: Option<Instant>,
+    live_read: Option<u64>,
+    /// The welcome's desk, waiting for the overlay to know its size.
+    welcome: Option<Menu>,
     /// This press of the trigger key found a drag (see `TAP_AFTER_DRAG`).
     key_saw_drag: bool,
     taps_ignored_until: Option<Instant>,
@@ -755,7 +777,7 @@ impl App {
 
     fn timeout(&self) -> Option<Duration> {
         let now = Instant::now();
-        [self.nudge_at, self.repaint_at, self.hold_at]
+        [self.nudge_at, self.repaint_at, self.hold_at, self.live_at]
             .into_iter()
             .flatten()
             .min()
@@ -775,10 +797,12 @@ impl App {
             self.hold_at = None;
             self.held_long();
         }
+        self.read_live(now);
         if self.layer.is_some()
             && !self.probing
             && self.click_files.is_none()
             && self.desk_menu.is_none()
+            && self.welcome.is_none()
             && self.overlay.is_idle()
         {
             self.hide();
@@ -874,6 +898,8 @@ impl App {
         let settings = Settings::load();
         crate::i18n::set(settings.language);
         self.hold = settings.hold;
+        self.hold_time = settings.hold_time();
+        self.appearance = settings.appearance;
         self.quick_apps = settings.quick_apps;
         if settings.trigger != self.trigger {
             self.fold();
@@ -1069,8 +1095,42 @@ impl App {
         self.key_saw_drag = true;
         let (apps, read, hold) = (self.quick_apps.clone(), self.desk_read.clone(), self.holds);
         std::thread::spawn(move || {
-            let _ = read.send(DeskRead::Open(hold, Menu::read(&apps)));
+            // Shift held over files selected in the file manager is for selecting more. Asked
+            // alongside the reading, which it would otherwise hold up.
+            let menu = std::thread::scope(|s| {
+                let selecting = s.spawn(desk::selecting);
+                let menu = Menu::read(&apps);
+                (!selecting.join().unwrap_or(false)).then_some(menu)
+            });
+            if let Some(menu) = menu {
+                let _ = read.send(DeskRead::Open(hold, menu));
+            }
         });
+    }
+
+    /// While the desk shows the computer's load or its switches, reads it again every
+    /// `desk::LIVE` (once the last reading is back).
+    fn read_live(&mut self, now: Instant) {
+        let live = self.desk
+            && matches!(
+                self.overlay.desk_mode(),
+                Some(crate::catalog::Mode::Everyday | crate::catalog::Mode::System)
+            );
+        if !live {
+            self.live_at = None;
+            return;
+        }
+        match self.live_at {
+            None => self.live_at = Some(now + desk::LIVE),
+            Some(at) if now >= at && self.live_read.is_none() => {
+                self.live_at = None;
+                if let Some(menu) = self.overlay.desk_menu() {
+                    self.live_read = Some(self.runner.live(menu));
+                }
+            }
+            Some(at) if now >= at => self.live_at = None,
+            Some(_) => {}
+        }
     }
 
     /// Whether a modifier other than the trigger is held (the locks don't count).
@@ -1099,18 +1159,53 @@ impl App {
                 self.desk_menu = Some(menu);
                 self.map_overlay();
             }
-            DeskRead::Again(number, menu) if number >= self.desk_from => {
-                self.overlay.refresh_desk(menu, Instant::now());
-                self.repaint_now();
+            DeskRead::Again(number, menu) => {
+                if self.live_read.is_some_and(|asked| number >= asked) {
+                    self.live_read = None;
+                }
+                if number >= self.desk_from {
+                    self.overlay.refresh_desk(menu, Instant::now());
+                    self.repaint_now();
+                }
             }
-            DeskRead::Again(..) => {}
+            DeskRead::Welcome(menu) => {
+                if self.paused || self.layer.is_some() || !self.overlay.is_idle() {
+                    return;
+                }
+                self.log("welcome");
+                let mut settings = Settings::load();
+                settings.welcomed = true;
+                if let Err(e) = settings.save() {
+                    eprintln!("mcgyver: can't save the settings: {e}");
+                }
+                self.welcome = Some(menu);
+                self.map_overlay();
+            }
         }
+    }
+
+    /// Opens the welcome once the overlay knows the screen's size.
+    fn show_welcome(&mut self) {
+        let Some(size) = self.layer.as_ref().map(|s| s.size).filter(|s| s.0 > 0) else {
+            return;
+        };
+        let Some(menu) = self.welcome.take() else {
+            return;
+        };
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(size.0 as f32, size.1 as f32));
+        let hint = crate::i18n::trf(
+            "Hold {} for your apps and settings, or while dragging files",
+            &[&self.trigger.label()],
+        );
+        crate::glass::set_dark(self.appearance.dark());
+        self.overlay.welcome(menu, screen, hint, Instant::now());
+        self.repaint_now();
     }
 
     /// The probe found the pointer rather than a drag. Held on, the key opens the desk.
     fn no_drag(&mut self) {
         if self.probing && self.hold {
-            self.hold_at = self.held_at.map(|at| at + HOLD);
+            self.hold_at = self.held_at.map(|at| at + self.hold_time);
         }
         self.end_probe("pointer entered, no drag");
     }
@@ -1123,6 +1218,7 @@ impl App {
         self.nudge_at = None;
         let (w, h) = self.layer.as_ref().map_or((0, 0), |s| s.size);
         let screen = Rect::from_min_size(Pos2::ZERO, vec2(w as f32, h as f32));
+        crate::glass::set_dark(self.appearance.dark());
         self.overlay.open_desk(menu, at, screen, Instant::now());
         self.desk = true;
         self.desk_from = self.runner.next();
@@ -1143,7 +1239,8 @@ impl App {
             commands.remove(at);
             self.show_settings();
         }
-        self.runner.run(commands, self.quick_apps.clone());
+        // Readings asked before these would undo what the click shows at once.
+        self.desk_from = self.runner.run(commands, self.quick_apps.clone());
     }
 
     /// KWin re-targets a drag only when the pointer moves. If nothing answered the probe, a
@@ -1498,6 +1595,12 @@ impl LayerShellHandler for App {
             return;
         };
         surface.size = configure.new_size;
+        if self.welcome.is_some() {
+            self.show_welcome();
+        }
+        let Some(surface) = &mut self.layer else {
+            return;
+        };
         match &surface.gl_surface {
             Some(gl_surface) => {
                 let scale = surface.render_scale() as u32;
@@ -1612,14 +1715,7 @@ impl PointerHandler for App {
                 PointerEventKind::Release {
                     button: BTN_LEFT, ..
                 } if on_cards => {
-                    let moved = self.overlay.holding_card();
                     self.overlay.card_release(at, Instant::now());
-                    if moved && let Some(close) = self.overlay.close_button_of(at) {
-                        self.log(format!(
-                            "card let go, close button at ({:.0}, {:.0})",
-                            close.x, close.y
-                        ));
-                    }
                     self.card_pointer(at);
                 }
                 _ => {}
@@ -1629,8 +1725,7 @@ impl PointerHandler for App {
 }
 
 impl App {
-    /// The pointer over the cards: one being held follows it, and the cursor says what a press
-    /// would do there.
+    /// The pointer over the cards: the cursor says what a press would do there.
     fn card_pointer(&mut self, at: Pos2) {
         self.overlay.card_hover(Some(at));
         let spot = self.overlay.card_spot(at);
@@ -1643,14 +1738,9 @@ impl App {
                 ));
             }
         }
-        let shape = if self.overlay.holding_card() {
-            Shape::Grabbing
-        } else {
-            match self.overlay.card_spot(at) {
-                Some(CardSpot::Close) => Shape::Pointer,
-                Some(CardSpot::Body) => Shape::Grab,
-                None => Shape::Default,
-            }
+        let shape = match self.overlay.card_spot(at) {
+            Some(CardSpot::Close) => Shape::Pointer,
+            _ => Shape::Default,
         };
         if let Some(cursor) = &self.cursor {
             cursor.set_shape(self.pointer_serial, shape);
@@ -1758,6 +1848,7 @@ impl App {
         self.nudge_at = None;
         let (w, h) = self.layer.as_ref().map_or((0, 0), |s| s.size);
         let screen = Rect::from_min_size(Pos2::ZERO, vec2(w as f32, h as f32));
+        crate::glass::set_dark(self.appearance.dark());
         self.overlay.open(
             files,
             pos2(x as f32, y as f32),
@@ -1847,6 +1938,7 @@ impl App {
         self.nudge_at = None;
         let (w, h) = self.layer.as_ref().map_or((0, 0), |s| s.size);
         let screen = Rect::from_min_size(Pos2::ZERO, vec2(w as f32, h as f32));
+        crate::glass::set_dark(self.appearance.dark());
         self.overlay
             .open(files, at, screen, Mode::Convert, Instant::now());
         self.sticky = true;

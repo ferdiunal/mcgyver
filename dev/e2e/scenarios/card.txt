@@ -1,4 +1,4 @@
-# A card can be held and moved, and its close button cancels its work. Run with a long video:
+# A card shows at the bottom right of the screen, and its close button cancels its work. Run with a long video:
 #   SETUP='ffmpeg -loglevel error -f lavfi -i testsrc=duration=60:size=1280x720:rate=30 -c:v mpeg4 "$OUT/files/clip.mp4"' FILE=clip.mp4 dev/e2e/run.sh card
 # MP4 isn't offered for an MP4, so the wheel has 5 wedges from the top: MOV, MKV, WEBM, GIF,
 # MP3. The drop is on WEBM (144 degrees), a slow VP9 encode. FFmpeg must be gone
@@ -20,18 +20,11 @@ key 42 0
 sleep 800
 shot card-1-working
 shell pgrep -a ffmpeg > "$OUT/ffmpeg-during.txt"
-log 2 hold the card by its middle and move it down
-move 640 400
+log 2 the card is at the bottom right, newest at the bottom
+move 1150 710
 sleep 300
-press
-sleep 100
-glide 640 620 20 15
-release
-sleep 300
-shot card-2-moved
+shot card-2-corner
 log 3 its close button cancels it
-move 640 620
-sleep 300
 shell grep -o 'close button at ([0-9]*, [0-9]*)' "$OUT/app.log" | tail -n 1 | tr -dc '0-9 ' > "$OUT/close.txt"
 movefrom close.txt
 sleep 300

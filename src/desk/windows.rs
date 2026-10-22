@@ -16,27 +16,38 @@ use windows::Media::Control::{
 };
 use windows::Media::MediaPlaybackAutoRepeatMode as AutoRepeat;
 use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
-use windows::Win32::Media::Audio::{IMMDeviceEnumerator, MMDeviceEnumerator, eConsole, eRender};
+use windows::Win32::Media::Audio::{
+    EDataFlow, IMMDeviceEnumerator, MMDeviceEnumerator, eCapture, eConsole, eRender,
+};
 use windows::Win32::System::Com::{
     CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
 };
 use windows_sys::Win32::Globalization::{
-    GetLocaleInfoEx, LCIDToLocaleName, LOCALE_SLOCALIZEDDISPLAYNAME,
+    GetLocaleInfoEx, GetUserDefaultUILanguage, LCIDToLocaleName, LOCALE_SLOCALIZEDDISPLAYNAME,
 };
 use windows_sys::Win32::System::Com::COINIT_APARTMENTTHREADED;
+use windows_sys::Win32::System::Power::{
+    ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED, SetSuspendState,
+    SetThreadExecutionState,
+};
 use windows_sys::Win32::System::Registry::{
-    HKEY, HKEY_CLASSES_ROOT, KEY_READ, RegCloseKey, RegOpenKeyExW,
+    HKEY, HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, REG_DWORD,
+    RRF_RT_REG_SZ, RegCloseKey, RegEnumKeyExW, RegGetValueW, RegOpenKeyExW, RegSetKeyValueW,
 };
+use windows_sys::Win32::System::Shutdown::LockWorkStation;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    GetKeyboardLayout, GetKeyboardLayoutList, HKL,
+    GetKeyboardLayout, GetKeyboardLayoutList, HKL, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+    KEYEVENTF_KEYUP, SendInput, VK_LWIN, VK_SHIFT, VK_SNAPSHOT,
 };
-use windows_sys::Win32::UI::Shell::ShellExecuteW;
+use windows_sys::Win32::UI::Shell::{
+    SHERB_NOCONFIRMATION, SHERB_NOPROGRESSUI, SHEmptyRecycleBinW, ShellExecuteW,
+};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowThreadProcessId, PostMessageW, SW_SHOWNORMAL,
-    WM_INPUTLANGCHANGEREQUEST,
+    GetForegroundWindow, GetWindowThreadProcessId, HWND_BROADCAST, PostMessageW, SMTO_ABORTIFHUNG,
+    SW_SHOWNORMAL, SendMessageTimeoutW, WM_INPUTLANGCHANGEREQUEST, WM_SETTINGCHANGE,
 };
 
-use super::{App, Command, Layout, MediaKey, Messenger, Player, Repeat, Volume};
+use super::{App, Command, Language, Layout, MediaKey, Messenger, Player, Repeat, Shot, Volume};
 use crate::actions::quiet;
 
 /// How long the list of installed apps is trusted before the Start menu is read again.
@@ -52,6 +63,35 @@ fn wide(text: &str) -> Vec<u16> {
 fn com() {
     // SAFETY: no reserved pointer; a thread already joined just says so.
     let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+}
+
+/// What a PowerShell script prints, if it is done within `limit`; otherwise it is stopped.
+fn powershell_within(script: &str, limit: Duration) -> Option<String> {
+    let mut child = quiet(
+        Process::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null()),
+    )
+    .spawn()
+    .ok()?;
+    let started = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() < limit => std::thread::sleep(Duration::from_millis(15)),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    };
+    let mut said = String::new();
+    use std::io::Read;
+    child.stdout.take()?.read_to_string(&mut said).ok()?;
+    status.success().then(|| said.trim().to_owned())
 }
 
 fn powershell(script: &str) -> Option<String> {
@@ -154,14 +194,20 @@ fn app_name(id: &str) -> String {
     word.rsplit('.').next().unwrap_or(word).to_owned()
 }
 
+/// The default speakers' volume.
 fn endpoint() -> Option<IAudioEndpointVolume> {
+    default_device(eRender)
+}
+
+/// The default speakers' (`eRender`) or microphone's (`eCapture`) volume.
+fn default_device(flow: EDataFlow) -> Option<IAudioEndpointVolume> {
     com();
     // SAFETY: COM calls on interfaces COM handed out, on a thread joined to COM.
     unsafe {
         let devices: IMMDeviceEnumerator =
             CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
-        let speakers = devices.GetDefaultAudioEndpoint(eRender, eConsole).ok()?;
-        speakers.Activate(CLSCTX_ALL, None).ok()
+        let device = devices.GetDefaultAudioEndpoint(flow, eConsole).ok()?;
+        device.Activate(CLSCTX_ALL, None).ok()
     }
 }
 
@@ -179,6 +225,35 @@ pub fn volume() -> Option<Volume> {
 /// The last brightness read, and when.
 static BRIGHTNESS: Mutex<Option<(Instant, Option<f32>)>> = Mutex::new(None);
 static READING_BRIGHTNESS: AtomicBool = AtomicBool::new(false);
+
+/// An Explorer window is in front with files selected. (Explorer is asked only when it is the
+/// window in front.)
+pub fn selecting() -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetClassNameW;
+    // SAFETY: asks for the window in front and writes its class name into the buffer given.
+    let (front, class) = unsafe {
+        let front = GetForegroundWindow();
+        let mut class = [0u16; 64];
+        let len = GetClassNameW(front, class.as_mut_ptr(), class.len() as i32);
+        (
+            front,
+            String::from_utf16_lossy(&class[..len.max(0) as usize]),
+        )
+    };
+    if class != "CabinetWClass" {
+        return false;
+    }
+    powershell_within(
+        &format!(
+            "(New-Object -ComObject Shell.Application).Windows() | Where-Object {{ $_.HWND -eq {} }} \
+             | ForEach-Object {{ $_.Document.SelectedItems().Count }}",
+            front as isize
+        ),
+        Duration::from_millis(1500),
+    )
+    .and_then(|count| count.lines().next()?.trim().parse::<u32>().ok())
+    .is_some_and(|count| count > 0)
+}
 
 /// The built-in screen's brightness. WMI is slow to ask (PowerShell starts for it), so after
 /// the first time this answers with the last reading and reads again behind the scenes.
@@ -332,7 +407,280 @@ pub fn run(command: &Command) -> Result<(), String> {
         })
         .ok_or_else(|| "couldn't set the brightness".to_owned()),
         Command::Launch(app) => launch(&app.id),
+        Command::Activate(id) => crate::switcher::activate(id),
+        // Snipping Tool's own keys: its bar to pick an area, the screen saved to Pictures, its
+        // recorder.
+        Command::Screenshot(Shot::Screen) => keys(&[VK_LWIN, VK_SNAPSHOT]),
+        Command::Screenshot(_) => keys(&[VK_LWIN, VK_SHIFT, u16::from(b'S')]),
+        Command::Record(_) => keys(&[VK_LWIN, VK_SHIFT, u16::from(b'R')]),
+        Command::Language(id) => set_language(id),
+        Command::MuteMic(on) => {
+            let mic = default_device(eCapture).ok_or("no microphone")?;
+            // SAFETY: as in `default_device`.
+            unsafe { mic.SetMute(*on, std::ptr::null()).map_err(|e| e.message()) }
+        }
+        Command::DarkMode(on) => dark_mode(*on),
+        Command::StayAwake(on) => {
+            stay_awake(*on);
+            Ok(())
+        }
+        // SAFETY: plain calls without arguments that matter.
+        Command::Lock => match unsafe { LockWorkStation() } {
+            0 => Err("couldn't lock the screen".into()),
+            _ => Ok(()),
+        },
+        Command::Sleep => {
+            // SAFETY: as above.
+            if unsafe { SetSuspendState(false, false, false) } {
+                Ok(())
+            } else {
+                Err("couldn't put the computer to sleep".into())
+            }
+        }
+        Command::EmptyTrash => {
+            // SAFETY: every drive's bin, no window to own a dialog, and no dialog. An empty bin
+            // answers with an error, which isn't one here.
+            unsafe {
+                SHEmptyRecycleBinW(
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                    SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI,
+                );
+            }
+            Ok(())
+        }
+        Command::ShowDesktop => keys(&[VK_LWIN, u16::from(b'D')]),
+        Command::Monitor => shell_open("taskmgr.exe"),
         Command::Settings => unreachable!("the settings are opened by `desk::run`"),
+    }
+}
+
+/// Presses the keys in order and lets them go in reverse, as one would, once the trigger key
+/// has come up (with it still down, they would be another shortcut).
+fn keys(vks: &[u16]) -> Result<(), String> {
+    if !crate::switcher::modifiers_up() {
+        return Err("a key is still held down".into());
+    }
+    let key = |vk: u16, up: bool| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: vk,
+                wScan: 0,
+                dwFlags: if up { KEYEVENTF_KEYUP } else { 0 },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+    let inputs: Vec<INPUT> = vks
+        .iter()
+        .map(|&vk| key(vk, false))
+        .chain(vks.iter().rev().map(|&vk| key(vk, true)))
+        .collect();
+    // SAFETY: the inputs, their count and the size of one.
+    let sent = unsafe {
+        SendInput(
+            inputs.len() as u32,
+            inputs.as_ptr(),
+            std::mem::size_of::<INPUT>() as i32,
+        )
+    };
+    if sent as usize == inputs.len() {
+        Ok(())
+    } else {
+        Err("couldn't press the keys".into())
+    }
+}
+
+/// Windows adds keyboard languages in its own settings.
+pub const ADDS_LAYOUTS: bool = false;
+
+/// Snipping Tool takes an area (its bar also offers a window) or the screen; Windows 11's
+/// records an area.
+pub fn captures() -> (Vec<Shot>, Vec<Shot>) {
+    let build: u32 = registry_text(
+        HKEY_LOCAL_MACHINE,
+        r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+        "CurrentBuildNumber",
+    )
+    .and_then(|b| b.parse().ok())
+    .unwrap_or(0);
+    let records = if build >= 22000 {
+        vec![Shot::Region]
+    } else {
+        Vec::new()
+    };
+    (vec![Shot::Region, Shot::Screen], records)
+}
+
+/// A text value from the registry.
+fn registry_text(root: HKEY, key: &str, name: &str) -> Option<String> {
+    let (key, name) = (wide(key), wide(name));
+    let mut buffer = [0u16; 256];
+    let mut size = std::mem::size_of_val(&buffer) as u32;
+    // SAFETY: reads a string into the buffer, of the size given in bytes.
+    let found = unsafe {
+        RegGetValueW(
+            root,
+            key.as_ptr(),
+            name.as_ptr(),
+            RRF_RT_REG_SZ,
+            std::ptr::null_mut(),
+            buffer.as_mut_ptr().cast(),
+            &mut size,
+        )
+    } == 0;
+    let len = buffer.iter().position(|&c| c == 0).unwrap_or(0);
+    found.then(|| String::from_utf16_lossy(&buffer[..len]))
+}
+
+/// The display languages installed, the one Windows speaks marked.
+pub fn languages() -> (Vec<Language>, Option<usize>) {
+    let installed = wide(r"SYSTEM\CurrentControlSet\Control\MUI\UILanguages");
+    let mut ids = Vec::new();
+    // SAFETY: the key is opened to read, its subkeys' names are written into a buffer of the
+    // length given, and it is closed.
+    unsafe {
+        let mut key: HKEY = std::ptr::null_mut();
+        if RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            installed.as_ptr(),
+            0,
+            KEY_READ,
+            &mut key,
+        ) == 0
+        {
+            for i in 0.. {
+                let mut name = [0u16; 86];
+                let mut len = name.len() as u32;
+                let status = RegEnumKeyExW(
+                    key,
+                    i,
+                    name.as_mut_ptr(),
+                    &mut len,
+                    std::ptr::null(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                );
+                if status != 0 {
+                    break;
+                }
+                ids.push(String::from_utf16_lossy(&name[..len as usize]));
+            }
+            RegCloseKey(key);
+        }
+    }
+    let mut locale = [0u16; 85];
+    // SAFETY: written into a buffer of the length given, NUL included in what it returns.
+    let len = unsafe {
+        LCIDToLocaleName(
+            u32::from(GetUserDefaultUILanguage()),
+            locale.as_mut_ptr(),
+            locale.len() as i32,
+            0,
+        )
+    };
+    let current = String::from_utf16_lossy(&locale[..(len.max(1) - 1) as usize]);
+    if !current.is_empty() && !ids.iter().any(|id| id.eq_ignore_ascii_case(&current)) {
+        ids.insert(0, current.clone());
+    }
+    let languages: Vec<Language> = ids
+        .iter()
+        .map(|id| super::languages::language(id))
+        .collect();
+    let index = languages
+        .iter()
+        .position(|l| l.id.eq_ignore_ascii_case(&current));
+    (languages, index)
+}
+
+/// Has Windows speak `id` from the next sign-in.
+fn set_language(id: &str) -> Result<(), String> {
+    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err(format!("no language {id}"));
+    }
+    powershell(&format!("Set-WinUILanguageOverride -Language '{id}'"))
+        .map(drop)
+        .ok_or_else(|| "couldn't change the language".to_owned())
+}
+
+/// Whether the default microphone is muted.
+pub fn mic_muted() -> Option<bool> {
+    let mic = default_device(eCapture)?;
+    // SAFETY: as in `default_device`.
+    unsafe { mic.GetMute().ok().map(|muted| muted.as_bool()) }
+}
+
+/// Whether apps are dark.
+pub fn dark() -> Option<bool> {
+    Some(crate::settings::system_dark_now())
+}
+
+/// Turns apps and the taskbar dark or light, and tells the windows open.
+fn dark_mode(on: bool) -> Result<(), String> {
+    let key = wide(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+    let light: u32 = (!on).into();
+    for name in ["AppsUseLightTheme", "SystemUsesLightTheme"] {
+        let name = wide(name);
+        // SAFETY: writes a DWORD of the size given.
+        let status = unsafe {
+            RegSetKeyValueW(
+                HKEY_CURRENT_USER,
+                key.as_ptr(),
+                name.as_ptr(),
+                REG_DWORD,
+                (&light as *const u32).cast(),
+                std::mem::size_of::<u32>() as u32,
+            )
+        };
+        if status != 0 {
+            return Err("couldn't switch dark mode".into());
+        }
+    }
+    std::thread::spawn(|| {
+        let what = wide("ImmersiveColorSet");
+        let mut result = 0;
+        // SAFETY: a NUL-terminated string for every top window; one that hangs is skipped.
+        unsafe {
+            SendMessageTimeoutW(
+                HWND_BROADCAST,
+                WM_SETTINGCHANGE,
+                0,
+                what.as_ptr() as isize,
+                SMTO_ABORTIFHUNG,
+                500,
+                &mut result,
+            );
+        }
+    });
+    Ok(())
+}
+
+/// The thread keeping the computer awake; dropping it lets the computer sleep again.
+static AWAKE: Mutex<Option<std::sync::mpsc::Sender<()>>> = Mutex::new(None);
+
+pub fn awake() -> Option<bool> {
+    Some(AWAKE.lock().unwrap_or_else(|e| e.into_inner()).is_some())
+}
+
+/// Windows keeps the screen on while a thread asks it to, until that thread stops asking.
+fn stay_awake(on: bool) {
+    let mut held = AWAKE.lock().unwrap_or_else(|e| e.into_inner());
+    *held = None;
+    if on {
+        let (tell, told) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            // SAFETY: flags only.
+            unsafe {
+                SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED)
+            };
+            let _ = told.recv();
+            // SAFETY: as above.
+            unsafe { SetThreadExecutionState(ES_CONTINUOUS) };
+        });
+        *held = Some(tell);
     }
 }
 

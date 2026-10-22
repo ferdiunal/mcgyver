@@ -97,7 +97,7 @@ pub fn task(file: &Path, choice: Choice) -> Option<Task> {
             (fits && to.can_write()).then_some(Task::Convert(to))
         }
         Mode::Tools => None,
-        Mode::Actions | Mode::Media | Mode::Everyday | Mode::Apps => None,
+        Mode::Actions | Mode::Media | Mode::Everyday | Mode::Apps | Mode::System => None,
     }
 }
 

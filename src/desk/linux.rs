@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use zbus::blocking::Connection;
 use zbus::zvariant::{OwnedValue, Value};
 
-use super::{App, Command, Layout, MediaKey, Messenger, Player, Repeat, Volume};
+use super::{App, Command, Language, Layout, MediaKey, Messenger, Player, Repeat, Shot, Volume};
 use crate::actions::has;
 
 const MPRIS: &str = "org.mpris.MediaPlayer2.";
@@ -108,6 +108,33 @@ fn strings(value: &Value) -> Vec<String> {
         Value::Value(inner) => strings(inner),
         _ => Vec::new(),
     }
+}
+
+#[cfg(test)]
+mod ini_tests {
+    use super::*;
+
+    #[test]
+    fn a_key_is_set_in_its_section_and_the_rest_kept() {
+        let text = "[Layout]\nLayoutList=tr\nUse=true\n\n[Other]\nKey=1\n";
+        let set = ini_set(text, "Layout", "LayoutList", "tr,us");
+        assert_eq!(
+            ini_value(&set, "Layout", "LayoutList").as_deref(),
+            Some("tr,us")
+        );
+        assert_eq!(ini_value(&set, "Other", "Key").as_deref(), Some("1"));
+        let added = ini_set(&set, "Translations", "LANGUAGE", "en_US:tr");
+        assert!(
+            added.ends_with("[Translations]\nLANGUAGE=en_US:tr\n"),
+            "{added}"
+        );
+        assert_eq!(ini_set("", "Layout", "Use", "true"), "[Layout]\nUse=true\n");
+    }
+}
+
+/// The active Dolphin window has files selected.
+pub fn selecting() -> bool {
+    crate::file_manager::active_with_selection().is_some()
 }
 
 /// The player playing, or else one paused; a stopped one has nothing to show.
@@ -318,6 +345,7 @@ pub fn run(command: &Command) -> Result<(), String> {
                 Value::from(status),
             )
         }
+        Command::Layout(id) if id.starts_with('+') => add_layout(&bus()?, &id[1..]),
         Command::Layout(id) => {
             let index: u32 = id.parse().map_err(|_| format!("no layout {id}"))?;
             bus()?
@@ -402,8 +430,380 @@ pub fn run(command: &Command) -> Result<(), String> {
             let entry = entry(&app.id).ok_or_else(|| format!("{} isn't installed", app.name))?;
             launch(&entry, &[])
         }
+        Command::Activate(id) => crate::switcher::activate(id),
+        Command::Screenshot(shot) => {
+            let mode = match shot {
+                Shot::Region => "--region",
+                Shot::Screen => "--fullscreen",
+                Shot::Window => "--activewindow",
+            };
+            detached("spectacle", &[mode])
+        }
+        Command::Record(shot) => {
+            let mode = match shot {
+                Shot::Region => "--record=region",
+                Shot::Screen => "--record=screen",
+                Shot::Window => "--record=window",
+            };
+            detached("spectacle", &[mode])
+        }
+        Command::Language(id) => set_language(id),
+        Command::MuteMic(on) => {
+            let on = if *on { "1" } else { "0" };
+            if has("wpctl") {
+                quietly("wpctl", &["set-mute", "@DEFAULT_AUDIO_SOURCE@", on])
+            } else {
+                quietly("pactl", &["set-source-mute", "@DEFAULT_SOURCE@", on])
+            }
+        }
+        Command::DarkMode(on) => dark_mode(*on),
+        Command::StayAwake(on) => stay_awake(*on),
+        Command::Lock => call(
+            &bus()?,
+            "org.freedesktop.ScreenSaver",
+            "/ScreenSaver",
+            "org.freedesktop.ScreenSaver",
+            "Lock",
+        )
+        .or_else(|_| quietly("loginctl", &["lock-session"])),
+        Command::Sleep => quietly("systemctl", &["suspend"]),
+        Command::EmptyTrash => {
+            if has("ktrash6") {
+                quietly("ktrash6", &["--empty"])
+            } else {
+                quietly("gio", &["trash", "--empty"])
+            }
+        }
+        Command::ShowDesktop => bus()?
+            .call_method(
+                Some("org.kde.kglobalaccel"),
+                "/component/kwin",
+                Some("org.kde.kglobalaccel.Component"),
+                "invokeShortcut",
+                &("Show Desktop",),
+            )
+            .map(drop)
+            .map_err(|e| e.to_string()),
+        Command::Monitor => ["plasma-systemmonitor", "ksysguard", "gnome-system-monitor"]
+            .into_iter()
+            .find(|program| has(program))
+            .map_or_else(
+                || Err("no system monitor".into()),
+                |program| detached(program, &[]),
+            ),
         Command::Settings => unreachable!("the settings are opened by `desk::run`"),
     }
+}
+
+/// Starts `program` and leaves it running.
+fn detached(program: &str, args: &[&str]) -> Result<(), String> {
+    let mut child = Process::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("{program}: {e}"))?;
+    std::thread::spawn(move || child.wait());
+    Ok(())
+}
+
+/// Plasma can add the layouts the computer's languages want (see `Command::Layout`).
+pub const ADDS_LAYOUTS: bool = true;
+
+/// What Spectacle can take pictures and recordings of.
+pub fn captures() -> (Vec<Shot>, Vec<Shot>) {
+    if has("spectacle") {
+        (
+            vec![Shot::Region, Shot::Screen, Shot::Window],
+            vec![Shot::Region, Shot::Screen],
+        )
+    } else {
+        (Vec::new(), Vec::new())
+    }
+}
+
+/// Adds the layout `xkb` (as "us") to Plasma's, has KWin read them again, and types with it.
+fn add_layout(bus: &Connection, xkb: &str) -> Result<(), String> {
+    let path = crate::settings::config_home()
+        .ok_or("no config folder")?
+        .join("kxkbrc");
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    // Plasma lists none until set up; what it types with is then the first of these.
+    let (known, _) = layouts();
+    let known: Vec<String> = known.into_iter().map(|l| l.short.to_lowercase()).collect();
+    let (text, index) = with_layout(&text, xkb, &known);
+    std::fs::write(&path, text).map_err(|e| e.to_string())?;
+    let reload = zbus::Message::signal("/Layouts", "org.kde.keyboard", "reloadConfig")
+        .and_then(|signal| signal.build(&()))
+        .map_err(|e| e.to_string())?;
+    bus.send(&reload).map_err(|e| e.to_string())?;
+    std::thread::sleep(Duration::from_millis(300));
+    bus.call_method(
+        Some(KEYBOARD),
+        "/Layouts",
+        Some("org.kde.KeyboardLayouts"),
+        "setLayout",
+        &(index as u32,),
+    )
+    .map(drop)
+    .map_err(|e| e.to_string())
+}
+
+/// `kxkbrc` with the layout `xkb` added to its list (after `known`, the layouts typed with now,
+/// when it lists none yet), each other layout keeping its variant and name; and its place.
+fn with_layout(text: &str, xkb: &str, known: &[String]) -> (String, usize) {
+    let list = |key: &str| -> Vec<String> {
+        ini_value(text, "Layout", key)
+            .filter(|v| !v.is_empty())
+            .map(|v| v.split(',').map(str::to_owned).collect())
+            .unwrap_or_default()
+    };
+    let mut names = list("LayoutList");
+    let (mut variants, mut shown) = (list("VariantList"), list("DisplayNames"));
+    if names.is_empty() {
+        names = known.to_vec();
+        (variants, shown) = (Vec::new(), Vec::new());
+    }
+    variants.resize(names.len(), String::new());
+    shown.resize(names.len(), String::new());
+    let index = match names.iter().position(|l| l == xkb) {
+        Some(index) => index,
+        None => {
+            names.push(xkb.to_owned());
+            variants.push(String::new());
+            shown.push(String::new());
+            names.len() - 1
+        }
+    };
+    let text = ini_set(text, "Layout", "LayoutList", &names.join(","));
+    let text = ini_set(&text, "Layout", "VariantList", &variants.join(","));
+    let text = ini_set(&text, "Layout", "DisplayNames", &shown.join(","));
+    (ini_set(&text, "Layout", "Use", "true"), index)
+}
+
+/// A key's value in a section of an INI-style file.
+fn ini_value(text: &str, section: &str, key: &str) -> Option<String> {
+    let mut inside = false;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            inside = line == format!("[{section}]");
+        } else if inside
+            && let Some((k, v)) = line.split_once('=')
+            && k.trim() == key
+        {
+            return Some(v.trim().to_owned());
+        }
+    }
+    None
+}
+
+/// The file with a key set in a section, the section added if missing; the rest as it was.
+fn ini_set(text: &str, section: &str, key: &str, value: &str) -> String {
+    let header = format!("[{section}]");
+    let mut out = Vec::new();
+    let (mut inside, mut done, mut seen) = (false, false, false);
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            if inside && !done {
+                out.push(format!("{key}={value}"));
+                done = true;
+            }
+            inside = trimmed == header;
+            seen |= inside;
+        } else if inside
+            && trimmed
+                .split_once('=')
+                .is_some_and(|(k, _)| k.trim() == key)
+        {
+            out.push(format!("{key}={value}"));
+            done = true;
+            continue;
+        }
+        out.push(line.to_owned());
+    }
+    if inside && !done {
+        out.push(format!("{key}={value}"));
+    } else if !seen {
+        if out.last().is_some_and(|l| !l.is_empty()) {
+            out.push(String::new());
+        }
+        out.push(header);
+        out.push(format!("{key}={value}"));
+    }
+    out.join("\n") + "\n"
+}
+
+/// The languages Plasma may speak: the user's list (first is the one spoken), else the
+/// session's language, with English always there to go back to.
+pub fn languages() -> (Vec<Language>, Option<usize>) {
+    let configured = crate::settings::config_home()
+        .and_then(|dir| std::fs::read_to_string(dir.join("plasma-localerc")).ok())
+        .and_then(|text| ini_value(&text, "Translations", "LANGUAGE"))
+        .filter(|list| !list.is_empty());
+    let list = configured
+        .or_else(|| std::env::var("LANGUAGE").ok().filter(|l| !l.is_empty()))
+        .or_else(|| std::env::var("LANG").ok())
+        .unwrap_or_else(|| "en_US".into());
+    let mut found: Vec<Language> = Vec::new();
+    for id in list.split(':').chain(["en_US"]) {
+        let id = id.split('.').next().unwrap_or(id);
+        if id.is_empty() || id == "C" || id == "POSIX" {
+            continue;
+        }
+        let language = super::languages::language(id);
+        if !found.iter().any(|l| l.short == language.short) {
+            found.push(language);
+        }
+    }
+    let current = (!found.is_empty()).then_some(0);
+    (found, current)
+}
+
+/// Puts `id` first in Plasma's languages, the others kept as they were; Plasma speaks it from
+/// the next login.
+fn set_language(id: &str) -> Result<(), String> {
+    let path = crate::settings::config_home()
+        .ok_or("no config folder")?
+        .join("plasma-localerc");
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let mut list: Vec<String> = match ini_value(&text, "Translations", "LANGUAGE") {
+        Some(list) if !list.is_empty() => list.split(':').map(str::to_owned).collect(),
+        _ => languages().0.into_iter().map(|l| l.id).collect(),
+    };
+    list.retain(|l| l != id && !l.is_empty());
+    list.insert(0, id.to_owned());
+    let text = ini_set(&text, "Translations", "LANGUAGE", &list.join(":"));
+    std::fs::write(path, text).map_err(|e| e.to_string())
+}
+
+/// Whether the default microphone is muted.
+pub fn mic_muted() -> Option<bool> {
+    let said = |program: &str, args: &[&str]| -> Option<String> {
+        let out = Process::new(program)
+            .args(args)
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+            .ok()?;
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    };
+    if has("wpctl") {
+        return said("wpctl", &["get-volume", "@DEFAULT_AUDIO_SOURCE@"])
+            .map(|s| s.contains("MUTED"));
+    }
+    if has("pactl") {
+        return said("pactl", &["get-source-mute", "@DEFAULT_SOURCE@"]).map(|s| s.contains("yes"));
+    }
+    None
+}
+
+/// Whether Plasma is dark, where its colours can be switched.
+pub fn dark() -> Option<bool> {
+    has("plasma-apply-colorscheme").then(crate::settings::system_dark_now)
+}
+
+/// Switches Plasma's colours dark or light: back to the scheme it had before the last switch
+/// when that one is as wanted, else Breeze's. The scheme it leaves is kept for that.
+fn dark_mode(on: bool) -> Result<(), String> {
+    let config = crate::settings::config_home().ok_or("no config folder")?;
+    let current = std::fs::read_to_string(config.join("kdeglobals"))
+        .ok()
+        .and_then(|text| ini_value(&text, "General", "ColorScheme"))
+        .filter(|scheme| !scheme.is_empty());
+    let kept = config.join(crate::settings::APP_ID).join("color-scheme");
+    let before = std::fs::read_to_string(&kept)
+        .ok()
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty());
+    let scheme = match before {
+        Some(before) if scheme_dark(&before) == on => before,
+        _ if on => "BreezeDark".to_owned(),
+        _ => "BreezeLight".to_owned(),
+    };
+    if let Some(current) = current
+        && current != scheme
+        && let Some(dir) = kept.parent()
+        && std::fs::create_dir_all(dir).is_ok()
+    {
+        let _ = std::fs::write(&kept, current);
+    }
+    quietly("plasma-apply-colorscheme", &[&scheme])
+}
+
+/// Whether a colour scheme is dark: its windows' background, or else its name.
+fn scheme_dark(name: &str) -> bool {
+    let file = format!("color-schemes/{name}.colors");
+    application_dirs()
+        .iter()
+        .filter_map(|apps| apps.parent())
+        .find_map(|share| std::fs::read_to_string(share.join(&file)).ok())
+        .and_then(|text| ini_value(&text, "Colors:Window", "BackgroundNormal"))
+        .and_then(|rgb| {
+            let parts: Vec<f32> = rgb
+                .split(',')
+                .filter_map(|v| v.trim().parse().ok())
+                .collect();
+            match parts[..] {
+                [r, g, b, ..] => Some(0.299 * r + 0.587 * g + 0.114 * b < 128.0),
+                _ => None,
+            }
+        })
+        .unwrap_or_else(|| name.to_lowercase().contains("dark"))
+}
+
+/// The inhibitions held while the computer is kept awake: the bus connection they belong to
+/// (closing it, or this process ending, lifts them) and their cookies.
+static AWAKE: Mutex<Option<Inhibitions>> = Mutex::new(None);
+
+/// A bus connection and, per service, the cookie it handed out.
+type Inhibitions = (Connection, Vec<(&'static str, &'static str, u32)>);
+
+/// Whether the computer is kept awake.
+pub fn awake() -> Option<bool> {
+    Some(AWAKE.lock().unwrap_or_else(|e| e.into_inner()).is_some())
+}
+
+/// Keeps the screen on and the computer from sleeping, or lets them again.
+fn stay_awake(on: bool) -> Result<(), String> {
+    let mut held = AWAKE.lock().unwrap_or_else(|e| e.into_inner());
+    if !on {
+        if let Some((bus, cookies)) = held.take() {
+            for (service, path, cookie) in cookies {
+                let _ =
+                    bus.call_method(Some(service), path, Some(service), "UnInhibit", &(cookie,));
+            }
+        }
+        return Ok(());
+    }
+    if held.is_some() {
+        return Ok(());
+    }
+    let bus = bus().ok_or("no session bus")?;
+    let reason = (crate::settings::APP_NAME, crate::i18n::tr("Stay Awake"));
+    let mut cookies = Vec::new();
+    for (service, path) in [
+        ("org.freedesktop.ScreenSaver", "/ScreenSaver"),
+        (
+            "org.freedesktop.PowerManagement.Inhibition",
+            "/org/freedesktop/PowerManagement/Inhibition",
+        ),
+    ] {
+        if let Ok(reply) = bus.call_method(Some(service), path, Some(service), "Inhibit", &reason)
+            && let Ok(cookie) = reply.body().deserialize::<u32>()
+        {
+            cookies.push((service, path, cookie));
+        }
+    }
+    if cookies.is_empty() {
+        return Err("nothing to keep the computer awake with".into());
+    }
+    *held = Some((bus, cookies));
+    Ok(())
 }
 
 /// Runs `program` and waits for it; an error if it fails.
@@ -727,6 +1127,32 @@ pub fn open_messenger(_which: Messenger, app: &App) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn adding_a_layout_keeps_the_others_variants() {
+        let text = "[General]\nx=1\n\n[Layout]\nDisplayNames=,\nLayoutList=tr,us\nUse=true\n\
+                    VariantList=f,intl\n";
+        let (text, index) = with_layout(text, "de", &[]);
+        assert_eq!(index, 2);
+        assert_eq!(
+            ini_value(&text, "Layout", "LayoutList").unwrap(),
+            "tr,us,de"
+        );
+        assert_eq!(
+            ini_value(&text, "Layout", "VariantList").unwrap(),
+            "f,intl,"
+        );
+        assert_eq!(ini_value(&text, "Layout", "DisplayNames").unwrap(), ",,");
+        assert_eq!(ini_value(&text, "General", "x").unwrap(), "1");
+        // One there already is only typed with.
+        let (again, index) = with_layout(&text, "us", &[]);
+        assert_eq!((again, index), (text, 1));
+        // Nothing set up yet: the layouts typed with now come first.
+        let (fresh, index) = with_layout("", "tr", &["us".to_owned()]);
+        assert_eq!(index, 1);
+        assert_eq!(ini_value(&fresh, "Layout", "LayoutList").unwrap(), "us,tr");
+        assert_eq!(ini_value(&fresh, "Layout", "Use").unwrap(), "true");
+    }
 
     #[test]
     fn exec_lines_split_like_a_launcher_would() {

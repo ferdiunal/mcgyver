@@ -1,10 +1,10 @@
 //! Renders the overlay in an ordinary window, for working on the UI without dragging files.
 //!
-//!     cargo run --example preview -- [wheel|hover|swap|tools|actions|mixed|json|document|card|cards|archive|folder|failed]
-//!     cargo run --example preview -- [desk|desk-volume|desk-keyboard|desk-apps|desk-empty]
+//!     cargo run --example preview -- [wheel|hover|swap|tools|actions|share|mixed|json|document|card|cards|archive|folder|failed]
+//!     cargo run --example preview -- [desk|desk-apps|desk-media|desk-volume|desk-keyboard|desk-monitor|desk-system|desk-empty|welcome]
 //!
 //! With `EFRAME_SCREENSHOT_TO=out.png` it saves the second frame and exits; `MCGYVER_LANG=tr` shows
-//! it in Turkish. The `settings` scene opens the settings window instead. `MCGYVER_AT=0.1` stops
+//! it in Turkish, `MCGYVER_DARK=1` dark. The `settings` scene opens the settings window instead. `MCGYVER_AT=0.1` stops
 //! the clock that many seconds after the scene's last step (the wheel opening, the wedge aimed
 //! at, the mode switched), to see a frame of the motion.
 
@@ -25,6 +25,9 @@ fn main() -> eframe::Result {
     {
         mcgyver::i18n::set(lang);
     }
+    if std::env::var_os("MCGYVER_DARK").is_some() {
+        mcgyver::glass::set_dark(true);
+    }
     // The wheel offers Copy and Cut where the platform can put files on the clipboard; here,
     // nothing is put anywhere.
     mcgyver::actions::serve_files_with(mcgyver::actions::FileClipboard {
@@ -36,7 +39,7 @@ fn main() -> eframe::Result {
         return mcgyver::settings_window::run().map_err(|e| eframe::Error::AppCreation(e.into()));
     }
     // The desk's bubbles reach further out.
-    let size = if scene.starts_with("desk") {
+    let size = if scene.starts_with("desk") || scene == "welcome" {
         620.0
     } else {
         520.0
@@ -119,6 +122,15 @@ fn backdrop(p: &egui::Painter, screen: Rect) {
     p.add(egui::Shape::mesh(mesh));
 }
 
+/// The apps on the desk scenes' desktop, by the ids their icons are found by.
+const APPS: [(&str, &str); 5] = [
+    ("org.mozilla.firefox", "Firefox"),
+    ("org.kde.konsole", "Konsole"),
+    ("org.kde.dolphin", "Dolphin"),
+    ("org.kde.kate", "Kate"),
+    ("org.telegram.desktop", "Telegram"),
+];
+
 /// What a desktop might have, for the desk scenes.
 fn menu(name: &str) -> Menu {
     let layout = |id: &str, short: &str, name: &str| desk::Layout {
@@ -126,12 +138,23 @@ fn menu(name: &str) -> Menu {
         short: short.into(),
         name: name.into(),
     };
-    let app = |name: &str| desk::App {
-        id: format!("{}.desktop", name.to_lowercase()),
+    let language = |id: &str, short: &str, name: &str| desk::Language {
+        id: id.into(),
+        short: short.into(),
         name: name.into(),
     };
+    let window = |id: &str, (app_id, app): (&str, &str), title: &str, active: bool| {
+        mcgyver::switcher::Window {
+            id: id.into(),
+            title: title.into(),
+            app: app.into(),
+            app_id: app_id.into(),
+            active,
+        }
+    };
+    let empty = name == "desk-empty";
     Menu {
-        player: (name == "desk").then(|| desk::Player {
+        player: matches!(name, "desk" | "desk-media").then(|| desk::Player {
             id: "org.mpris.MediaPlayer2.spotify".into(),
             name: "Spotify".into(),
             title: "Teardrop".into(),
@@ -149,52 +172,99 @@ fn menu(name: &str) -> Menu {
             layout("3", "JA", "Japanese"),
         ],
         layout: Some(1),
+        languages: vec![
+            language("tr_TR", "TR", "Türkçe"),
+            language("en_US", "EN", "English"),
+        ],
+        language: Some(0),
         volume: Some(desk::Volume {
             level: 0.45,
             muted: false,
         }),
         brightness: Some(0.8),
-        apps: if name == "desk-empty" {
+        mic_muted: Some(false),
+        dark: Some(true),
+        awake: Some(false),
+        shots: vec![desk::Shot::Region, desk::Shot::Screen, desk::Shot::Window],
+        records: vec![desk::Shot::Region, desk::Shot::Screen],
+        usage: Some(desk::Usage {
+            processor: 0.23,
+            memory: 0.61,
+            disk: 0.91,
+        }),
+        windows: if empty {
             Vec::new()
         } else {
-            ["Firefox", "Dolphin", "Konsole", "Telegram", "Kate"]
-                .map(app)
-                .to_vec()
+            vec![
+                window("a", APPS[3], "notes.md — Kate", true),
+                window("b", APPS[0], "McGyver — Mozilla Firefox", false),
+                window("c", APPS[1], "~ : bash — Konsole", false),
+                window("d", APPS[2], "Downloads — Dolphin", false),
+                window("e", APPS[1], "cargo test — Konsole", false),
+            ]
         },
+        apps: if empty {
+            Vec::new()
+        } else {
+            APPS.iter()
+                .map(|(id, name)| desk::App {
+                    id: format!("{id}.desktop"),
+                    name: (*name).into(),
+                })
+                .collect()
+        },
+        ..Menu::default()
     }
 }
 
-/// The desk, opened at `then` less a second, with a wedge aimed at (and one of its bubbles)
-/// at `then`.
+/// The desk, opened at `then` less a second and switched to a mode, with a wedge aimed at (and
+/// one of its bubbles) at `then`. `welcome` is the first start's instead.
 fn desk_scene(name: &str, screen: Rect, then: Instant) -> Overlay {
     let center = screen.center();
+    let menu = menu(name);
     let mut overlay = Overlay::default();
-    overlay.open_desk(menu(name), center, screen, then - Duration::from_secs(1));
-    // The mode slice to switch to, and the wedge aimed at (of how many) with which bubble (of
-    // how many).
-    type Aim = Option<(usize, usize, Option<(usize, usize)>)>;
-    let (mode_at, wedge): (Option<f32>, Aim) = match name {
-        // Volume, lower right, and its 50 % bubble.
-        "desk-volume" => (None, Some((1, 3, Some((2, 5))))),
-        // The keyboard on top, and its third bubble.
-        "desk-keyboard" => (None, Some((0, 3, Some((2, 4))))),
-        // To Apps, lower left on the ring.
-        "desk-apps" => (Some(150.0), Some((0, 5, None))),
-        "desk-empty" => (Some(150.0), None),
-        _ => (None, None),
+    // Found before the first frame asks for them.
+    for (id, _) in APPS {
+        let _ = mcgyver::icons::app(id, 64);
+    }
+    if name == "welcome" {
+        let hint = mcgyver::i18n::trf(
+            "Hold {} for your apps and settings, or while dragging files",
+            &[&"Shift"],
+        );
+        overlay.welcome(menu, screen, hint, then);
+        return overlay;
+    }
+    overlay.open_desk(menu.clone(), center, screen, then - Duration::from_secs(1));
+    // The mode, and the wedge aimed at with which of its bubbles.
+    let (mode, aim): (Mode, Option<(usize, Option<usize>)>) = match name {
+        // Konsole, with its two windows.
+        "desk-apps" => (Mode::Apps, Some((1, Some(1)))),
+        "desk-media" => (Mode::Media, Some((1, None))),
+        // Volume and its 50 % bubble.
+        "desk-volume" => (Mode::Everyday, Some((2, Some(2)))),
+        "desk-keyboard" => (Mode::Everyday, Some((0, Some(2)))),
+        "desk-monitor" => (Mode::Everyday, Some((6, Some(1)))),
+        // Dark Mode.
+        "desk-system" => (Mode::System, Some((1, None))),
+        _ => (Mode::Apps, None),
     };
-    if let Some(degrees) = mode_at {
+    let modes = menu.modes();
+    if let Some(i) = modes.iter().position(|&m| m == mode).filter(|&i| i > 0) {
+        let degrees = -90.0 + 360.0 * i as f32 / modes.len() as f32;
         overlay.drag_moved(
             center + Vec2::angled(degrees.to_radians()) * 48.0,
             then - Duration::from_millis(900),
         );
         overlay.click(then - Duration::from_millis(900));
     }
-    if let Some((i, n, bubble)) = wedge {
+    if let Some((i, bubble)) = aim {
+        let n = menu.items(mode).len();
+        let subs = menu.items(mode)[i].subs.len();
         let toward = Vec2::angled(-FRAC_PI_2 + i as f32 * std::f32::consts::TAU / n as f32);
         overlay.drag_moved(center + toward * 118.0, then - Duration::from_millis(600));
-        if let Some((k, count)) = bubble {
-            overlay.drag_moved(mcgyver::wheel::bubble_spots(center, i, n, count)[k], then);
+        if let Some(k) = bubble {
+            overlay.drag_moved(mcgyver::wheel::bubble_spots(center, i, n, subs)[k], then);
         }
     }
     overlay
@@ -203,7 +273,7 @@ fn desk_scene(name: &str, screen: Rect, then: Instant) -> Overlay {
 /// Sets up the overlay as a drag would have: the scene's last step (the wheel opening, the drag
 /// aiming at a wedge, the mode switching) at `then`, the steps before it a second earlier.
 fn scene(name: &str, screen: Rect, then: Instant) -> Overlay {
-    if name.starts_with("desk") {
+    if name.starts_with("desk") || name == "welcome" {
         return desk_scene(name, screen, then);
     }
     let center = screen.center();
@@ -212,6 +282,7 @@ fn scene(name: &str, screen: Rect, then: Instant) -> Overlay {
         "swap" => (&["holiday.jpg"], Mode::Convert, None),
         "tools" => (&["trip.mov"], Mode::Tools, Some(0.0)),
         "actions" => (&["report.pdf"], Mode::Actions, Some(120.0)),
+        "share" => (&["report.pdf"], Mode::Actions, None),
         "mixed" => (
             &["IMG_2041.heic", "banner.png", "scan.pdf"],
             Mode::Convert,
@@ -234,7 +305,7 @@ fn scene(name: &str, screen: Rect, then: Instant) -> Overlay {
         _ => (&["holiday.jpg"], Mode::Convert, None),
     };
     let mut overlay = Overlay::default();
-    let opened = if aim.is_some() || name == "swap" {
+    let opened = if aim.is_some() || name == "swap" || name == "share" {
         then - Duration::from_secs(1)
     } else {
         then
@@ -259,6 +330,19 @@ fn scene(name: &str, screen: Rect, then: Instant) -> Overlay {
             center + Vec2::angled(degrees.to_radians() - FRAC_PI_2) * 118.0,
             then,
         );
+    }
+    if name == "share" {
+        // The Share wedge, and its second bubble (the first messaging app).
+        let choices = mcgyver::catalog::choices(&[PathBuf::from("report.pdf")], Mode::Actions);
+        let n = choices.len();
+        if let Some(i) = choices.iter().position(|c| c.label == "Share") {
+            let subs = mcgyver::catalog::subs(choices[i]).len();
+            let toward = Vec2::angled(-FRAC_PI_2 + i as f32 * std::f32::consts::TAU / n as f32);
+            overlay.drag_moved(center + toward * 118.0, then - Duration::from_millis(600));
+            if subs > 1 {
+                overlay.drag_moved(mcgyver::wheel::bubble_spots(center, i, n, subs)[1], then);
+            }
+        }
     }
     if name == "cards" {
         // An earlier drop at the same spot, still working: its card moves up.

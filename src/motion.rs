@@ -54,6 +54,12 @@ impl Feel {
         if t <= 0.0 { 0.0 } else { self.at(0.0, 0.0, 1.0, t).0 }
     }
 
+    /// Where a spring at rest is, `t` seconds after a flick sends it out: out and back, past
+    /// where it rested and back again, settling there. Its first swing reaches about 0.6.
+    pub fn kick(self, t: f32) -> f32 {
+        if t <= 0.0 { 0.0 } else { self.at(0.0, TAU / self.response, 0.0, t).0 }
+    }
+
     /// How long until it is within a hundredth of the way it had to go.
     pub fn settle(self) -> f32 {
         let z = self.damping.clamp(0.05, 1.0);
@@ -65,6 +71,12 @@ impl Feel {
         }
     }
 }
+
+/// The hub flicked toward a click, and back. Overshoots, coming back, by about 20 %.
+pub const NUDGE: Feel = Feel {
+    response: 0.26,
+    damping: 0.45,
+};
 
 /// A value that springs toward wherever it is sent, without a jump when sent elsewhere halfway.
 #[derive(Clone, Copy, Debug)]

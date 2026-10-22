@@ -17,6 +17,7 @@ mod file_manager {
 pub mod glass;
 pub mod i18n;
 mod icon;
+pub mod icons;
 pub mod images;
 pub mod jobs;
 mod markdown;
@@ -26,6 +27,8 @@ pub mod office;
 pub mod overlay;
 pub mod settings;
 mod sound;
+pub mod switcher;
+mod textures;
 pub mod wheel;
 
 #[cfg(target_os = "linux")]

@@ -15,7 +15,6 @@ rar = ["dep:unrar", "dep:unrar_sys"]
 egui = { version = "0.37", default-features = false, features = ["default_fonts"] }
 log = "0.4"
 tempfile = "3"
-
 # Archives and compression (src/archive). Pure Rust except zstd and unRAR, which build their
 # bundled C/C++ sources.
 brotli = "9"
@@ -56,8 +55,16 @@ pdfcraft-cos = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6b
 pdfcraft-organize = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
 pdfcraft-optimize = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
 
+# The wheel without files' system monitor: processor, memory and disk use. (Windows asks
+# Win32 itself: sysinfo's ntapi links winapi's import libraries, which cargo-zigbuild misses.)
+[target.'cfg(not(windows))'.dependencies]
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+# The system's disk, asked alone (statvfs).
+libc = "0.2"
+
 # KDE Plasma on Wayland (src/kde.rs and the modules it uses): the overlay is a layer-shell
 # surface drawn with egui_glow; the tray, the single instance and KDE's shortcuts go over D-Bus.
+
 [target.'cfg(target_os = "linux")'.dependencies]
 eframe = { version = "0.37", default-features = false, features = ["wayland", "x11"] }
 egui_glow = { version = "0.37", default-features = false }
@@ -79,8 +86,8 @@ tray-icon = { version = "0.26", default-features = false }
 # macOS (src/desktop/mac.rs): AppKit, for making the app a menu bar one.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSMenu", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSView", "NSWindow"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSString", "NSURL"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSBitmapImageRep", "NSGraphics", "NSGraphicsContext", "NSImage", "NSImageRep", "NSMenu", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSScreen", "NSView", "NSWindow", "NSWorkspace", "libc", "objc2-core-foundation"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSGeometry", "NSString", "NSURL", "objc2-core-foundation"] }
 # eframe's own winit, for its macOS event loop options (a menu bar app that doesn't take focus).
 winit = { version = "0.30", default-features = false }
 
@@ -93,15 +100,20 @@ windows = { version = "0.62", features = [
     "Foundation",
     "Foundation_Collections",
     "Media_Control",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_Media_Audio",
     "Win32_Media_Audio_Endpoints",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Variant",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
 ] }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Globalization",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     "Win32_Media_Audio",
     "Win32_Storage_FileSystem",
@@ -110,7 +122,11 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
     "Win32_System_Ole",
+    "Win32_System_Power",
     "Win32_System_Registry",
+    "Win32_System_Shutdown",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
     "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",

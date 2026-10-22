@@ -51,6 +51,12 @@ if [ "${PERMISSIONS:-}" = 1 ]; then
 else
     CHECKS=KWIN_WAYLAND_NO_PERMISSION_CHECKS=1
 fi
+# The welcome plays the first time the app starts; the scenarios start after it (WELCOME=1
+# keeps it).
+if [ "${WELCOME:-}" != 1 ]; then
+    mkdir -p "$OUT/config/mcgyver"
+    printf 'welcomed = yes\n' > "$OUT/config/mcgyver/settings.conf"
+fi
 # The desk scenario switches between keyboard layouts, which KWin serves.
 if [ "${1:-full}" = desk ]; then
     printf '[Layout]\nDisplayNames=,,\nLayoutList=us,tr,de\nUse=true\nVariantList=,,\n' > "$OUT/config/kxkbrc"

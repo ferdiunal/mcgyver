@@ -37,8 +37,9 @@
 	<!-- No App Nap: the trigger key is read every 30 ms. -->
 	<key>NSAppSleepDisabled</key>
 	<true/>
-	<!-- The wheel without files drives Spotify and Music with AppleScript; macOS asks once. -->
+	<!-- The wheel without files drives Spotify and Music, dark mode (System Events) and the
+	     Trash (Finder) with AppleScript; macOS asks once per app. -->
 	<key>NSAppleEventsUsageDescription</key>
-	<string>McGyver plays, pauses and skips tracks in Spotify and Music from its wheel.</string>
+	<string>McGyver plays, pauses and skips tracks in Spotify and Music, switches dark mode and empties the Trash from its wheel.</string>
 </dict>
 </plist>
