@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>McGyver: drag-and-drop file converter for KDE, Mac &amp; Windows</title>
+  <meta name="description" content="Hold Shift while dragging a file and a wheel opens: convert pictures, shrink videos, turn PDFs into Word, zip folders. All on your computer. KDE, Mac, Windows.">
+  <link rel="canonical" href="https://mcgyver.ferdiunal.tr/">
+  <!-- llmstxt.org: the page as Markdown, and the llms.txt that covers it. -->
+  <link rel="alternate" type="text/markdown" href="/index.md">
+  <link rel="describedby" href="/llms.txt">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <!-- The paper tokens (tokens.css --color-paper), in the form the browser's own bar reads. -->
+  <meta name="theme-color" content="#fbf5ed" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#140e0b" media="(prefers-color-scheme: dark)">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="McGyver">
+  <meta property="og:url" content="https://mcgyver.ferdiunal.tr/">
+  <meta property="og:title" content="McGyver: drag a file, hold Shift, pick a wedge">
+  <meta property="og:description" content="A wheel opens around your pointer while you drag files: convert pictures, shrink videos, turn PDFs into Word, zip folders. For KDE Plasma 6, macOS and Windows.">
+  <meta property="og:image" content="https://mcgyver.ferdiunal.tr/assets/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="McGyver's wheel open beside a column of files, with the words Drag a file. Hold Shift. Pick a wedge.">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "McGyver",
+    "url": "https://mcgyver.ferdiunal.tr/",
+    "image": "https://mcgyver.ferdiunal.tr/assets/og.jpg",
+    "description": "A wheel that opens around the pointer while you drag files: convert, compress, zip or share them by dropping them on a wedge. Conversions run on your computer.",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Linux (KDE Plasma 6, Wayland), macOS 11 or later, Windows 10, Windows 11",
+    "softwareVersion": "0.1.0",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "downloadUrl": "https://github.com/ferdiunal/mcgyver/releases/latest",
+    "author": {
+      "@type": "Person",
+      "name": "Ferdi ÜNAL",
+      "url": "https://ferdiunal.tr/",
+      "sameAs": ["https://github.com/ferdiunal"]
+    }
+  }
+  </script>
+  <script>
+    // Dark or light before anything paints: the visitor's choice from the wheel, else the system's.
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem("mcgyver-theme"); } catch (e) {}
+      var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (dark) document.documentElement.dataset.theme = "dark";
+      // A choice made on the wheel paints the browser's bar too, whatever the system says.
+      if (saved) document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute("content", dark ? "#140e0b" : "#fbf5ed"); });
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Geist:wght@300..700&display=swap">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="styles.css">
+  <script src="wheel.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="masthead" data-masthead>
+    <div class="banner" data-banner>
+      <p class="banner__text">A prototype, made in the open. KDE Plasma 6 first; the macOS and Windows builds are in testing.</p>
+      <button class="banner__close" type="button" data-banner-close aria-label="Dismiss the notice">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <nav class="nav" aria-label="Main">
+      <a class="brand" href="#main">
+        <img class="brand__mark" src="assets/icon.svg" alt="" width="34" height="34">
+        <span class="brand__name">McGyver</span>
+      </a>
+      <ul class="nav__links">
+        <li><a class="nav__link" href="#try">Try it</a></li>
+        <li><a class="nav__link" href="#opens">What it opens</a></li>
+        <li><a class="nav__link" href="#download">Download</a></li>
+      </ul>
+      <div class="nav__actions">
+        <a class="btn btn--soft btn--sm nav__sponsor" href="https://github.com/sponsors/ferdiunal">
+          <svg class="heart" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14s-5.5-3.4-5.5-7.3A3 3 0 0 1 8 4.6a3 3 0 0 1 5.5 2.1C13.5 10.6 8 14 8 14z"/></svg>
+          Sponsor
+        </a>
+        <a class="btn btn--sm" href="#download">Download</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="workbench" id="try" aria-labelledby="hero-title">
+      <div class="hero">
+        <h1 class="hero__title" id="hero-title"><span>Drag a file.</span> <span>Hold Shift.</span> <span>Pick a&nbsp;wedge.</span></h1>
+        <p class="hero__lede">McGyver opens a wheel around your pointer while you drag files. Drop them on a wedge: pictures change format, videos shrink, PDFs turn into Word files, folders get zipped. Conversions run on your computer, not in a cloud.</p>
+        <div class="hero__actions">
+          <a class="btn btn--lg" href="#download" data-download-cta>Download</a>
+          <a class="link-arrow" href="#stage" data-try>Try the wheel <span aria-hidden="true">→</span></a>
+        </div>
+        <p class="hero__meta">Version 0.1.0 · KDE Plasma 6, macOS and Windows</p>
+      </div>
+
+      <div class="workbench__stage">
+        <div class="stage" id="stage" data-stage tabindex="-1" role="group" aria-label="A desktop to try the wheel on">
+          <ul class="desktop" aria-label="Files on this desktop">
+            <li><button class="file" type="button" data-file="holiday.jpg"><span class="file__icon" aria-hidden="true">JPG</span><span class="file__name">holiday.jpg</span></button></li>
+            <li><button class="file" type="button" data-file="trip.mov"><span class="file__icon" aria-hidden="true">MOV</span><span class="file__name">trip.mov</span></button></li>
+            <li><button class="file" type="button" data-file="song.flac"><span class="file__icon" aria-hidden="true">FLAC</span><span class="file__name">song.flac</span></button></li>
+            <li><button class="file" type="button" data-file="report.pdf"><span class="file__icon" aria-hidden="true">PDF</span><span class="file__name">report.pdf</span></button></li>
+            <li><button class="file" type="button" data-file="notes.docx"><span class="file__icon" aria-hidden="true">DOCX</span><span class="file__name">notes.docx</span></button></li>
+            <li><button class="file" type="button" data-file="photos.zip"><span class="file__icon" aria-hidden="true">ZIP</span><span class="file__name">photos.zip</span></button></li>
+            <li><button class="file" type="button" data-file="film.srt"><span class="file__icon" aria-hidden="true">SRT</span><span class="file__name">film.srt</span></button></li>
+            <li><button class="file file--pair" type="button" data-file="chapters"><span class="file__icon" aria-hidden="true">PDF</span><span class="file__name">2 chapters</span></button></li>
+          </ul>
+          <button class="keycap" type="button" data-shift aria-label="Shift on its own: the wheel without files">
+            <span aria-hidden="true">⇧</span> Shift
+          </button>
+          <svg class="wheel" data-wheel role="group" aria-label="The wheel" aria-hidden="true"></svg>
+          <ol class="cards" data-cards aria-live="polite" aria-label="Work done"></ol>
+          <p class="stage__hint" data-hint aria-live="polite"></p>
+          <p class="visually-hidden" data-status aria-live="polite"></p>
+        </div>
+        <p class="stage__note">A demo: nothing leaves this page, and no file is touched. Drag a file onto the space and hold Shift, or just click one.</p>
+      </div>
+
+      <div class="tour" id="modes">
+        <h2 class="tour__title">One wheel, seven modes</h2>
+        <p class="tour__lede">The ring around the centre switches between them. Stop on a slice, or move along the ring into it.</p>
+
+        <h3 class="tour__group">With files</h3>
+        <ol class="steps">
+          <li class="step" data-step="holiday.jpg|Convert">
+            <h4 class="step__title">Convert</h4>
+            <p>The wheel opens on Convert. Aim at a format and let go: holiday.webp lands next to holiday.jpg. Pictures, video, audio, PDFs, Office files, archives and subtitles each get their own list.</p>
+            <button class="link-arrow step__try" type="button" data-show="holiday.jpg|Convert">Try Convert <span aria-hidden="true">→</span></button>
+          </li>
+          <li class="step" data-step="trip.mov|Tools">
+            <h4 class="step__title">Tools</h4>
+            <p>Compress, trim, mute or rotate a video, or pull stills out of it. Pictures resize, crop and lose their EXIF; PDFs split and rotate, and two or more merge into one.</p>
+            <button class="link-arrow step__try" type="button" data-show="trip.mov|Tools">Try Tools <span aria-hidden="true">→</span></button>
+          </li>
+          <li class="step" data-step="report.pdf|Actions">
+            <h4 class="step__title">Actions</h4>
+            <p>Zip it, copy or move it somewhere, copy its path, open a terminal there, or send it to your phone, WhatsApp, Telegram, Slack or Teams.</p>
+            <button class="link-arrow step__try" type="button" data-show="report.pdf|Actions">Try Actions <span aria-hidden="true">→</span></button>
+          </li>
+        </ol>
+
+        <h3 class="tour__group">Without files</h3>
+        <p class="tour__aside">Hold Shift on its own for a moment and the wheel is for the computer instead.</p>
+        <ol class="steps">
+          <li class="step" data-step="desk|Apps">
+            <h4 class="step__title">Apps</h4>
+            <p>What is open, the one you used last on top, then the apps you picked in the settings. Alt+Tab, in a circle.</p>
+            <button class="link-arrow step__try" type="button" data-show="desk|Apps">Try Apps <span aria-hidden="true">→</span></button>
+          </li>
+          <li class="step" data-step="desk|Media">
+            <h4 class="step__title">Media</h4>
+            <p>Whatever is playing: play or pause, next, previous, repeat, shuffle, and the player itself.</p>
+            <button class="link-arrow step__try" type="button" data-show="desk|Media">Try Media <span aria-hidden="true">→</span></button>
+          </li>
+          <li class="step" data-step="desk|Everyday">
+            <h4 class="step__title">Everyday</h4>
+            <p>Keyboard layout, the computer’s language, volume, brightness, screenshots, screen recording, and how busy the computer is.</p>
+            <button class="link-arrow step__try" type="button" data-show="desk|Everyday">Try Everyday <span aria-hidden="true">→</span></button>
+          </li>
+          <li class="step" data-step="desk|System">
+            <h4 class="step__title">System</h4>
+            <p>Lock, Dark Mode, Stay Awake, the microphone, the trash and sleep. Try Dark Mode: this page goes dark with it.</p>
+            <button class="link-arrow step__try" type="button" data-show="desk|System">Try System <span aria-hidden="true">→</span></button>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="opens" id="opens" aria-labelledby="opens-title">
+      <div class="opens__head">
+        <h2 class="section__title" id="opens-title">What each file gets</h2>
+        <p class="section__lede">The wheel only offers what the files in your hand can become. A file already in a format skips it; a mode with nothing to offer has no slice.</p>
+      </div>
+      <table class="spec">
+        <caption class="visually-hidden">Wedges per kind of file</caption>
+        <thead>
+          <tr><th scope="col">File</th><th scope="col">Convert to</th><th scope="col">Tools</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Pictures <span>JPEG, PNG, HEIC, camera RAW, PSD, SVG…</span></th><td>JPG · PNG · WEBP · HEIC · AVIF · TIFF · GIF · BMP · ICO · PDF</td><td>Compress · Resize · Crop · Rotate · Strip EXIF</td></tr>
+          <tr><th scope="row">Video <span>needs FFmpeg</span></th><td>MP4 · MOV · MKV · WEBM · GIF · MP3</td><td>Compress · Trim · Mute · Rotate · Frames</td></tr>
+          <tr><th scope="row">Audio <span>needs FFmpeg</span></th><td>MP3 · M4A · WAV · FLAC · OGG · OPUS · AIFF</td><td>Trim · Normalize · Compress · Merge</td></tr>
+          <tr><th scope="row">PDF</th><td>DOCX · PPTX · XLSX · JPG · PNG · EPUB · TXT · MD</td><td>Compress · Split · Rotate · Merge</td></tr>
+          <tr><th scope="row">Documents <span>DOCX, DOC, ODT, RTF</span></th><td>PDF · DOCX · ODT · RTF · HTML · TXT · MD</td><td>Merge</td></tr>
+          <tr><th scope="row">Spreadsheets <span>XLSX, XLS, ODS, CSV</span></th><td>PDF · XLSX · CSV · TSV · HTML · MD</td><td>Merge</td></tr>
+          <tr><th scope="row">Slides <span>PPTX; PPT and ODP to MD</span></th><td>PDF · PPTX · TXT · MD</td><td>Compress</td></tr>
+          <tr><th scope="row">Archives <span>ZIP, 7Z, RAR, TAR…</span></th><td>Unzip · ZIP · 7Z · TAR.GZ · TAR.XZ · TAR.ZST · TAR.BZ2 · TAR</td><td>—</td></tr>
+          <tr><th scope="row">Compressed files <span>GZ, XZ, ZST, BZ2, LZ4</span></th><td>Unzip · GZ · XZ · ZST · BZ2 · LZ4 · ZIP · 7Z</td><td>—</td></tr>
+          <tr><th scope="row">Subtitles <span>SRT, VTT</span></th><td>VTT · SRT · TXT</td><td>Shift by half a second or a second</td></tr>
+          <tr><th scope="row">Folders</th><td>ZIP · 7Z · TAR.GZ · TAR.XZ · TAR.ZST · TAR.BZ2 · TAR</td><td>Flatten</td></tr>
+        </tbody>
+      </table>
+      <p class="opens__foot">Every file and folder also gets <strong>Actions</strong>: Zip, Copy, Cut, Copy To, Move To, Copy Path, Terminal and Share. Merge appears once two or more files are in hand. HEIC and AVIF appear where the computer’s libheif can write them.</p>
+    </section>
+
+    <section class="get" id="download" aria-labelledby="get-title">
+      <div class="get__head">
+        <h2 class="section__title" id="get-title">Get McGyver</h2>
+        <p class="section__lede">One download, then it waits in the tray or the menu bar until you hold Shift.</p>
+      </div>
+      <div class="platforms" data-platforms>
+        <article class="platform" data-os="linux">
+          <h3 class="platform__name">KDE Plasma 6</h3>
+          <p class="platform__needs">Linux, on Wayland. Where McGyver started.</p>
+          <p class="platform__note">After the first start, press <em>Set up</em> in its settings, so the wheel opens the moment you press Shift during a drag.</p>
+          <a class="btn platform__get" href="https://github.com/ferdiunal/mcgyver/releases/latest">Download for Linux</a>
+        </article>
+        <article class="platform" data-os="mac">
+          <h3 class="platform__name">macOS</h3>
+          <p class="platform__needs">macOS 11 or later. One app for Apple Silicon and Intel.</p>
+          <p class="platform__note">In testing on Apple Silicon. It isn’t notarized yet: Control-click it in Applications and choose <em>Open</em> the first time.</p>
+          <a class="btn btn--soft platform__get" href="https://github.com/ferdiunal/mcgyver/releases/latest">Download for Mac</a>
+        </article>
+        <article class="platform" data-os="windows">
+          <h3 class="platform__name">Windows</h3>
+          <p class="platform__needs">Windows 10 and 11, on x64 and ARM64 PCs.</p>
+          <p class="platform__note">A first port, not yet run on a real Windows machine. SmartScreen asks once: <em>More info</em>, then <em>Run anyway</em>.</p>
+          <a class="btn btn--soft platform__get" href="https://github.com/ferdiunal/mcgyver/releases/latest">Download for Windows</a>
+        </article>
+      </div>
+    </section>
+
+    <section class="support" id="support" aria-labelledby="support-title">
+      <h2 class="support__title" id="support-title">Made by one person, in Gaziantep.</h2>
+      <p class="support__text">McGyver is built by Ferdi ÜNAL. If it saves you a few clicks a day, sponsoring it keeps the work going.</p>
+      <div class="support__actions">
+        <a class="btn btn--lg support__sponsor" href="https://github.com/sponsors/ferdiunal">
+          <svg class="heart" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14s-5.5-3.4-5.5-7.3A3 3 0 0 1 8 4.6a3 3 0 0 1 5.5 2.1C13.5 10.6 8 14 8 14z"/></svg>
+          Sponsor on GitHub
+        </a>
+        <a class="link-arrow" href="https://github.com/ferdiunal/mcgyver">Source on GitHub <span aria-hidden="true">↗</span></a>
+        <a class="link-arrow" href="https://ferdiunal.tr/?utm_source=mcgyver-site">ferdiunal.tr <span aria-hidden="true">↗</span></a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="marquee" data-marquee>
+      <button class="marquee__toggle" type="button" data-marquee-toggle aria-pressed="false" aria-label="Pause the moving list">
+        <svg class="marquee__pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9M11 3.5v9"/></svg>
+        <svg class="marquee__play" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.2v9.6L12.6 8z"/></svg>
+      </button>
+      <div class="marquee__track" aria-hidden="true">
+        <span>JPG · PNG · WEBP · HEIC · AVIF · PDF · DOCX · XLSX · PPTX · EPUB · MD · MP4 · MKV · WEBM · MP3 · FLAC · OPUS · ZIP · 7Z · TAR.GZ · SRT · VTT ·&nbsp;</span>
+        <span>JPG · PNG · WEBP · HEIC · AVIF · PDF · DOCX · XLSX · PPTX · EPUB · MD · MP4 · MKV · WEBM · MP3 · FLAC · OPUS · ZIP · 7Z · TAR.GZ · SRT · VTT ·&nbsp;</span>
+      </div>
+    </div>
+    <div class="foot__meta">
+      <p class="foot__line"><img src="assets/icon.svg" alt="" width="22" height="22"> McGyver 0.1.0 · MIT or Apache-2.0 · © 2026 The McGyver authors</p>
+      <ul class="foot__links">
+        <li><a href="https://github.com/ferdiunal/mcgyver">GitHub</a></li>
+        <li><a href="https://github.com/sponsors/ferdiunal">Sponsor</a></li>
+        <li><a href="mailto:ferdiunal@outlook.com">ferdiunal@outlook.com</a></li>
+      </ul>
+    </div>
+  </footer>
+</body>
+</html>

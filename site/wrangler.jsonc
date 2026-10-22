@@ -1,0 +1,21 @@
+// The landing page, served by Workers Static Assets with no Worker script. src/ is what is
+// written; dist/ is what is served, built by build.mjs before every dev and deploy.
+//   npm ci
+//   npm run dev       try it at http://localhost:8787
+//   npm run deploy    publish to https://mcgyver.ferdiunal.tr
+{
+  "name": "mcgyver-site",
+  "compatibility_date": "2026-10-22",
+  "build": { "command": "node build.mjs", "watch_dir": "src" },
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  // ferdiunal.tr is a zone on the same Cloudflare account: the deploy makes the DNS record
+  // and the certificate.
+  "routes": [{ "pattern": "mcgyver.ferdiunal.tr", "custom_domain": true }],
+  // One address only: no workers.dev copy of the page for search engines to find twice.
+  "workers_dev": false,
+  "preview_urls": false
+}

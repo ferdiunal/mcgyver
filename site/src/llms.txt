@@ -1,0 +1,41 @@
+# McGyver
+
+> McGyver is a desktop app that opens a wheel of options around the pointer while you drag files. Hold Shift during a drag, then drop the files on a wedge to convert, compress, zip or share them. Conversions run on the computer; nothing is uploaded. KDE Plasma 6 (Linux, Wayland) first; the macOS and Windows builds are in testing.
+
+Things to know before reading the pages below:
+
+- Version 0.1.0, a prototype. Free to download; licensed MIT or Apache-2.0. Made by Ferdi ÜNAL.
+- The wheel has seven modes on a ring around its centre. With files in hand: Convert, Tools and Actions. Shift held on its own, without files: Apps, Media, Everyday and System.
+- The wheel only offers what the files in hand can become. A file already in a format skips it, and a mode with nothing to offer has no slice. Merge appears once two or more files are in hand.
+- Video and audio need FFmpeg on the computer. HEIC and AVIF appear where the computer's libheif can write them.
+- KDE Plasma 6 needs Wayland, and Set up pressed once in the settings. macOS 11 or later, one app for Apple Silicon and Intel, not notarized yet. Windows 10 and 11 on x64 and ARM64, a first port not yet run on a real Windows machine.
+
+What each kind of file can become (Convert) and what can be done to it (Tools):
+
+- Pictures (JPEG, PNG, HEIC, camera RAW, PSD, SVG…): JPG, PNG, WEBP, HEIC, AVIF, TIFF, GIF, BMP, ICO, PDF. Tools: Compress, Resize, Crop, Rotate, Strip EXIF.
+- Video: MP4, MOV, MKV, WEBM, GIF, MP3. Tools: Compress, Trim, Mute, Rotate, Frames.
+- Audio: MP3, M4A, WAV, FLAC, OGG, OPUS, AIFF. Tools: Trim, Normalize, Compress, Merge.
+- PDF: DOCX, PPTX, XLSX, JPG, PNG, EPUB, TXT, MD. Tools: Compress, Split, Rotate, Merge.
+- Documents (DOCX, DOC, ODT, RTF): PDF, DOCX, ODT, RTF, HTML, TXT, MD. Tools: Merge.
+- Spreadsheets (XLSX, XLS, ODS, CSV): PDF, XLSX, CSV, TSV, HTML, MD. Tools: Merge.
+- Slides (PPTX; PPT and ODP to MD only): PDF, PPTX, TXT, MD. Tools: Compress.
+- Archives (ZIP, 7Z, RAR, TAR…): Unzip, ZIP, 7Z, TAR.GZ, TAR.XZ, TAR.ZST, TAR.BZ2, TAR.
+- Compressed files (GZ, XZ, ZST, BZ2, LZ4): Unzip, GZ, XZ, ZST, BZ2, LZ4, ZIP, 7Z.
+- Subtitles (SRT, VTT): VTT, SRT, TXT. Tools: shift by half a second or a second.
+- Folders: ZIP, 7Z, TAR.GZ, TAR.XZ, TAR.ZST, TAR.BZ2, TAR. Tools: Flatten.
+- Every file and folder: Actions, which are Zip, Copy, Cut, Copy To, Move To, Copy Path, Terminal and Share (to a phone, WhatsApp, Telegram, Slack or Teams).
+
+## Docs
+
+- [McGyver in Markdown](https://mcgyver.ferdiunal.tr/index.md): the landing page as text: what the wheel does, each of its modes, every format, and how to install it on each platform.
+- [Landing page](https://mcgyver.ferdiunal.tr/): the same, with a working demo of the wheel; nothing in the demo touches a file.
+
+## Download
+
+- [Latest release](https://github.com/ferdiunal/mcgyver/releases/latest): the builds for KDE Plasma 6, macOS and Windows.
+
+## Optional
+
+- [Source code](https://github.com/ferdiunal/mcgyver): the app, written in Rust.
+- [Sponsor](https://github.com/sponsors/ferdiunal): support McGyver's development on GitHub Sponsors.
+- [Ferdi ÜNAL](https://ferdiunal.tr/): the author's site.

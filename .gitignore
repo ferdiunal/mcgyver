@@ -4,3 +4,6 @@
 /dev/e2e/drive/target/
 /dev/e2e/drive/Cargo.lock
 /dist/
+/site/.wrangler/
+/site/dist/
+/site/node_modules/

@@ -1,0 +1,11 @@
+# Workers Static Assets reads this file and doesn't serve it.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+
+# The page's text in Markdown, and the llms.txt that covers it (llmstxt.org).
+/
+  Link: </index.md>; rel="alternate"; type="text/markdown"
+  Link: </llms.txt>; rel="describedby"
