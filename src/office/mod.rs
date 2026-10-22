@@ -10,6 +10,10 @@ use pdfcraft_cos::Document;
 
 use crate::archive::Progress;
 
+pub mod export;
+pub mod merge;
+pub mod slides;
+
 /// Every engine reads the whole file into memory; larger files are refused up front.
 const MAX_INPUT: u64 = 512 << 20;
 

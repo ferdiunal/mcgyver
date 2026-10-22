@@ -258,10 +258,11 @@ impl Wheel {
     }
 
     /// Whether picking wedge `i` of a wheel of files does something: Share without a phone to
-    /// send to only holds its bubbles.
+    /// send to, and Shift, which needs to be told how far, only hold their bubbles.
     fn runs(&self, i: usize) -> bool {
         self.choices.get(i).is_some_and(|c| {
-            Action::from_label(c.label) != Some(Action::Share) || Action::Share.available()
+            !(c.mode == Mode::Tools && c.label == catalog::SHIFT)
+                && (Action::from_label(c.label) != Some(Action::Share) || Action::Share.available())
         })
     }
 
@@ -962,7 +963,7 @@ impl Overlay {
     fn close_card(&mut self, batch: u32, now: Instant) {
         let mut working = false;
         for job in self.jobs.iter_mut().filter(|j| j.batch == batch) {
-            if job.finished_at(now).is_none() {
+            if job.finished_at().is_none() {
                 job.cancel(now);
                 working = true;
             }
@@ -999,8 +1000,7 @@ impl Overlay {
         w.follow(now);
         self.clicked = true;
         self.batch += 1;
-        self.jobs
-            .extend(jobs::start(&w.files, choice, self.batch, now + FLASH));
+        self.jobs.extend(jobs::start(&w.files, choice, self.batch));
         let shown_at = now + FLASH + Duration::from_secs_f32(OPEN_TIME);
         self.cards.push(Card {
             row: Spring::new(motion::POP, 0.0, shown_at),
@@ -1059,7 +1059,7 @@ impl Overlay {
                 continue;
             }
             let batch: Vec<&Job> = self.jobs.iter().filter(|j| j.batch == card.batch).collect();
-            if batch.is_empty() || !batch.iter().all(|job| job.finished_at(now).is_some()) {
+            if batch.is_empty() || !batch.iter().all(|job| job.finished_at().is_some()) {
                 continue;
             }
             card.selection_requested = true;
@@ -1264,7 +1264,7 @@ fn paint_card(
         return Some(card.shown_at - now);
     }
     let batch: Vec<&Job> = jobs.iter().filter(|j| j.batch == card.batch).collect();
-    let finished: Vec<Instant> = batch.iter().filter_map(|j| j.finished_at(now)).collect();
+    let finished: Vec<Instant> = batch.iter().filter_map(|j| j.finished_at()).collect();
     let done_at = (finished.len() == batch.len())
         .then(|| finished.iter().copied().max().unwrap_or(card.shown_at));
     let cancelled = batch.iter().any(|j| j.is_cancelled());
@@ -1307,7 +1307,6 @@ fn paint_card(
                 reason
             }
         }
-        Some(_) if batch.iter().all(|j| j.is_simulated()) => tr("Done · simulated").to_owned(),
         Some(_) => match &batch[..] {
             [one] => one.message().unwrap_or_default(),
             _ => trf("Done · {} files", &[&batch.len()]),
@@ -1356,7 +1355,7 @@ fn paint_card(
         }
         None => {
             let progress =
-                batch.iter().map(|j| j.progress(now)).sum::<f32>() / batch.len().max(1) as f32;
+                batch.iter().map(|j| j.progress()).sum::<f32>() / batch.len().max(1) as f32;
             progress_ring(p, icon, 12.0, progress, alpha);
         }
     }
@@ -1385,8 +1384,7 @@ fn paint_card(
         (Some(at), _) if now < at + Duration::from_millis(250) => Duration::ZERO,
         (_, Some(from)) if now < from => from - now,
         (Some(_), _) => Duration::ZERO,
-        (None, _) if batch.iter().any(|j| !j.is_simulated()) => PROGRESS_TICK,
-        (None, _) => Duration::ZERO,
+        (None, _) => PROGRESS_TICK,
     })
 }
 

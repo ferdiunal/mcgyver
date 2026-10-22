@@ -42,6 +42,9 @@ resvg = "0.48"
 tiff = { version = "0.11", features = ["deflate"] }
 webp = { version = "0.3", default-features = false }
 anydoc = "0.2.4"
+# Subtitles in older encodings (src/subtitles.rs): what they are written in, and reading it.
+chardetng = "1"
+encoding_rs = "0.8"
 
 # The settings window, and on macOS the overlay too.
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow"] }
@@ -54,6 +57,13 @@ gridcraft-engine = { git = "https://github.com/storytold/gridcraft", rev = "c30f
 pdfcraft-cos = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
 pdfcraft-organize = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
 pdfcraft-optimize = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+# A PDF saved as Word, PowerPoint, an e-book, tables, text (its paragraphs and pictures) and
+# page images (pdfcraft-render draws with hayro; see the patches below).
+pdfcraft-create = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+pdfcraft-edit = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+pdfcraft-export = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+pdfcraft-model = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+pdfcraft-render = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
 
 # The wheel without files' system monitor: processor, memory and disk use. (Windows asks
 # Win32 itself: sysinfo's ntapi links winapi's import libraries, which cargo-zigbuild misses.)
@@ -199,6 +209,15 @@ krilla = { git = "https://github.com/storytold/craft-libs", rev = "c3487320b2d1d
 # vello_cpu's `multithreading` feature. vendor/epaint is epaint 0.37.0 (MIT OR Apache-2.0) with
 # that context made single-threaded; see `single_threaded` in src/text/font_face.rs.
 epaint = { path = "vendor/epaint" }
+# pdfcraft-render needs PdfCraft's own hayro (hardened against damaged files, with the API it
+# uses) and the vello_common it draws with; a dependency's patches don't carry over, so they are
+# repeated here from the same commit. lopdf's are hardening only.
+hayro = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+hayro-interpret = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+hayro-jbig2 = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+hayro-syntax = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+lopdf = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
+vello_common = { git = "https://github.com/storytold/pdfcraft", rev = "932bf9c6bfdd63e2a21bb831696a3447b9def9cf" }
 # unrar_sys 0.5.8 (MIT OR Apache-2.0) picks its Windows sources and libraries with `cfg!` in its
 # build script, which is the build machine's: vendor/unrar_sys asks for the target's instead,
 # so Windows builds cross-compiled on Linux link (see `McGyver:` in its build.rs).

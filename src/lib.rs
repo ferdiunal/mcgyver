@@ -26,6 +26,7 @@ pub mod motion;
 pub mod office;
 pub mod overlay;
 pub mod settings;
+mod subtitles;
 mod sound;
 pub mod switcher;
 mod textures;

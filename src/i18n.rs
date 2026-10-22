@@ -227,7 +227,7 @@ fn turkish(english: &str) -> Option<&'static str> {
         "remove photo details" => "fotoğraf bilgilerini sil",
         "Trim" => "Kes",
         "cut silence" => "sessizliği kes",
-        "cut the ends" => "baştan ve sondan kes",
+        "cut black ends" => "siyah baş ve sonu kes",
         "Normalize" => "Dengele",
         "even volume" => "eşit ses",
         "Merge" => "Birleştir",
@@ -297,7 +297,6 @@ fn turkish(english: &str) -> Option<&'static str> {
 
         // The card.
         "{} · nothing to change" => "{} · değişecek bir şey yok",
-        "Done · simulated" => "Bitti · simülasyon",
         "Done · {} files" => "Bitti · {} dosya",
         "Working on {} of {}…" => "{} / {} işleniyor…",
         "Working…" => "İşleniyor…",
@@ -343,6 +342,22 @@ fn turkish(english: &str) -> Option<&'static str> {
             "sıkıştırılmış dosya yalnızca tek bir dosya içerir"
         }
         "FFmpeg produced an empty file" => "FFmpeg boş bir dosya üretti",
+        "FFmpeg produced no frames" => "FFmpeg hiç kare çıkarmadı",
+        "FFmpeg could not change this file" => "FFmpeg bu dosyayı değiştiremedi",
+        "FFmpeg could not join these files" => "FFmpeg bu dosyaları birleştiremedi",
+        "there is no silence at the start or the end" => "başta ya da sonda sessizlik yok",
+        "there is no black at the start or the end" => "başta ya da sonda siyah yok",
+        "nothing would be left" => "geriye bir şey kalmazdı",
+        "this file is already as small as it gets" => "bu dosya zaten olabildiğince küçük",
+        "this video has no sound" => "bu videoda ses yok",
+        "this file has no picture" => "bu dosyada görüntü yok",
+        "these files can't be merged" => "bu dosyalar birleştirilemez",
+        "McGyver can't do that" => "McGyver bunu yapamaz",
+        "there are no tables in this PDF" => "bu PDF'te tablo yok",
+        "a PDF can't be saved as that" => "PDF bu biçimde kaydedilemez",
+        "the page was drawn at the wrong size" => "sayfa yanlış boyutta çizildi",
+        "there are no subtitles in this file" => "bu dosyada altyazı yok",
+        "there are no files in this folder" => "bu klasörde dosya yok",
         "HEIC and AVIF need libheif, which isn't installed" => {
             "HEIC ve AVIF için libheif gerekir, kurulu değil"
         }

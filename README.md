@@ -14,10 +14,14 @@ merged, zipped, shared. Drop them on a wedge and it's done, without opening anot
 - [pictures](#pictures)
 - image tools (compress, resize, square crop, rotate, strip EXIF)
 - [compressed files and folders](#compressed-files)
-- audio and video format conversions (with FFmpeg installed)
+- [audio and video](#audio-and-video) conversions and tools: trim, normalize, compress, merge,
+  mute, rotate, stills (with FFmpeg installed)
 - [office documents and PDFs](#office-documents-and-pdfs) without LibreOffice: Word, Excel and
-  PowerPoint files to PDF and to other formats of their own kind (Word to ODT, Excel to CSV…); PDFs
-  compressed, rotated, split and merged
+  PowerPoint files to PDF and to other formats of their own kind (Word to ODT, Excel to CSV…);
+  documents and spreadsheets merged, presentations' pictures compressed; PDFs to Word,
+  PowerPoint, their tables, EPUB, text and page images, and compressed, rotated, split and merged
+- [subtitles and folders](#subtitles-and-folders): SRT, VTT and text, moved in time; folders
+  flattened
 - Word (DOCX, DOC, ODT, RTF), Excel (XLSX, XLS, ODS, CSV), PowerPoint, EPUB and text PDFs to
   Markdown (MD), with
   [anydoc](https://github.com/firecrawl/anydoc): pure Rust, nothing leaves the machine; a scanned
@@ -28,8 +32,7 @@ merged, zipped, shared. Drop them on a wedge and it's done, without opening anot
   volume, the brightness, screenshots and recordings, how busy the computer is, and switches for
   the whole computer (lock, dark mode, stay awake, the microphone, the trash, sleep)
 
-Media editing, PDF conversions other than to Markdown, document and spreadsheet Merge, and
-presentation Compress are still simulated. It runs on **KDE Plasma 6 (Wayland)**, and on
+Everything the wheel offers is done for real. It runs on **KDE Plasma 6 (Wayland)**, and on
 **macOS** and **Windows** as first ports (see [macOS](#macos) and [Windows](#windows)).
 
 ## Run
@@ -217,14 +220,14 @@ switches between the three modes:
 - **Drop on an option wedge:** the wedge flashes, the wheel folds, and a card slides in at the
   bottom right of the screen, as a notification does. It shows progress, then a check mark and
   the new file's name (or a red mark and the reason it failed), then fades; not while the pointer
-  is on it. Simulated work says "simulated". Cards stack, the newest at the bottom.
+  is on it. Cards stack, the newest at the bottom.
 - **The card:** its × cancels the work: FFmpeg is stopped,
   a merge stops between two files, and nothing is put in place after a cancel (files already
   finished in that batch stay). On a finished card the × puts it away. Only the cards take the
   pointer; the rest of the screen stays clickable. A merge counts its files on the progress ring.
 - **Finished outputs:** real conversion and tool jobs ask the active Dolphin window, or the window
   already showing an output folder, to select the files they made. A batch sends one request for all
-  successful outputs; simulated and failed jobs are skipped. If needed, Dolphin opens their folders
+  successful outputs; failed jobs are skipped. If needed, Dolphin opens their folders
   in tabs in that same window. If no matching existing window is available, selection is skipped.
 - **Drop on the centre, the ring or off the wheel:** the drag is cancelled.
 - **The centre** shows the file's size (or how many files); while aiming at an option, the format
@@ -342,6 +345,50 @@ GIF, BMP, ICO and PDF. Its own format is left out, and so is any format this sys
 - **Not yet:** animated GIF and WebP keep only their first frame. Multi-page TIFF keeps only
   its first page.
 
+## Audio and video
+
+With FFmpeg installed (see [Run](#run)), Convert saves audio as MP3, M4A, WAV, FLAC, OGG, OPUS
+or AIFF and video as MP4, MOV, MKV, WEBM, GIF or MP3, keeping the tags and chapters. The card
+fills as FFmpeg gets through the file, and its × stops FFmpeg.
+
+| Drag | Tools |
+|------|-------|
+| Audio: MP3, M4A, WAV, FLAC, OGG, OPUS, AIFF, WMA | Trim (the silence at the start and the end), Normalize (even loudness, EBU R128 at -16 LUFS), Compress, Merge |
+| Video: MP4, MOV, MKV, WEBM, AVI, WMV, M4V | Compress, Trim (the black at the start and the end), Mute, Rotate (a quarter turn clockwise), Frames |
+
+- **Names and formats:** "song (trimmed).mp3", "clip (muted).mp4"… in the file's own format where
+  FFmpeg writes it, else M4A or MP4 (an AVI comes out MP4). What the file holds decides, not its
+  name: a .webm with sound alone is treated as audio. Mute copies the picture as it is, into the
+  same kind of file, leaving data tracks (a phone's or an action camera's readings) out.
+- **Compress** lowers the bit rate (MP3 96 kb/s, AAC 96 kb/s, Opus 64 kb/s, Vorbis quality 2)
+  and fits video into 1080p; WAV, AIFF and FLAC become M4A. It fails rather than make a file
+  that is no smaller.
+- **Trim** finds the ends with FFmpeg's silence or black detection (quieter than -50 dB for half
+  a second, or black for a tenth, ending within half a second of the end), then cuts there; it
+  says so when there is nothing to cut.
+- **Merge** joins the tracks in the order they were dragged into "first (merged)" in the first's
+  format.
+- **Frames** saves a still a second as JPEGs into a folder "clip (frames)", or 100 spread over a
+  video longer than 100 seconds.
+- **H.264** is made with x264 where FFmpeg has it, else OpenH264 (Fedora's ffmpeg-free has only
+  that) at a bit rate for the picture's size, else FFmpeg's own MPEG-4. A picture with an odd
+  side loses a pixel there, as 4:2:0 needs even sides.
+
+## Subtitles and folders
+
+- **Subtitles:** SRT, VTT and TXT. WebVTT's escapes, voices and classes are turned into SubRip's
+  plain text, and the other way round SubRip's `{\an8}` positions and font colours are dropped;
+  italic, bold and underline stay. TXT is the words, a cue to a line, a line held over several
+  cues written once. A file in an older encoding (Windows-1254 or -1252, say) is recognised and
+  saved as UTF-8. Blank lines holding spaces, and cues with no blank line between them, are read
+  as hand-edited files have them.
+- **Shift** pops out −1 s, −0.5 s, +0.5 s and +1 s; drop on one to move every cue that much,
+  into "film (+0.5 s).srt". Only the times change: positions, settings, styles and a WebVTT's
+  header stay. Cues moved before the start are dropped.
+- **Flatten** copies every file in a folder and the folders inside it, side by side into
+  "photos (flat)", keeping their dates. A name met twice gets a number ("beach 2.jpg"), the one
+  nearer the top keeping it. The folder itself is left as it was.
+
 ## Office documents and PDFs
 
 The engines of four open-source "craft" apps do this work, in pure Rust (MIT OR Apache-2.0), so
@@ -353,15 +400,43 @@ nothing needs to be installed:
 
 | Drag | Convert | Tools |
 |------|---------|-------|
-| Word: DOCX, DOC, ODT, RTF, HTML, Markdown, TXT | PDF, DOCX, ODT, RTF, HTML, TXT; MD for DOCX, DOC, ODT, RTF | Merge (simulated) |
-| Spreadsheet: XLSX, XLS, ODS, CSV, TSV | PDF, XLSX, CSV, TSV, HTML; MD for all but TSV | Merge (simulated) |
-| Presentation: PPTX | PDF, PPTX, TXT (the outline), MD | Compress (simulated) |
-| PDF | MD (the rest simulated) | Compress, Rotate, Split, Merge |
+| Word: DOCX, DOC, ODT, RTF, HTML, Markdown, TXT | PDF, DOCX, ODT, RTF, HTML, TXT; MD for DOCX, DOC, ODT, RTF | Merge |
+| Spreadsheet: XLSX, XLS, ODS, CSV, TSV | PDF, XLSX, CSV, TSV, HTML; MD for all but TSV | Merge |
+| Presentation: PPTX (ODP for Compress) | PDF, PPTX, TXT (the outline), MD | Compress |
+| PDF | DOCX, PPTX, XLSX (its tables), EPUB, TXT, JPG, PNG (a page each), MD | Compress, Rotate, Split, Merge |
 
 - **Names:** the result goes next to the original as for pictures: "report.pdf",
   "report (compressed).pdf", "report (rotated).pdf". Split makes a folder "report (pages)" holding
   "report 1.pdf", "report 2.pdf"…; Merge makes "first (merged).pdf" from the PDFs in the order
   they were dragged, with a bookmark for each, and skips files the wheel doesn't recognise.
+- **A PDF as something else:** Word and PowerPoint come from each page's paragraphs (headings
+  where the text is set larger, bold and italic, colours) and pictures, through PdfCraft's
+  export; PowerPoint makes a slide of each page. EPUB holds the same as one chapter, its
+  pictures as files and its headings as the contents. XLSX makes a sheet of each table PdfCraft
+  finds on the pages, numbers as numbers, and says so when there are none. TXT is the paragraphs
+  with a blank line between them; the words a scan's recognition left invisible over it count,
+  and a scan without any says it has no text. JPG and PNG draw each page at 150 dpi on white
+  with PdfCraft's renderer: one page gives "report.png", more a folder "report (pages)" of
+  "report 1.png", "report 2.png"…. A password-protected PDF is left alone, as for Split.
+- **Merging documents** puts them one after another in the first one's format (DOCX where
+  WordCraft can't write it, such as DOC or Markdown), each from a new page, with what each brings:
+  its pictures, lists, the styles the first lacks (where both have one, the first's wins),
+  footnotes, comments, text boxes and tracked changes. Each keeps its page setup (a section
+  break closes the one before), and takes the headers and footers before it, as Word's sections
+  do when linked to the previous one. Merge is offered for files of one kind only.
+- **Merging spreadsheets** puts every sheet of each into one XLSX, in order. A sheet whose name is
+  taken gets a number ("Data (2)"), and what its workbook says of it follows: formulas, charts,
+  names, sparklines, validations and conditional formats. Names come along; a workbook-wide
+  name the first already has is given to each of that workbook's sheets instead, which their
+  formulas find first. Dates from a workbook counting from 1904 are moved to the first's count.
+  Tables, pivot tables and slicers stay behind (their names must be unique in a workbook); their
+  cells come along.
+- **Compressing a presentation** (PPTX or ODP) scales its JPEG and PNG pictures down to 1920
+  pixels on the long side and saves them again, JPEG at quality 80; each keeps its format and
+  name and colour profile, and every other part of the file is copied byte for byte. A picture
+  that needn't be scaled is saved again only for a tenth off, so compressing twice doesn't wear
+  it down; a photo its Exif turns is left alone; and a presentation that comes out no smaller
+  fails rather than make a copy.
 - **PDF tools leave signed PDFs alone** (a signature field with a value, or a certified PDF):
   what they made would carry a broken signature. Split and Merge also leave password-protected
   PDFs alone, since the new files would come out unprotected. Compress fails rather than make a
@@ -376,7 +451,10 @@ nothing needs to be installed:
   Merge of PDFs that are larger than that together.
 - **Build:** they aren't on crates.io, so Cargo fetches them from GitHub at pinned commits. The
   first build takes a few minutes longer, and the release binary grows from about 47 MB to
-  about 99 MB (79 MB stripped).
+  about 117 MB (93 MB stripped), the renderer and the export included.
+- **PdfCraft's renderer** draws with PdfCraft's own copy of hayro, hardened against damaged
+  files; a dependency's patches don't carry over, so `Cargo.toml` repeats them from the same
+  commit.
 - **`vendor/epaint`:** WordCraft and DeckCraft switch on vello_cpu's multithreading, which
   breaks how egui's epaint 0.37.0 draws glyphs (it never flushes). The copy there draws them
   single-threaded; drop it once epaint does.
@@ -443,8 +521,6 @@ Archives have no tools, so their wheel has Convert and Actions only.
 - **Not yet:**
   - Password-protected archives fail with a message saying so.
   - File names that aren't valid UTF-8 are packed with `�` in place of the bad bytes.
-  - PDF conversions other than to Markdown, and Merge for documents and spreadsheets, are still
-    simulated.
 
 Most image and archive processing uses Rust crates. WebP, zstd and unRAR include native code;
 libheif is loaded at run time. Audio and video conversions use an installed `ffmpeg`. RAR support uses the official unRAR code,
@@ -595,11 +671,12 @@ the context was first made current without a surface, which left the draw buffer
 | `src/motion.rs` | Springs: the wheel's pop, unfold and swell, worked out from the time |
 | `src/glass.rs` | Colours, fonts, the frosted frame and capsules, blur-region geometry |
 | `src/catalog.rs` | What each file kind offers (formats, tools, actions) |
-| `src/jobs.rs` | Runs the work: real jobs on a background thread, the rest simulated |
-| `src/convert.rs` | What a wedge does to one file (picture, compressed file, folder); output names, scratch files |
+| `src/jobs.rs` | Runs the work on a background thread, one job after another |
+| `src/convert.rs` | What a wedge does to one file (picture, compressed file, folder), and merges; output names, scratch files |
 | `src/images/` | Reading and writing pictures; libheif at run time (`heif`), WebP metadata (`webp`), PDF, PSD |
-| `src/media.rs` | Audio and video conversion through FFmpeg |
-| `src/office.rs` | Office documents and PDF tools through the WordCraft, GridCraft, DeckCraft and PdfCraft engines |
+| `src/media.rs` | Audio and video conversions and tools through FFmpeg |
+| `src/subtitles.rs` | SubRip and WebVTT read, written as either or as text, and moved in time |
+| `src/office/` | Office documents and PDF tools through the WordCraft, GridCraft, DeckCraft and PdfCraft engines (`mod.rs`); a PDF as other formats (`export.rs`); documents and spreadsheets merged (`merge.rs`); presentations' pictures compressed (`slides.rs`) |
 | `src/markdown.rs` | Documents, spreadsheets, presentations and PDFs to Markdown through anydoc |
 | `src/actions.rs` | The Actions wheel: zip, copy, move, copy path, terminal, share, messaging apps |
 | `src/desk/` | The wheel without files: what it offers (`mod.rs`), languages' names and layouts (`languages.rs`), how busy the computer is (`monitor.rs`), and the player, layouts, volume, brightness, captures, switches, apps and messaging apps each system has (`linux.rs`, `mac.rs`, `windows.rs`) |
@@ -610,4 +687,4 @@ the context was first made current without a surface, which left the draw buffer
 | `tests/images.rs` | Every picture target, orientation, profiles, Exif, crafted files; checks against ImageMagick; the Zip action |
 | `tests/actions.rs` | Copy and Move through their real entry point, with a stand-in folder picker |
 | `tests/documents.rs` | Word, CSV and PDF to Markdown from hand-built files; scanned and broken files |
-| `tests/office.rs` | Word, spreadsheet and presentation conversions; PDF rotate, split, compress, merge |
+| `tests/office.rs` | Word, spreadsheet and presentation conversions; PDF rotate, split, compress, merge; a PDF as Word, PowerPoint, tables, EPUB, text and pictures; documents and workbooks merged |

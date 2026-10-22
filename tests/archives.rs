@@ -351,19 +351,18 @@ fn jobs_run_in_the_background() {
         label: "TAR.ZST",
         hint: "",
     };
-    let started = jobs::start(&[folder], choice, 1, Instant::now());
+    let started = jobs::start(&[folder], choice, 1);
     let [job] = &started[..] else {
         panic!("one job")
     };
-    assert!(!job.is_simulated());
     let deadline = Instant::now() + Duration::from_secs(30);
-    while job.finished_at(Instant::now()).is_none() {
+    while job.finished_at().is_none() {
         assert!(Instant::now() < deadline, "job never finished");
         std::thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(job.error(), None);
     assert_eq!(job.message().as_deref(), Some("Saved as Photos.tar.zst"));
-    assert_eq!(job.progress(Instant::now()), 1.0);
+    assert_eq!(job.progress(), 1.0);
 }
 
 fn have(tool: &str) -> bool {
@@ -583,14 +582,13 @@ fn jobs_finishing_together_keep_both_results() {
         label: "ZIP",
         hint: "",
     };
-    let now = Instant::now();
     let batches: Vec<_> = (0..4)
-        .map(|batch| jobs::start(std::slice::from_ref(&folder), choice, batch, now))
+        .map(|batch| jobs::start(std::slice::from_ref(&folder), choice, batch))
         .collect();
     let deadline = Instant::now() + Duration::from_secs(30);
     let mut made: Vec<String> = Vec::new();
     for job in batches.iter().flatten() {
-        while job.finished_at(Instant::now()).is_none() {
+        while job.finished_at().is_none() {
             assert!(Instant::now() < deadline, "job never finished");
             std::thread::sleep(Duration::from_millis(10));
         }
@@ -618,13 +616,12 @@ fn a_vanished_file_fails_instead_of_pretending() {
         label: "7Z",
         hint: "",
     };
-    let started = jobs::start(&[gone], choice, 1, Instant::now());
+    let started = jobs::start(&[gone], choice, 1);
     let [job] = &started[..] else {
         panic!("one job")
     };
-    assert!(!job.is_simulated());
     let deadline = Instant::now() + Duration::from_secs(10);
-    while job.finished_at(Instant::now()).is_none() {
+    while job.finished_at().is_none() {
         assert!(Instant::now() < deadline, "job never finished");
         std::thread::sleep(Duration::from_millis(5));
     }

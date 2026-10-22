@@ -80,6 +80,9 @@ impl Kind {
 pub const UNZIP: &str = "Unzip";
 /// Joins the files into one; offered only for two or more.
 pub const MERGE: &str = "Merge";
+pub const FLATTEN: &str = "Flatten";
+/// Subtitles' re-timing, whose bubbles say how far.
+pub const SHIFT: &str = "Shift";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Choice {
@@ -247,6 +250,8 @@ fn tools(kind: Kind) -> &'static [(&'static str, &'static str)] {
             ("Rotate", "90°"),
             ("Strip EXIF", "remove photo details"),
         ],
+        // FFmpeg does the work.
+        Kind::Audio | Kind::Video if !crate::media::available() => &[],
         Kind::Audio => &[
             ("Trim", "cut silence"),
             ("Normalize", "even volume"),
@@ -255,7 +260,7 @@ fn tools(kind: Kind) -> &'static [(&'static str, &'static str)] {
         ],
         Kind::Video => &[
             ("Compress", "smaller file"),
-            ("Trim", "cut the ends"),
+            ("Trim", "cut black ends"),
             ("Mute", "drop audio"),
             ("Rotate", "90°"),
             ("Frames", "export stills"),
@@ -268,9 +273,9 @@ fn tools(kind: Kind) -> &'static [(&'static str, &'static str)] {
         ],
         Kind::Document | Kind::Spreadsheet => &[(MERGE, "join files")],
         Kind::Slides => &[("Compress", "smaller file")],
-        Kind::Subtitle => &[("Shift", "re-time")],
+        Kind::Subtitle => &[(SHIFT, "re-time")],
         Kind::Archive | Kind::Compressed => &[],
-        Kind::Folder => &[("Flatten", "pull files up")],
+        Kind::Folder => &[(FLATTEN, "pull files up")],
     }
 }
 
@@ -286,8 +291,19 @@ pub fn modes(files: &[PathBuf]) -> Vec<Mode> {
         .collect()
 }
 
-/// The options a choice pops out as bubbles: where Share can send the files.
+/// The options a choice pops out as bubbles: where Share can send the files, and how far Shift
+/// moves subtitles.
 pub fn subs(choice: Choice) -> Vec<Choice> {
+    if choice.mode == Mode::Tools && choice.label == SHIFT {
+        return crate::subtitles::SHIFTS
+            .iter()
+            .map(|&(label, _)| Choice {
+                mode: Mode::Tools,
+                label,
+                hint: "",
+            })
+            .collect();
+    }
     if choice.mode != Mode::Actions || Action::from_label(choice.label) != Some(Action::Share) {
         return Vec::new();
     }
@@ -353,6 +369,9 @@ pub fn choices(files: &[PathBuf], mode: Mode) -> Vec<Choice> {
                 .filter(|(label, _)| {
                     known.iter().all(|(ext, kind)| {
                         tools(*kind).iter().any(|(l, _)| l == label)
+                            && (*label != MERGE
+                                || crate::convert::merges_file(*kind, ext) && kind == first)
+                            && (*kind != Kind::Slides || crate::office::slides::compresses(ext))
                             && (*kind != Kind::Image
                                 || images::Tool::from_label(label)
                                     .and_then(|tool| images::tool_target(ext, tool))

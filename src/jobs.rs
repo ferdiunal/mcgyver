@@ -1,12 +1,11 @@
-//! Work started from the wheel runs on a background thread. Images, archives, media conversions,
-//! Office-to-PDF exports and actions have real implementations; remaining catalog entries are
-//! simulated, with a made-up duration and no file touched.
+//! Work started from the wheel runs on a background thread: every conversion, tool and action
+//! the wheel offers is done for real.
 
 use std::io;
 use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::actions::{self, Action};
 use crate::archive::Progress;
@@ -18,15 +17,10 @@ pub struct Job {
     pub batch: u32,
     pub input: String,
     pub output: String,
-    work: Work,
+    work: Arc<Shared>,
     /// Cancelled from its card before it finished: done as far as the card is concerned,
     /// whatever the thread is still winding down.
     cancelled_at: Option<Instant>,
-}
-
-enum Work {
-    Simulated { start: Instant, duration: Duration },
-    Real(Arc<Shared>),
 }
 
 #[derive(Default)]
@@ -52,7 +46,7 @@ struct Outcome {
 }
 
 impl Job {
-    fn new(batch: u32, input: String, output: String, work: Work) -> Job {
+    fn new(batch: u32, input: String, output: String, work: Arc<Shared>) -> Job {
         Job {
             batch,
             input,
@@ -64,51 +58,38 @@ impl Job {
 
     /// Stops it, unless it is done: real work stops at its next check and puts nothing in place.
     pub fn cancel(&mut self, now: Instant) {
-        if self.finished_at(now).is_some() {
+        if self.finished_at().is_some() {
             return;
         }
         self.cancelled_at = Some(now);
-        if let Work::Real(shared) = &self.work {
-            shared.progress.cancel();
-        }
+        self.work.progress.cancel();
     }
 
     pub fn is_cancelled(&self) -> bool {
         self.cancelled_at.is_some()
     }
 
-    pub fn progress(&self, now: Instant) -> f32 {
-        match &self.work {
-            Work::Simulated { start, duration } => {
-                let elapsed = now.saturating_duration_since(*start).as_secs_f32();
-                (elapsed / duration.as_secs_f32()).clamp(0.0, 1.0)
-            }
-            Work::Real(shared) if shared.result().is_some() => 1.0,
-            Work::Real(shared) => shared.progress.fraction(),
+    pub fn progress(&self) -> f32 {
+        if self.work.result().is_some() {
+            1.0
+        } else {
+            self.work.progress.fraction()
         }
     }
 
     /// When it finished, if it has.
-    pub fn finished_at(&self, now: Instant) -> Option<Instant> {
+    pub fn finished_at(&self) -> Option<Instant> {
         if self.cancelled_at.is_some() {
             return self.cancelled_at;
         }
-        match &self.work {
-            Work::Simulated { start, duration } => {
-                Some(*start + *duration).filter(|end| now >= *end)
-            }
-            Work::Real(shared) => shared.result().map(|(at, _)| at),
-        }
+        self.work.result().map(|(at, _)| at)
     }
 
     pub fn error(&self) -> Option<String> {
         if self.is_cancelled() {
             return Some("cancelled".into());
         }
-        match &self.work {
-            Work::Real(shared) => shared.result().and_then(|(_, r)| r.err()),
-            Work::Simulated { .. } => None,
-        }
+        self.work.result().and_then(|(_, r)| r.err())
     }
 
     /// What it did, in a few words, once done.
@@ -116,12 +97,9 @@ impl Job {
         if self.is_cancelled() {
             return None;
         }
-        match &self.work {
-            Work::Real(shared) => shared
-                .result()
-                .and_then(|(_, r)| r.ok().map(|outcome| outcome.message)),
-            Work::Simulated { .. } => None,
-        }
+        self.work
+            .result()
+            .and_then(|(_, r)| r.ok().map(|outcome| outcome.message))
     }
 
     /// A newly created real output, if this job completed successfully.
@@ -129,14 +107,9 @@ impl Job {
         if self.is_cancelled() {
             return None;
         }
-        match &self.work {
-            Work::Real(shared) => shared.result().and_then(|(_, r)| r.ok()?.selected_output),
-            Work::Simulated { .. } => None,
-        }
-    }
-
-    pub fn is_simulated(&self) -> bool {
-        matches!(self.work, Work::Simulated { .. })
+        self.work
+            .result()
+            .and_then(|(_, r)| r.ok()?.selected_output)
     }
 }
 
@@ -156,13 +129,13 @@ pub fn applies(file: &Path, choice: Choice) -> bool {
 enum Real {
     File(PathBuf, Task),
     Action(Vec<PathBuf>, Action),
-    /// PDFs merged into one.
-    Merge(Vec<PathBuf>),
+    /// Files of one kind merged into one.
+    Merge(Vec<PathBuf>, catalog::Kind),
 }
 
-/// One job per file, or one for the whole selection for an action or a merge. Real ones run one after
-/// another on a thread of their own; simulated ones are queued back to back from `now`.
-pub fn start(files: &[PathBuf], choice: Choice, batch: u32, now: Instant) -> Vec<Job> {
+/// One job per file, or one for the whole selection for an action or a merge. They run one after
+/// another on a thread of their own.
+pub fn start(files: &[PathBuf], choice: Choice, batch: u32) -> Vec<Job> {
     if choice.mode == Mode::Actions
         && let Some(action) = Action::from_label(choice.label)
     {
@@ -171,7 +144,7 @@ pub fn start(files: &[PathBuf], choice: Choice, batch: u32, now: Instant) -> Vec
             batch,
             catalog::describe(files),
             actions::preview(files, action),
-            Work::Real(shared.clone()),
+            shared.clone(),
         );
         spawn(vec![(Real::Action(files.to_vec(), action), shared)]);
         return vec![job];
@@ -182,41 +155,39 @@ pub fn start(files: &[PathBuf], choice: Choice, batch: u32, now: Instant) -> Vec
         .filter(|f| catalog::kind_of(f).is_some())
         .cloned()
         .collect();
-    let all_pdfs = known
-        .iter()
-        .all(|f| catalog::kind_of(f) == Some(catalog::Kind::Pdf));
-    if choice.mode == Mode::Tools && choice.label == catalog::MERGE && all_pdfs && known.len() > 1 {
+    // Files all of one kind that merges, into one.
+    let kind = known.first().and_then(|f| catalog::kind_of(f));
+    if choice.mode == Mode::Tools
+        && choice.label == catalog::MERGE
+        && known.len() > 1
+        && let Some(kind) = kind.filter(|kind| convert::merges(*kind))
+        && known.iter().all(|f| catalog::kind_of(f) == Some(kind))
+    {
         let shared = Arc::new(Shared::default());
         let job = Job::new(
             batch,
             catalog::describe(&known),
             outcome(&known[0], choice),
-            Work::Real(shared.clone()),
+            shared.clone(),
         );
-        spawn(vec![(Real::Merge(known), shared)]);
+        spawn(vec![(Real::Merge(known, kind), shared)]);
         return vec![job];
     }
-    let mut queued = now;
     let mut real = Vec::new();
     let jobs = files
         .iter()
         .filter(|file| applies(file, choice))
         .map(|file| {
-            let work = match convert::task(file, choice) {
-                Some(task) => {
-                    let shared = Arc::new(Shared::default());
-                    real.push((Real::File(file.clone(), task), shared.clone()));
-                    Work::Real(shared)
-                }
+            let shared = Arc::new(Shared::default());
+            match convert::task(file, choice) {
+                Some(task) => real.push((Real::File(file.clone(), task), shared.clone())),
+                // The wheel only offers what is done; should anything else come, it says so.
                 None => {
-                    let duration = fake_duration(file, choice.mode);
-                    queued += duration;
-                    Work::Simulated {
-                        start: queued - duration,
-                        duration,
-                    }
+                    *shared.result.lock().unwrap_or_else(|e| e.into_inner()) =
+                        Some((Instant::now(), Err("McGyver can't do that".into())));
                 }
-            };
+            }
+            let work = shared;
             Job::new(
                 batch,
                 catalog::display_name(file),
@@ -264,7 +235,7 @@ fn run(work: &Real, progress: &Progress) -> Result<Outcome, String> {
             message: trf("Saved as {}", &[&catalog::display_name(&made)]),
             selected_output: Some(made),
         }),
-        Real::Merge(files) => convert::merge_pdfs(files, progress).map(|made| Outcome {
+        Real::Merge(files, kind) => convert::merge(files, *kind, progress).map(|made| Outcome {
             message: trf("Saved as {}", &[&catalog::display_name(&made)]),
             selected_output: Some(made),
         }),
@@ -302,6 +273,17 @@ pub fn outcome(file: &Path, choice: Choice) -> String {
         .extension()
         .map(|e| e.to_string_lossy().into_owned())
         .unwrap_or_default();
+    if choice.mode == Mode::Tools
+        && let Some(kind @ (catalog::Kind::Audio | catalog::Kind::Video)) = catalog::kind_of(file)
+        && let Some(tool) =
+            crate::media::Tool::from_label(choice.label, kind == catalog::Kind::Video)
+    {
+        let video = kind == catalog::Kind::Video;
+        return match crate::media::tool_extension(&catalog::ext_of(file), video, tool) {
+            Some(ext) => format!("{stem} ({}).{ext}", tool.suffix()),
+            None => format!("{stem} ({})", tool.suffix()),
+        };
+    }
     match choice.mode {
         // What an archive holds isn't known until it's opened.
         Mode::Convert if choice.label == catalog::UNZIP => match catalog::kind_of(file) {
@@ -326,6 +308,15 @@ pub fn outcome(file: &Path, choice: Choice) -> String {
                 None => format!("{stem} ({}).{ext}", choice.label.to_lowercase()),
             }
         }
+        Mode::Tools if choice.label == catalog::MERGE => match catalog::kind_of(file) {
+            Some(kind) => format!(
+                "{stem} (merged).{}",
+                convert::merged_extension(kind, &catalog::ext_of(file))
+            ),
+            None => format!("{stem} (merged).{ext}"),
+        },
+        Mode::Tools if choice.label == catalog::FLATTEN => format!("{stem} (flat)"),
+        Mode::Tools if choice.label == "Compress" => format!("{stem} (compressed).{ext}"),
         Mode::Tools => format!("{stem} ({}).{ext}", choice.label.to_lowercase()),
         Mode::Actions => tr(match choice.label {
             "Copy" | "Copy To" => "copied",
@@ -341,39 +332,115 @@ pub fn outcome(file: &Path, choice: Choice) -> String {
     }
 }
 
-fn fake_duration(file: &Path, mode: Mode) -> Duration {
-    if mode == Mode::Actions {
-        return Duration::from_millis(250);
-    }
-    let megabytes = std::fs::metadata(file)
-        .map(|m| m.len() as f32 / 1_000_000.0)
-        .unwrap_or_else(|_| (catalog::display_name(file).len() % 7) as f32 * 4.0 + 6.0);
-    Duration::from_secs_f32((0.6 + megabytes * 0.05).min(4.0))
-}
-
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     #[test]
     fn a_cancelled_job_is_over_at_once_and_made_nothing() {
         let now = Instant::now();
         let ms = Duration::from_millis;
-        let simulated = |duration| Work::Simulated {
-            start: now,
-            duration,
-        };
-        let mut job = Job::new(1, "a".into(), "b".into(), simulated(ms(10_000)));
-        assert_eq!(job.finished_at(now), None);
+        let running = Arc::new(Shared::default());
+        let mut job = Job::new(1, "a".into(), "b".into(), running.clone());
+        assert_eq!(job.finished_at(), None);
         job.cancel(now + ms(5));
-        assert_eq!(job.finished_at(now + ms(5)), Some(now + ms(5)));
+        assert_eq!(job.finished_at(), Some(now + ms(5)));
         assert_eq!(job.error().as_deref(), Some("cancelled"));
         assert_eq!(job.successful_output(), None);
+        assert!(running.progress.is_cancelled());
 
         // Done is done.
-        let mut done = Job::new(1, "a".into(), "b".into(), simulated(ms(1)));
+        let finished = Arc::new(Shared::default());
+        *finished.result.lock().unwrap() = Some((
+            now,
+            Ok(Outcome {
+                message: "done".into(),
+                selected_output: None,
+            }),
+        ));
+        let mut done = Job::new(1, "a".into(), "b".into(), finished);
         done.cancel(now + ms(5));
         assert!(!done.is_cancelled() && done.error().is_none());
+    }
+
+    #[test]
+    fn every_choice_the_wheel_offers_does_real_work() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("photos");
+        std::fs::create_dir(&folder).unwrap();
+        let mut files: Vec<PathBuf> = [
+            "photo.jpg",
+            "scan.png",
+            "raw.cr2",
+            "song.mp3",
+            "voice.wav",
+            "old.wma",
+            "clip.mp4",
+            "old.avi",
+            "report.pdf",
+            "letter.docx",
+            "old.doc",
+            "notes.md",
+            "plain.txt",
+            "book.epub",
+            "page.html",
+            "story.rtf",
+            "text.odt",
+            "mac.pages",
+            "table.xlsx",
+            "old.xls",
+            "sheet.ods",
+            "data.csv",
+            "data.tsv",
+            "mac.numbers",
+            "deck.pptx",
+            "old.ppt",
+            "talk.odp",
+            "show.key",
+            "film.srt",
+            "film.vtt",
+            "backup.zip",
+            "backup.tar.gz",
+            "log.gz",
+            "set.7z",
+        ]
+        .iter()
+        .map(|name| dir.path().join(name))
+        .collect();
+        files.push(folder);
+        for file in &files {
+            for mode in [Mode::Convert, Mode::Tools] {
+                for choice in catalog::choices(std::slice::from_ref(file), mode) {
+                    let bubbles = catalog::subs(choice);
+                    // Shift only holds its bubbles: how far is picked on them.
+                    let wedge = choice.label != catalog::SHIFT;
+                    for choice in bubbles.into_iter().chain(wedge.then_some(choice)) {
+                        assert!(
+                            convert::task(file, choice).is_some(),
+                            "{} offers {:?} {}, which does nothing",
+                            catalog::display_name(file),
+                            mode,
+                            choice.label
+                        );
+                    }
+                }
+            }
+            // A second of the same kind: Merge, where offered, is one real job.
+            let ext = catalog::ext_of(file);
+            let pair = [file.clone(), dir.path().join(format!("other.{ext}"))];
+            if let Some(merge) = catalog::choices(&pair, Mode::Tools)
+                .into_iter()
+                .find(|c| c.label == catalog::MERGE)
+            {
+                let kind = catalog::kind_of(file).unwrap();
+                assert!(convert::merges(kind) && convert::merges_file(kind, &ext));
+                // The files aren't there, so the job fails at once, touching nothing.
+                let jobs = start(&pair, merge, 1);
+                assert_eq!(jobs.len(), 1, "{ext}");
+            }
+        }
     }
 
     #[test]

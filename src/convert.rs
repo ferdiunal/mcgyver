@@ -1,6 +1,6 @@
 //! Doing what a wedge promises to one file, for real: pictures, archives, media, office documents,
-//! PDF tools and Markdown. Remaining catalog entries are still simulated (see `jobs`); the
-//! Actions wheel is in `actions`.
+//! PDFs, Markdown, subtitles and folders, and merging several into one. The Actions wheel is in
+//! `actions`.
 //!
 //! Results land next to the original under a free name ("photos 2.zip"). Work happens in
 //! hidden scratch files and folders beside it, which are moved into place only once complete,
@@ -28,12 +28,23 @@ pub enum Task {
     PictureTool(images::Tool),
     /// Convert audio or video through FFmpeg.
     Media(crate::media::Target),
+    /// Apply an audio or video tool through FFmpeg.
+    MediaTool(crate::media::Tool),
     /// Save a document, spreadsheet or presentation in another format (a target label).
     Office(&'static str),
     /// Compress, rotate or split a PDF.
     Pdf(crate::office::PdfTool),
+    /// Save a PDF as a document, a presentation, tables, an e-book, text or page images (a
+    /// target label).
+    FromPdf(&'static str),
     /// Take the text of a document, spreadsheet, presentation or PDF out as Markdown.
     Markdown,
+    /// Save subtitles as SubRip, WebVTT or text, moved by some milliseconds.
+    Subtitles(crate::subtitles::Format, i64),
+    /// Copy a folder's files, from however deep, side by side into a new folder.
+    Flatten,
+    /// Make a presentation smaller by scaling its pictures down.
+    CompressSlides,
 }
 
 enum Source {
@@ -72,10 +83,38 @@ pub fn task(file: &Path, choice: Choice) -> Option<Task> {
         (Mode::Tools, Some(Kind::Pdf)) => {
             return crate::office::PdfTool::from_label(choice.label).map(Task::Pdf);
         }
+        (Mode::Convert, Some(Kind::Pdf))
+            if crate::office::export::TARGETS.contains(&choice.label) =>
+        {
+            return Some(Task::FromPdf(choice.label));
+        }
+        (Mode::Tools, Some(kind @ (Kind::Audio | Kind::Video))) if crate::media::available() => {
+            return crate::media::Tool::from_label(choice.label, kind == Kind::Video)
+                .map(Task::MediaTool);
+        }
         (Mode::Convert, Some(Kind::Document | Kind::Spreadsheet | Kind::Slides | Kind::Pdf))
             if choice.label == "MD" && crate::markdown::reads(&catalog::ext_of(file)) =>
         {
             return Some(Task::Markdown);
+        }
+        (Mode::Convert, Some(Kind::Subtitle)) => {
+            return crate::subtitles::Format::from_label(choice.label)
+                .map(|format| Task::Subtitles(format, 0));
+        }
+        (Mode::Tools, Some(Kind::Subtitle)) => {
+            let shift = crate::subtitles::shift_by(choice.label)?;
+            let format =
+                crate::subtitles::Format::from_label(&catalog::ext_of(file).to_uppercase())?;
+            return Some(Task::Subtitles(format, shift));
+        }
+        (Mode::Tools, Some(Kind::Folder)) if choice.label == catalog::FLATTEN => {
+            return Some(Task::Flatten);
+        }
+        (Mode::Tools, Some(Kind::Slides))
+            if choice.label == "Compress"
+                && crate::office::slides::compresses(&catalog::ext_of(file)) =>
+        {
+            return Some(Task::CompressSlides);
         }
         (Mode::Tools, Some(Kind::Image)) => {
             let tool = images::Tool::from_label(choice.label)?;
@@ -101,19 +140,62 @@ pub fn task(file: &Path, choice: Choice) -> Option<Task> {
     }
 }
 
-/// The PDFs `files`, in order, merged into one next to the first.
-pub fn merge_pdfs(files: &[PathBuf], progress: &Progress) -> io::Result<PathBuf> {
+/// Whether files of `kind` can be merged into one.
+pub fn merges(kind: Kind) -> bool {
+    match kind {
+        Kind::Pdf | Kind::Document | Kind::Spreadsheet => true,
+        Kind::Audio => crate::media::available(),
+        _ => false,
+    }
+}
+
+/// Whether a file of `kind` named with `ext` can go into a merge: documents and spreadsheets
+/// that WordCraft and GridCraft open.
+pub fn merges_file(kind: Kind, ext: &str) -> bool {
+    use crate::office::Family;
+    match kind {
+        Kind::Document => Family::of(ext) == Some(Family::Word),
+        Kind::Spreadsheet => Family::of(ext) == Some(Family::Sheet),
+        kind => merges(kind),
+    }
+}
+
+/// The extension of what merging files of `kind`, the first a `first_ext`, makes.
+pub fn merged_extension(kind: Kind, first_ext: &str) -> String {
+    match kind {
+        Kind::Audio => crate::media::tool_target(first_ext, false, None)
+            .extension()
+            .to_owned(),
+        Kind::Document => crate::office::merge::document_extension(first_ext).to_owned(),
+        Kind::Spreadsheet => "xlsx".to_owned(),
+        _ => first_ext.to_owned(),
+    }
+}
+
+/// The `files` of `kind`, in order, merged into one next to the first.
+pub fn merge(files: &[PathBuf], kind: Kind, progress: &Progress) -> io::Result<PathBuf> {
     let first = files
         .first()
         .ok_or_else(|| io::Error::other("nothing to merge"))?;
     progress.set_steps(1);
     let parent = parent_of(first);
-    let bytes = crate::office::merge(files, progress)?;
+    let ext = merged_extension(kind, &catalog::ext_of(first));
     let temp = Scratch::dir(parent)?;
-    let output = temp.path().join("output.pdf");
-    fs::write(&output, bytes)?;
+    let output = temp.path().join(format!("output.{ext}"));
+    match kind {
+        Kind::Pdf => fs::write(&output, crate::office::merge(files, progress)?)?,
+        Kind::Audio => {
+            let target = crate::media::tool_target(&ext, false, None);
+            crate::media::merge(files, target, &output, progress)?;
+        }
+        Kind::Document => fs::write(&output, crate::office::merge::documents(files, progress)?)?,
+        Kind::Spreadsheet => {
+            fs::write(&output, crate::office::merge::workbooks(files, progress)?)?;
+        }
+        _ => return Err(io::Error::other("these files can't be merged")),
+    }
     let stem = format!("{} (merged)", catalog::stem_of(first));
-    move_to_free_name(&output, parent, &stem, ".pdf")
+    move_to_free_name(&output, parent, &stem, &format!(".{ext}"))
 }
 
 /// The folder holding `file`, `.` for a bare name.
@@ -178,6 +260,20 @@ pub fn run(file: &Path, task: Task, progress: &Progress) -> io::Result<PathBuf> 
             &format!(".{}", target.extension()),
         );
     }
+    if let Task::MediaTool(tool) = task {
+        let stem = format!("{} ({})", catalog::stem_of(file), tool.suffix());
+        let temp = Scratch::dir(parent)?;
+        let made = crate::media::apply(file, tool, temp.path(), progress)?;
+        // The stills go straight into the folder that becomes the result.
+        if made == temp.path() {
+            return temp.finish(parent, &stem, "");
+        }
+        let ext = made
+            .extension()
+            .map(|ext| format!(".{}", ext.to_string_lossy()))
+            .unwrap_or_default();
+        return move_to_free_name(&made, parent, &stem, &ext);
+    }
     if let Task::Office(label) = task {
         progress.set_steps(1);
         progress.begin(1);
@@ -220,6 +316,66 @@ pub fn run(file: &Path, task: Task, progress: &Progress) -> io::Result<PathBuf> 
             }
         };
         return Ok(made);
+    }
+    if let Task::Subtitles(format, shift) = task {
+        progress.set_steps(1);
+        progress.begin(1);
+        let bytes = crate::subtitles::convert(file, format, shift)?;
+        let stem = match crate::subtitles::shift_label(shift) {
+            Some(label) => format!("{} ({label})", catalog::stem_of(file)),
+            None => catalog::stem_of(file),
+        };
+        let temp = Scratch::dir(parent)?;
+        let output = temp.path().join("output");
+        fs::write(&output, bytes)?;
+        progress.add(1);
+        return move_to_free_name(&output, parent, &stem, &format!(".{}", format.extension()));
+    }
+    if matches!(task, Task::CompressSlides) {
+        progress.set_steps(1);
+        progress.begin(1);
+        let ext = catalog::ext_of(file);
+        let bytes = crate::office::slides::compress(file)?;
+        let temp = Scratch::dir(parent)?;
+        let output = temp.path().join("output");
+        fs::write(&output, bytes)?;
+        progress.add(1);
+        let stem = format!("{} (compressed)", catalog::stem_of(file));
+        return move_to_free_name(&output, parent, &stem, &format!(".{ext}"));
+    }
+    if matches!(task, Task::Flatten) {
+        let temp = Scratch::dir(parent)?;
+        flatten(file, temp.path(), progress)?;
+        let stem = format!("{} (flat)", catalog::display_name(file));
+        return temp.finish(parent, &stem, "");
+    }
+    if let Task::FromPdf(label) = task {
+        let ext = catalog::extension_for(label);
+        let stem = catalog::stem_of(file);
+        let temp = Scratch::dir(parent)?;
+        progress.set_steps(1);
+        if matches!(label, "JPG" | "PNG") {
+            let mut pages = 0;
+            crate::office::export::pictures(file, label == "JPG", progress, |page, bytes| {
+                pages += 1;
+                fs::write(
+                    temp.path().join(format!("{stem} {}.{ext}", page + 1)),
+                    bytes,
+                )
+            })?;
+            // One page is a picture of its own; more are a folder of them.
+            if pages == 1 {
+                let only = temp.path().join(format!("{stem} 1.{ext}"));
+                return move_to_free_name(&only, parent, &stem, &format!(".{ext}"));
+            }
+            return temp.finish(parent, &format!("{stem} (pages)"), "");
+        }
+        progress.begin(1);
+        let bytes = crate::office::export::convert(file, label)?;
+        let output = temp.path().join(format!("output.{ext}"));
+        fs::write(&output, bytes)?;
+        progress.add(1);
+        return move_to_free_name(&output, parent, &stem, &format!(".{ext}"));
     }
     if matches!(task, Task::Markdown) {
         progress.set_steps(1);
@@ -280,12 +436,77 @@ pub fn run(file: &Path, task: Task, progress: &Progress) -> io::Result<PathBuf> 
         (Task::Extract, Source::Folder) => Err(io::Error::other("a folder isn't an archive")),
         (Task::Picture(_), _) => unreachable!("handled above"),
         (
-            Task::PictureTool(_) | Task::Media(_) | Task::Office(_) | Task::Pdf(_) | Task::Markdown,
+            Task::PictureTool(_)
+            | Task::Media(_)
+            | Task::MediaTool(_)
+            | Task::Office(_)
+            | Task::Pdf(_)
+            | Task::FromPdf(_)
+            | Task::Markdown
+            | Task::Subtitles(..)
+            | Task::Flatten
+            | Task::CompressSlides,
             _,
         ) => {
             unreachable!("handled above")
         }
     }
+}
+
+/// Copies every file in `folder` and the folders inside it, side by side into `into`: a name
+/// met twice gets a number ("notes 2.txt"), the one nearer the top keeping it. Links to
+/// folders aren't followed.
+fn flatten(folder: &Path, into: &Path, progress: &Progress) -> io::Result<()> {
+    fn files(dir: &Path, found: &mut Vec<(PathBuf, u64)>) -> io::Result<()> {
+        let mut entries: Vec<fs::DirEntry> = fs::read_dir(dir)?.collect::<io::Result<_>>()?;
+        entries.sort_by_key(fs::DirEntry::file_name);
+        let mut inside = Vec::new();
+        for entry in entries {
+            let path = entry.path();
+            if entry.file_type()?.is_dir() {
+                inside.push(path);
+            } else if let Ok(meta) = fs::metadata(&path)
+                && meta.is_file()
+            {
+                found.push((path, meta.len()));
+            }
+        }
+        for dir in inside {
+            files(&dir, found)?;
+        }
+        Ok(())
+    }
+    let mut found = Vec::new();
+    files(folder, &mut found)?;
+    if found.is_empty() {
+        return Err(io::Error::other("there are no files in this folder"));
+    }
+    progress.set_steps(1);
+    progress.begin(found.iter().map(|(_, size)| size).sum());
+    let mut taken = std::collections::HashSet::new();
+    for (path, size) in found {
+        progress.check()?;
+        let name = catalog::display_name(&path);
+        let (base, ext) = split_name(&name, false);
+        // Lower case, for the file systems that don't tell "A.txt" from "a.txt".
+        let free = (1..)
+            .map(|n| match n {
+                1 => name.clone(),
+                n => format!("{base} {n}{ext}"),
+            })
+            .find(|name| taken.insert(name.to_lowercase()))
+            .expect("a free name");
+        let to = into.join(free);
+        fs::copy(&path, &to)?;
+        if let Ok(meta) = fs::metadata(&path) {
+            let _ = filetime::set_file_mtime(
+                &to,
+                filetime::FileTime::from_last_modification_time(&meta),
+            );
+        }
+        progress.add(size);
+    }
+    Ok(())
 }
 
 /// Everything directly inside `dir`, with names, sorted.
@@ -580,5 +801,35 @@ mod tests {
         assert_eq!(split_name("notes.txt", false), ("notes", ".txt"));
         assert_eq!(split_name(".bashrc", false), (".bashrc", ""));
         assert_eq!(split_name("v1.2", true), ("v1.2", ""));
+    }
+
+    #[test]
+    fn flatten_pulls_every_file_up_and_numbers_the_twins() {
+        let dir = tempfile::tempdir().unwrap();
+        let photos = dir.path().join("photos");
+        fs::create_dir_all(photos.join("2024/june")).unwrap();
+        fs::create_dir_all(photos.join("2025")).unwrap();
+        fs::write(photos.join("cover.jpg"), "a").unwrap();
+        fs::write(photos.join("2024/june/beach.jpg"), "b").unwrap();
+        fs::write(photos.join("2025/beach.jpg"), "c").unwrap();
+        fs::write(photos.join("2025/Cover.jpg"), "d").unwrap();
+        let flat = run(&photos, Task::Flatten, &Progress::default()).unwrap();
+        assert_eq!(flat, dir.path().join("photos (flat)"));
+        let mut names: Vec<String> = fs::read_dir(&flat)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(
+            names,
+            ["Cover 2.jpg", "beach 2.jpg", "beach.jpg", "cover.jpg"]
+        );
+        // The folder itself is left as it was.
+        assert!(photos.join("2024/june/beach.jpg").is_file());
+
+        let empty = dir.path().join("empty");
+        fs::create_dir_all(empty.join("inside")).unwrap();
+        let error = run(&empty, Task::Flatten, &Progress::default()).unwrap_err();
+        assert_eq!(error.to_string(), "there are no files in this folder");
     }
 }
