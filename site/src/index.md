@@ -48,7 +48,7 @@ Every file and folder also gets **Actions**: Zip, Copy, Cut, Copy To, Move To, C
 One download, then it waits in the tray or the menu bar until you hold Shift.
 
 - **KDE Plasma 6.** Linux, on Wayland. Where McGyver started. After the first start, press *Set up* in its settings, so the wheel opens the moment you press Shift during a drag. [Download the .deb](https://mcgyver.ferdiunal.tr/download/deb) for Debian and Ubuntu, or [the .rpm](https://mcgyver.ferdiunal.tr/download/rpm) for Fedora.
-- **macOS.** macOS 11 or later. One app for Apple Silicon and Intel. Open the disk image and the app offers to move itself to Applications. It isn't notarized yet: the first time, Control-click it and choose *Open* (from macOS 15 on, *Open Anyway* in Privacy & Security). [Download for Mac](https://mcgyver.ferdiunal.tr/download/macos).
+- **macOS.** macOS 11 or later. One app for Apple Silicon and Intel. Open the disk image and the app offers to move itself to Applications. It isn't notarized yet: the first time, Control-click it and choose *Open* (from macOS 15 on, *Open Anyway* in Privacy & Security). [Download for Mac](https://mcgyver.ferdiunal.tr/download/macos), or [for Apple Silicon only](https://mcgyver.ferdiunal.tr/download/macos-arm64) (smaller).
 - **Windows.** Windows 10 and 11, on x64 and ARM64 PCs. On a PC without a graphics driver, like a virtual machine, it draws with Mesa's software OpenGL, which comes in the zip. SmartScreen asks once: *More info*, then *Run anyway*. [Download for x64 PCs](https://mcgyver.ferdiunal.tr/download/windows-x64), or [for ARM64](https://mcgyver.ferdiunal.tr/download/windows-arm64).
 
 ## Privacy

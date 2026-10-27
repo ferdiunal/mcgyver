@@ -13,6 +13,7 @@ const DOWNLOADS = {
   deb: (name) => name.endsWith("_amd64.deb"),
   rpm: (name) => name.endsWith(".x86_64.rpm"),
   macos: (name) => name.endsWith(".dmg"),
+  "macos-arm64": (name) => name.endsWith("-arm64.dmg"),
 };
 // GitHub is asked about the latest release at most this often; the rest come from the cache.
 const RELEASE_TTL = 600;

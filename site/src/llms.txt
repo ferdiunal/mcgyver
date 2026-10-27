@@ -37,6 +37,7 @@ What each kind of file can become (Convert) and what can be done to it (Tools):
 - [Linux .deb](https://mcgyver.ferdiunal.tr/download/deb): KDE Plasma 6 on Debian and Ubuntu, x86_64.
 - [Linux .rpm](https://mcgyver.ferdiunal.tr/download/rpm): KDE Plasma 6 on Fedora, x86_64.
 - [macOS](https://mcgyver.ferdiunal.tr/download/macos): one app for Apple Silicon and Intel, macOS 11 or later.
+- [macOS, Apple Silicon only](https://mcgyver.ferdiunal.tr/download/macos-arm64): the same app for Apple Silicon Macs alone, a smaller download.
 - [Windows x64](https://mcgyver.ferdiunal.tr/download/windows-x64): a zip for Windows 10 and 11.
 - [Windows ARM64](https://mcgyver.ferdiunal.tr/download/windows-arm64): the same, for ARM64 PCs.
 

@@ -2,8 +2,9 @@
 # Puts a release on GitHub from this machine: tags the version in Cargo.toml, builds what this
 # machine can, and uploads it to that version's release, a draft until --publish. Linux builds
 # the .deb and the .rpm (packaging/linux/build.sh) and the Windows zips (packaging/windows/
-# build.sh); a Mac builds the .dmg (packaging/macos/build-app.sh). So: run it on Linux, then on a
-# Mac from the same commit, then --publish from either.
+# build.sh); a Mac builds the .dmgs, the universal one and one for Apple Silicon alone
+# (packaging/macos/build-app.sh). So: run it on Linux, then on a Mac from the same commit, then
+# --publish from either.
 #
 #   packaging/release.sh             # build and upload to the draft
 #   packaging/release.sh --publish   # the draft becomes the latest release: the site's downloads
@@ -25,7 +26,7 @@ tag="v$version"
 if [ "${1:-}" = --publish ]; then
 	# Every download button needs its file: one missing would land on the page again.
 	names=$(gh release view "$tag" --json assets --jq '.assets[].name')
-	for end in _amd64.deb .x86_64.rpm -universal.dmg -windows-x64.zip -windows-arm64.zip; do
+	for end in _amd64.deb .x86_64.rpm -universal.dmg -arm64.dmg -windows-x64.zip -windows-arm64.zip; do
 		if ! printf '%s\n' "$names" | grep -q -- "$end\$"; then
 			echo "$tag has no *$end yet" >&2
 			exit 1
@@ -73,8 +74,10 @@ Linux)
 		dist/McGyver-$version-windows-x64.zip dist/McGyver-$version-windows-arm64.zip"
 	;;
 Darwin)
+	# Apple Silicon first: the universal build reuses its half, and leaves dist/McGyver.app whole.
+	packaging/macos/build-app.sh arm64
 	packaging/macos/build-app.sh
-	files="dist/McGyver-$version-universal.dmg"
+	files="dist/McGyver-$version-arm64.dmg dist/McGyver-$version-universal.dmg"
 	;;
 *)
 	echo "a release is built on Linux and on a Mac" >&2

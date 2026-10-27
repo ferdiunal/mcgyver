@@ -38,16 +38,17 @@ Releases are built on our own machines, not in GitHub Actions:
    (`packaging/linux/build.sh`) and the Windows zips (`packaging/windows/build.sh`), and uploads
    them. Run again, it rebuilds and replaces them.
 3. On a Mac, from the same commit (`git fetch --tags && git checkout v<version>`):
-   `packaging/release.sh` builds the universal .dmg and uploads it to the same draft.
+   `packaging/release.sh` builds the universal .dmg and the Apple Silicon one (`-arm64.dmg`) and
+   uploads them to the same draft.
 4. `packaging/release.sh --publish`: the draft becomes the latest release, once it holds all five
-   files (.deb, .rpm, .dmg and both zips).
+   files (.deb, .rpm, both .dmgs and both zips).
 5. Deploy the site after publishing (`cd site && npm run deploy`), with its version lines updated:
    its download buttons hand out the latest published release, so they work only from then on.
 
 A published release's files are replaced only with `packaging/release.sh --force`.
 
 The repository is private, so the files aren't public on GitHub: the site hands them out.
-`https://mcgyver.ferdiunal.tr/download/<deb|rpm|macos|windows-x64|windows-arm64>` finds the file in
+`https://mcgyver.ferdiunal.tr/download/<deb|rpm|macos|macos-arm64|windows-x64|windows-arm64>` finds the file in
 the latest release and redirects to a short-lived link to it, with a read-only token
 (`GITHUB_TOKEN`, a secret of the site's Worker; see `site/wrangler.jsonc`). The apps' daily update
 check asks the same Worker (`/api/ping`, `/api/latest`), which reads the latest release's tag, so
