@@ -13,8 +13,10 @@
   <!-- llmstxt.org: the page as Markdown, and the llms.txt that covers it. -->
   <link rel="alternate" type="text/markdown" href="/tr/index.md">
   <link rel="describedby" href="/llms.txt">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
   <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <meta name="theme-color" content="#0B0D10">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="McGyver">
@@ -22,13 +24,14 @@
   <meta property="og:locale:alternate" content="en_US">
   <meta property="og:url" content="https://mcgyver.ferdiunal.tr/tr/">
   <meta property="og:title" content="McGyver: doğru araç, tam imlecinizin ucunda">
-  <meta property="og:description" content="Bir dosya sürükleyin, Shift’i basılı tutun, bir çark açılır: resimleri dönüştürün, videoları küçültün, PDF’leri Word’e çevirin. KDE Plasma 6, macOS ve Windows için ücretsiz ve açık kaynak.">
-  <meta property="og:image" content="https://mcgyver.ferdiunal.tr/assets/og.jpg">
+  <meta property="og:description" content="Bir dosya sürükleyin, Shift’i basılı tutun, bir çark açılır: resim dönüştürün, video küçültün, PDF’yi Word’e çevirin. KDE, macOS ve Windows için ücretsiz.">
+  <meta property="og:image" content="https://mcgyver.ferdiunal.tr/assets/og-tr.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Bir dizüstü bilgisayarda, Finder’daki holiday.jpg’nin yanında açık duran McGyver çarkı, WEBP seçili; yanında İngilizce “The right tool. Right at your cursor.” yazısı.">
+  <meta property="og:image:alt" content="Açık duran McGyver çarkı, Dönüştür modunda imleç WEBP diliminde; altında tatil.jpg’den tatil.webp’ye bir ok, yanında “Sürükle. Shift’e bas. Bırak.” yazısı.">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image:alt" content="Bir dizüstü bilgisayarda, Finder’daki holiday.jpg’nin yanında açık duran McGyver çarkı, WEBP seçili; yanında İngilizce “The right tool. Right at your cursor.” yazısı.">
+  <meta name="twitter:site" content="@_ferdiunal">
+  <meta name="twitter:image:alt" content="Açık duran McGyver çarkı, Dönüştür modunda imleç WEBP diliminde; altında tatil.jpg’den tatil.webp’ye bir ok, yanında “Sürükle. Shift’e bas. Bırak.” yazısı.">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -38,7 +41,7 @@
         "@id": "https://mcgyver.ferdiunal.tr/#app",
         "name": "McGyver",
         "url": "https://mcgyver.ferdiunal.tr/tr/",
-        "image": "https://mcgyver.ferdiunal.tr/assets/og.jpg",
+        "image": "https://mcgyver.ferdiunal.tr/assets/og-tr.jpg",
         "description": "Dosya sürüklerken imlecin çevresinde açılan bir çark: dosyaları bir dilimin üstüne bırakarak dönüştürün, sıkıştırın, zip’leyin ya da paylaşın. Dönüştürmeler bilgisayarınızda yapılır.",
         "applicationCategory": "UtilitiesApplication",
         "operatingSystem": "Linux (KDE Plasma 6, Wayland), macOS 11 veya üstü, Windows 10, Windows 11",
@@ -84,9 +87,6 @@
     ]
   }
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;650;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script>document.documentElement.classList.add('js');matchMedia('(prefers-reduced-motion: reduce)').matches||document.documentElement.classList.add('intro')</script>
   <link rel="stylesheet" href="/styles.css">
   <script src="/wheel.js" defer></script>
@@ -159,7 +159,10 @@
 <section class="hero" aria-labelledby="hero-title">
   <div class="hero-media" id="hero-media">
     <div class="hero-frame" id="hero-frame">
-      <img class="hero-photo" src="/assets/hero-laptop.webp" alt="" width="1536" height="864" fetchpriority="high" decoding="async">
+      <picture>
+        <source srcset="/assets/hero-laptop.avif" type="image/avif">
+        <img class="hero-photo" src="/assets/hero-laptop.webp" alt="" width="1536" height="864" fetchpriority="high" decoding="async">
+      </picture>
       <div class="hero-spill" id="hero-spill" aria-hidden="true"></div>
       <div class="hero-screen" id="hero-screen">
         <div id="hero-scene" role="img" aria-label="Bir dizüstü bilgisayarda, Finder’da tatil.jpg sürükleniyor. Shift basılı tutulunca McGyver çarkı imlecin çevresinde açılıyor, WEBP seçiliyor ve tatil.webp asıl dosyanın yanında beliriyor."></div>
@@ -168,7 +171,7 @@
     </div>
   </div>
   <div class="hero-copy">
-    <h1 class="display" id="hero-title"><span class="eyebrow hero-kicker">McGyver · Sürükle-bırak dosya dönüştürücü</span> <span class="line"><span>Doğru araç.</span></span> <span class="accent line"><span>Tam imlecinizin ucunda.</span></span></h1>
+    <h1 class="display" id="hero-title"><span class="eyebrow hero-kicker">McGyver · Sürükle-bırak dosya dönüştürücü</span> <span class="line"><span>Doğru araç.</span></span> <span class="accent line"><span>Tam imlecinizin</span></span> <span class="accent line"><span>ucunda.</span></span></h1>
     <p class="lede">Ücretsiz, çevrimdışı çalışan bir dosya dönüştürücü. Akışınızı bozmadan dosyaları dönüştürün, sıkıştırın, birleştirin ve paylaşın: bir dosya sürükleyin, Shift’i basılı tutun, sonra ne olacağını seçin.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#download" id="hero-dl" data-track="hero_download_click"><svg id="hero-dl-icon" aria-hidden="true"><use href="#i-apple"/></svg><span id="hero-dl-label">Mac için indir</span></a>
@@ -563,12 +566,18 @@
 <div class="dghost" id="dghost" aria-hidden="true"><i></i><span></span><em>⇧ basılı tutun</em></div>
 <div class="navwheel" id="navwheel" hidden><svg class="wheel is-interactive" id="nav-wheel-svg" viewBox="-210 -210 420 420" role="menu" aria-label="Bir bölüme gidin"></svg></div>
 <!-- Google Analytics (GA4), loaded after the page: visits, and the clicks app.js names (download, demo, sponsor). -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-QLB2KP6MMZ"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag() { dataLayer.push(arguments); }
   gtag("js", new Date());
   gtag("config", "G-QLB2KP6MMZ");
+  // Its script is asked for once the page has loaded, so it never shares the first paint's line.
+  addEventListener("load", function () {
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-QLB2KP6MMZ";
+    document.head.appendChild(s);
+  });
 </script>
 </body>
 </html>

@@ -3,6 +3,27 @@
    Tokens follow the brief (section 3.3) and are the only source of colour.
    ========================================================================== */
 
+/* Inter and Inter Tight, served from here (SIL OFL 1.1): one variable file per family for Latin,
+   and one for the Turkish letters Latin lacks (Ğ ğ İ Ş ş), cut from Google Fonts' latin-ext so
+   /tr/ doesn't fetch 85 KB for five letters. Their weight axis is cut to what the page uses
+   (fonttools varLib.instancer wght=400:700 for Inter, 600:700 for Inter Tight). Each weight is
+   its own face, as Google declares them, so a weight in between still resolves to the same
+   face it did. */
+@font-face { font-family: "Inter Tight"; font-weight: 600; font-display: swap; src: url(/assets/fonts/inter-tight-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter Tight"; font-weight: 600; font-display: swap; src: url(/assets/fonts/inter-tight-turkish.woff2) format("woff2"); unicode-range: U+011E-011F, U+0130, U+015E-015F; }
+@font-face { font-family: "Inter Tight"; font-weight: 650; font-display: swap; src: url(/assets/fonts/inter-tight-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter Tight"; font-weight: 650; font-display: swap; src: url(/assets/fonts/inter-tight-turkish.woff2) format("woff2"); unicode-range: U+011E-011F, U+0130, U+015E-015F; }
+@font-face { font-family: "Inter Tight"; font-weight: 700; font-display: swap; src: url(/assets/fonts/inter-tight-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter Tight"; font-weight: 700; font-display: swap; src: url(/assets/fonts/inter-tight-turkish.woff2) format("woff2"); unicode-range: U+011E-011F, U+0130, U+015E-015F; }
+@font-face { font-family: "Inter"; font-weight: 400; font-display: swap; src: url(/assets/fonts/inter-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter"; font-weight: 400; font-display: swap; src: url(/assets/fonts/inter-turkish.woff2) format("woff2"); unicode-range: U+011E-011F, U+0130, U+015E-015F; }
+@font-face { font-family: "Inter"; font-weight: 500; font-display: swap; src: url(/assets/fonts/inter-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter"; font-weight: 500; font-display: swap; src: url(/assets/fonts/inter-turkish.woff2) format("woff2"); unicode-range: U+011E-011F, U+0130, U+015E-015F; }
+@font-face { font-family: "Inter"; font-weight: 600; font-display: swap; src: url(/assets/fonts/inter-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter"; font-weight: 600; font-display: swap; src: url(/assets/fonts/inter-turkish.woff2) format("woff2"); unicode-range: U+011E-011F, U+0130, U+015E-015F; }
+@font-face { font-family: "Inter"; font-weight: 700; font-display: swap; src: url(/assets/fonts/inter-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter"; font-weight: 700; font-display: swap; src: url(/assets/fonts/inter-turkish.woff2) format("woff2"); unicode-range: U+011E-011F, U+0130, U+015E-015F; }
+
 :root {
   --bg: #0B0D10;
   --surface: #15171D;
@@ -1033,17 +1054,20 @@ body::after { opacity: .018; }
 html:not(.reveal-ready) .reveal { opacity: 1; transform: none; }
 
 /* 1 · Page-load intro (≤1.2s; photo never hidden, CTAs live from frame 1) */
-/* Keep descenders inside the gradient paint box, including during the reveal. */
-.hero .display .line > span { display: block; padding-bottom: .2em; margin-bottom: -.2em; }
+/* Keep descenders inside the gradient paint box, including during the reveal; and the box as wide
+   as its line, so a line longer than the column is painted to its end. */
+.hero .display .line > span { display: block; width: fit-content; padding-bottom: .2em; margin-bottom: -.2em; }
 @keyframes introFade { from { opacity: 0; transform: translateY(var(--y, 10px)); } }
 @keyframes lineUp { from { transform: translateY(105%); } }
 @keyframes settle { from { scale: 1.035; } }
 @keyframes veil { from { opacity: .45; } to { opacity: 0; } }
 @keyframes powerOn { 0% { opacity: 1; } 14% { opacity: .5; } 24% { opacity: .72; } 100% { opacity: 0; } }
 .intro .site-header { --y: -8px; animation: introFade 480ms var(--ease-out) both; }
-.intro .hero .display .line { overflow: clip; padding-bottom: .24em; margin-bottom: -.24em; }
+/* Clipped only below, for the rise: a line longer than the column runs on over the picture. */
+.intro .hero .display .line { overflow-x: visible; overflow-y: clip; padding-bottom: .24em; margin-bottom: -.24em; }
 .intro .hero .display .line > span { animation: lineUp 560ms cubic-bezier(.2,.9,.25,1) both; }
 .intro .hero .display .line + .line > span { animation-delay: 70ms; }
+.intro .hero .display .line + .line + .line > span { animation-delay: 140ms; }
 .intro .hero .lede { animation: introFade 520ms var(--ease-out) 180ms both; }
 .intro .hero .cta-row { animation: introFade 460ms var(--ease-out) 240ms both; }
 .intro .hero .facts, .intro .hero .platforms { animation: introFade 460ms var(--ease-out) 320ms both; }

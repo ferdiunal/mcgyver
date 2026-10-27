@@ -13,8 +13,10 @@
   <!-- llmstxt.org: the page as Markdown, and the llms.txt that covers it. -->
   <link rel="alternate" type="text/markdown" href="/index.md">
   <link rel="describedby" href="/llms.txt">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
   <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <meta name="theme-color" content="#0B0D10">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="McGyver">
@@ -28,6 +30,7 @@
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="McGyver's wheel open on a laptop next to holiday.jpg, WEBP chosen, beside the words The right tool. Right at your cursor.">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@_ferdiunal">
   <meta name="twitter:image:alt" content="McGyver's wheel open on a laptop next to holiday.jpg, WEBP chosen, beside the words The right tool. Right at your cursor.">
   <script type="application/ld+json">
   {
@@ -94,9 +97,6 @@
       if (!picked && /^tr\b/i.test(first)) location.replace("/tr/" + location.search + location.hash);
     })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;650;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script>document.documentElement.classList.add('js');matchMedia('(prefers-reduced-motion: reduce)').matches||document.documentElement.classList.add('intro')</script>
   <link rel="stylesheet" href="/styles.css">
   <script src="/wheel.js" defer></script>
@@ -169,7 +169,10 @@
 <section class="hero" aria-labelledby="hero-title">
   <div class="hero-media" id="hero-media">
     <div class="hero-frame" id="hero-frame">
-      <img class="hero-photo" src="/assets/hero-laptop.webp" alt="" width="1536" height="864" fetchpriority="high" decoding="async">
+      <picture>
+        <source srcset="/assets/hero-laptop.avif" type="image/avif">
+        <img class="hero-photo" src="/assets/hero-laptop.webp" alt="" width="1536" height="864" fetchpriority="high" decoding="async">
+      </picture>
       <div class="hero-spill" id="hero-spill" aria-hidden="true"></div>
       <div class="hero-screen" id="hero-screen">
         <div id="hero-scene" role="img" aria-label="On a laptop, holiday.jpg is dragged in Finder. Shift is held, the McGyver wheel opens around the cursor, WEBP is chosen, and holiday.webp appears next to the original."></div>
@@ -573,12 +576,18 @@
 <div class="dghost" id="dghost" aria-hidden="true"><i></i><span></span><em>Hold ⇧</em></div>
 <div class="navwheel" id="navwheel" hidden><svg class="wheel is-interactive" id="nav-wheel-svg" viewBox="-210 -210 420 420" role="menu" aria-label="Jump to a section"></svg></div>
 <!-- Google Analytics (GA4), loaded after the page: visits, and the clicks app.js names (download, demo, sponsor). -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-QLB2KP6MMZ"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag() { dataLayer.push(arguments); }
   gtag("js", new Date());
   gtag("config", "G-QLB2KP6MMZ");
+  // Its script is asked for once the page has loaded, so it never shares the first paint's line.
+  addEventListener("load", function () {
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=G-QLB2KP6MMZ";
+    document.head.appendChild(s);
+  });
 </script>
 </body>
 </html>

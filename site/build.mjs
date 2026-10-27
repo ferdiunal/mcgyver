@@ -1,6 +1,7 @@
-// The site as served: src/ copied to dist/, its scripts and stylesheets minified on the way.
-// Wrangler runs this before `dev` and `deploy` (wrangler.jsonc "build").
-import { cp, readdir, rm, writeFile } from "node:fs/promises";
+// The site as served: src/ copied to dist/, its scripts and stylesheets minified on the way, and
+// the stylesheet written into each page. Wrangler runs this before `dev` and `deploy`
+// (wrangler.jsonc "build").
+import { cp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
@@ -26,3 +27,13 @@ await build({
   legalComments: "none",
   logLevel: "info",
 });
+
+// The first paint waits for the page alone, not for a second request: on a phone's slow line
+// (PageSpeed's mobile run) styles.css shared it with the photo, the scripts and the fonts.
+const css = (await readFile(`${root}dist/styles.css`, "utf8")).trim();
+const link = '<link rel="stylesheet" href="/styles.css">';
+for (const page of (await readdir(`${root}dist`, { recursive: true })).filter((path) => path.endsWith(".html"))) {
+  const html = await readFile(`${root}dist/${page}`, "utf8");
+  if (!html.includes(link)) throw new Error(`${page} doesn't link ${link}`);
+  await writeFile(`${root}dist/${page}`, html.replace(link, () => `<style>${css}</style>`));
+}

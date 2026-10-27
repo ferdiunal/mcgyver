@@ -1,0 +1,5 @@
+# Workers Static Assets reads this file and doesn't serve it. A page's other addresses move to it
+# for good (301), so search engines keep one; without these, they're told it's for now (307).
+/tr /tr/ 301
+/index.html / 301
+/tr/index.html /tr/ 301
