@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>McGyver: drag-and-drop file converter for KDE, Mac, Windows</title>
-  <meta name="description" content="Hold Shift while dragging a file and a wheel opens: convert pictures, shrink videos, turn PDFs into Word, zip folders. All on your computer. KDE, Mac, Windows.">
+  <meta name="description" content="Free, open-source file converter for KDE, Mac and Windows. Hold Shift while dragging a file: convert images, shrink videos, turn PDFs into Word. Works offline.">
   <link rel="canonical" href="https://mcgyver.ferdiunal.tr/">
   <!-- The same page in Turkish; English for every other language. -->
   <link rel="alternate" hreflang="en" href="https://mcgyver.ferdiunal.tr/">
@@ -13,47 +13,80 @@
   <!-- llmstxt.org: the page as Markdown, and the llms.txt that covers it. -->
   <link rel="alternate" type="text/markdown" href="/index.md">
   <link rel="describedby" href="/llms.txt">
-  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <!-- The paper tokens (tokens.css --color-paper), in the form the browser's own bar reads. -->
-  <meta name="theme-color" content="#fbf5ed" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#140e0b" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+  <meta name="theme-color" content="#0B0D10">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="McGyver">
   <meta property="og:locale" content="en_US">
   <meta property="og:locale:alternate" content="tr_TR">
   <meta property="og:url" content="https://mcgyver.ferdiunal.tr/">
-  <meta property="og:title" content="McGyver: drag a file, hold Shift, pick a wedge">
-  <meta property="og:description" content="A wheel opens as you drag files: convert pictures, shrink videos, turn PDFs into Word. For KDE Plasma 6, macOS and Windows.">
+  <meta property="og:title" content="McGyver: the right tool, right at your cursor">
+  <meta property="og:description" content="Drag a file, hold Shift, and a wheel opens: convert pictures, shrink videos, turn PDFs into Word. Free and open source for KDE Plasma 6, macOS and Windows.">
   <meta property="og:image" content="https://mcgyver.ferdiunal.tr/assets/og.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="McGyver's wheel open beside a column of files, with the words Drag a file. Hold Shift. Pick a wedge.">
+  <meta property="og:image:alt" content="McGyver's wheel open on a laptop next to holiday.jpg, WEBP chosen, beside the words The right tool. Right at your cursor.">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image:alt" content="McGyver's wheel open on a laptop next to holiday.jpg, WEBP chosen, beside the words The right tool. Right at your cursor.">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "McGyver",
-    "url": "https://mcgyver.ferdiunal.tr/",
-    "image": "https://mcgyver.ferdiunal.tr/assets/og.jpg",
-    "description": "A wheel that opens around the pointer while you drag files: convert, compress, zip or share them by dropping them on a wedge. Conversions run on your computer.",
-    "applicationCategory": "UtilitiesApplication",
-    "operatingSystem": "Linux (KDE Plasma 6, Wayland), macOS 11 or later, Windows 10, Windows 11",
-    "softwareVersion": "1.0.0",
-    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-    "downloadUrl": "https://mcgyver.ferdiunal.tr/#download",
-    "author": {
-      "@type": "Person",
-      "name": "Ferdi ÜNAL",
-      "url": "https://ferdiunal.tr/",
-      "sameAs": ["https://github.com/ferdiunal"]
-    }
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://mcgyver.ferdiunal.tr/#app",
+        "name": "McGyver",
+        "url": "https://mcgyver.ferdiunal.tr/",
+        "image": "https://mcgyver.ferdiunal.tr/assets/og.jpg",
+        "description": "A wheel that opens around the pointer while you drag files: convert, compress, zip or share them by dropping them on a wedge. Conversions run on your computer.",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Linux (KDE Plasma 6, Wayland), macOS 11 or later, Windows 10, Windows 11",
+        "softwareVersion": "1.0.0",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "downloadUrl": "https://mcgyver.ferdiunal.tr/#download",
+        "author": {
+          "@type": "Person",
+          "name": "Ferdi ÜNAL",
+          "url": "https://ferdiunal.tr/",
+          "sameAs": [
+            "https://github.com/ferdiunal"
+          ]
+        },
+        "inLanguage": [
+          "en",
+          "tr"
+        ],
+        "isAccessibleForFree": true,
+        "license": [
+          "https://github.com/ferdiunal/mcgyver/blob/main/LICENSE-MIT",
+          "https://github.com/ferdiunal/mcgyver/blob/main/LICENSE-APACHE"
+        ],
+        "screenshot": "https://mcgyver.ferdiunal.tr/assets/og.jpg",
+        "sameAs": [
+          "https://github.com/ferdiunal/mcgyver"
+        ]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://mcgyver.ferdiunal.tr/#website",
+        "url": "https://mcgyver.ferdiunal.tr/",
+        "name": "McGyver",
+        "inLanguage": [
+          "en",
+          "tr"
+        ]
+      }
+    ]
   }
   </script>
   <script>
     // A browser that asks for Turkish first gets the Turkish page, until a language is picked on
-    // either page (wheel.js keeps that choice).
+    // either page (app.js keeps that choice).
     (function () {
       var picked = null;
       try { picked = localStorage.getItem("mcgyver-lang"); } catch (e) {}
@@ -61,238 +94,491 @@
       if (!picked && /^tr\b/i.test(first)) location.replace("/tr/" + location.search + location.hash);
     })();
   </script>
-  <script>
-    // Dark or light before anything paints: the visitor's choice from the wheel, else the system's.
-    (function () {
-      var saved = null;
-      try { saved = localStorage.getItem("mcgyver-theme"); } catch (e) {}
-      var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
-      if (dark) document.documentElement.dataset.theme = "dark";
-      // A choice made on the wheel paints the browser's bar too, whatever the system says.
-      if (saved) document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute("content", dark ? "#140e0b" : "#fbf5ed"); });
-    })();
-  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Geist:wght@300..700&display=swap">
-  <link rel="stylesheet" href="tokens.css">
-  <link rel="stylesheet" href="styles.css">
-  <script src="wheel.js" defer></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;650;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>document.documentElement.classList.add('js');matchMedia('(prefers-reduced-motion: reduce)').matches||document.documentElement.classList.add('intro')</script>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/wheel.js" defer></script>
+  <script src="/app.js" defer></script>
 </head>
 <body>
-  <a class="skip" href="#main">Skip to content</a>
+<a class="skip" href="#main">Skip to content</a>
 
-  <header class="masthead" data-masthead>
-    <div class="banner" data-banner>
-      <p class="banner__text">McGyver 1.0.0 is out, the first stable release. For KDE Plasma 6, macOS and Windows.</p>
-      <button class="banner__close" type="button" data-banner-close aria-label="Dismiss the notice">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-      </button>
+<!-- Shared icon sprite: one stroke system, 1.75px, round joins -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-convert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.6-4.5L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16"/><path d="M20 21v-5h-5"/></symbol>
+    <symbol id="i-tools" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5 19.5 9 9 19.5H4.5V15z"/><path d="m13 6.5 4.5 4.5"/></symbol>
+    <symbol id="i-actions" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></symbol>
+    <symbol id="i-apps" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></symbol>
+    <symbol id="i-media" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5v14"/><path d="m10 5 9 7-9 7z"/></symbol>
+    <symbol id="i-everyday" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+    <symbol id="i-system" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+    <symbol id="w-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17.5 5-4.5 3.5 3 3-2.5 4.5 4"/></symbol>
+    <symbol id="w-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></symbol>
+    <symbol id="w-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="13" height="13" rx="2.5"/><path d="m16 10.5 5-3v9l-5-3"/></symbol>
+    <symbol id="w-audio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5.5l11-2V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></symbol>
+    <symbol id="w-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="5" rx="1.5"/><path d="M5 9v9.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5V9M10 13h4"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="m6 11 6 6 6-6"/><path d="M5 20h14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a.8.8 0 0 0 1.2.7l12-7.5a.8.8 0 0 0 0-1.4l-12-7.5A.8.8 0 0 0 7 4.5z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></symbol>
+    <symbol id="i-device" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+    <symbol id="i-cloudoff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10a4 4 0 0 0 .7-7.9A6 6 0 0 0 6.2 9.1 4.5 4.5 0 0 0 7 18z"/><path d="m4 4 16 16"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="m8.2 10.8 7.6-3.6M8.2 13.2l7.6 3.6"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20.5s-7.5-4.6-9.3-9.2C1.4 8 3.4 4.5 7 4.5c2 0 3.5 1.1 5 2.9 1.5-1.8 3-2.9 5-2.9 3.6 0 5.6 3.5 4.3 6.8-1.8 4.6-9.3 9.2-9.3 9.2z"/></symbol>
+    <symbol id="i-github" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.4-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.4 1.1 2.9.8.1-.6.4-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.5 9.5 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></symbol>
+    <symbol id="i-apple" viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.8 1.2 1.8 2.6 3.1 2.6 1.3-.1 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.5 1-1.4 1.4-2.8 1.4-2.9 0 0-2.7-1-2.2-4.1zM13.9 5c.7-.8 1.2-2 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z"/></symbol>
+    <symbol id="i-windows" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.3 10.4 4.3v7.2H3zM11.3 4.2 21 2.8v8.7h-9.7zM3 12.4h7.4v7.3L3 18.7zM11.3 12.4H21v8.8l-9.7-1.4z"/></symbol>
+    <symbol id="i-kde" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v16"/><path d="M19 4 11 12l8 8"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><path d="M4.5 8.5 3 7M4.5 15.5 3 17"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5"/><path d="M4 3.5v5h5"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m12 11 3 2.5-3 2.5M8 13.5h7"/></symbol>
+  </defs>
+</svg>
+
+<header class="site-header" id="top">
+  <nav class="wrap nav" aria-label="Main">
+    <a class="brand" href="#top" aria-label="McGyver home"><img src="/assets/icon.svg" alt="" width="34" height="34">McGyver</a>
+    <ul class="nav-links" id="nav-links">
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#modes">Modes</a></li>
+      <li><a href="#try">Try it</a></li>
+      <li><a href="#files">Supported files</a></li>
+      <li><a href="#open-source">Open source</a></li>
+    </ul>
+    <div class="nav-cta">
+      <a class="lang-link" href="/tr/" hreflang="tr" lang="tr" data-lang="tr">Türkçe</a>
+      <a class="btn btn-ghost btn-sm" href="https://github.com/sponsors/ferdiunal" data-track="sponsor_click" rel="noopener"><svg class="heart"><use href="#i-heart"/></svg>Sponsor</a>
+      <a class="btn btn-primary btn-sm" href="#download"><svg><use href="#i-download"/></svg>Download</a>
     </div>
-    <nav class="nav" aria-label="Main">
-      <a class="brand" href="#main">
-        <img class="brand__mark" src="assets/icon.svg" alt="" width="34" height="34">
-        <span class="brand__name">McGyver</span>
-      </a>
-      <ul class="nav__links">
-        <li><a class="nav__link" href="#try">Try it</a></li>
-        <li><a class="nav__link" href="#opens">What it opens</a></li>
-        <li><a class="nav__link" href="#download">Download</a></li>
-      </ul>
-      <div class="nav__actions">
-        <a class="nav__link" href="/tr/" hreflang="tr" lang="tr" data-lang="tr">Türkçe</a>
-        <a class="btn btn--soft btn--sm nav__sponsor" href="https://github.com/sponsors/ferdiunal">
-          <svg class="heart" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14s-5.5-3.4-5.5-7.3A3 3 0 0 1 8 4.6a3 3 0 0 1 5.5 2.1C13.5 10.6 8 14 8 14z"/></svg>
-          Sponsor
-        </a>
-        <a class="btn btn--sm" href="#download">Download</a>
-      </div>
-    </nav>
-  </header>
+    <button class="menu-btn" aria-expanded="false" aria-controls="nav-links" aria-label="Menu"><span></span><span></span></button>
+  </nav>
+</header>
 
-  <main id="main">
-    <section class="workbench" id="try" aria-labelledby="hero-title">
-      <div class="hero">
-        <h1 class="hero__title" id="hero-title"><span>Drag a file.</span> <span>Hold Shift.</span> <span>Pick a&nbsp;wedge.</span></h1>
-        <p class="hero__lede">McGyver opens a wheel around your pointer while you drag files. Drop them on a wedge: pictures change format, videos shrink, PDFs turn into Word files, folders get zipped. Conversions run on your computer, not in a cloud.</p>
-        <div class="hero__actions">
-          <a class="btn btn--lg" href="#download" data-download-cta>Download</a>
-          <a class="link-arrow" href="#stage" data-try>Try the wheel <span aria-hidden="true">→</span></a>
+<main id="main">
+
+<!-- ====================================================== 01 HERO -->
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-media" id="hero-media">
+    <div class="hero-frame" id="hero-frame">
+      <img class="hero-photo" src="/assets/hero-laptop.webp" alt="" width="1536" height="864" fetchpriority="high" decoding="async">
+      <div class="hero-spill" id="hero-spill" aria-hidden="true"></div>
+      <div class="hero-screen" id="hero-screen">
+        <div id="hero-scene" role="img" aria-label="On a laptop, holiday.jpg is dragged in Finder. Shift is held, the McGyver wheel opens around the cursor, WEBP is chosen, and holiday.webp appears next to the original."></div>
+        <div class="hero-glare" aria-hidden="true"></div>
+      </div>
+    </div>
+  </div>
+  <div class="hero-copy">
+    <h1 class="display" id="hero-title"><span class="eyebrow hero-kicker">McGyver · Drag-and-drop file converter</span> <span class="line"><span>The right tool.</span></span> <span class="accent line"><span>Right at your cursor.</span></span></h1>
+    <p class="lede">A free file converter that works offline. Convert, compress, merge and share files without breaking your flow: drag a file, hold Shift, and choose what happens next.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#download" id="hero-dl" data-track="hero_download_click"><svg id="hero-dl-icon" aria-hidden="true"><use href="#i-apple"/></svg><span id="hero-dl-label">Download for Mac</span></a>
+      <a class="btn btn-ghost" href="#try"><svg aria-hidden="true"><use href="#i-play"/></svg>Try the wheel</a>
+    </div>
+    <p class="facts"><span>Free &amp; open source</span><span>File conversions run locally</span></p>
+    <ul class="platforms" aria-label="Platform status">
+      <li><svg aria-hidden="true"><use href="#i-kde"/></svg><span><b>KDE Plasma 6</b> <small class="ok">Available</small></span></li>
+      <li><svg aria-hidden="true"><use href="#i-apple"/></svg><span><b>macOS</b> <small class="ok">Available</small></span></li>
+      <li><svg aria-hidden="true"><use href="#i-windows"/></svg><span><b>Windows</b> <small class="ok">Available</small></span></li>
+    </ul>
+  </div>
+  <div class="hero-foot">
+    <p class="shift-tip" id="shift-tip"><kbd class="key">⇧ Shift</kbd><span>Hold it anywhere on this page to jump between sections.</span></p>
+    <button class="motion-toggle" id="hero-toggle" aria-pressed="false"><svg aria-hidden="true"><use href="#i-pause"/></svg><span>Pause</span></button>
+  </div>
+</section>
+
+<!-- ====================================================== 02 HOW IT WORKS -->
+<section class="section" id="how" aria-labelledby="how-title">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">02 · How it works</p>
+      <h2 class="h2" id="how-title">Three moves. <span class="accent">Then you're done.</span></h2>
+      <p class="lede">No extra windows. No hunting through menus. Just the next action, right where you need it.</p>
+    </div>
+
+    <div class="panel how reveal">
+      <div class="how-stage">
+        <div class="win-bar"><span class="s-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="t">McGyver · Interactive preview</span></div>
+        <div class="how-scene"><div class="scene-fit" id="how-scene" aria-hidden="true"></div></div>
+        <div class="how-foot">
+          <span class="hint"><kbd class="key">⇧ Shift</kbd><span>Hold to reveal actions</span></span>
+          <div class="step-ctrl">
+            <button class="icon-btn" id="how-prev" aria-label="Previous step"><svg><use href="#i-left"/></svg></button>
+            <button class="icon-btn" id="how-play" aria-label="Pause walkthrough"><svg><use href="#i-pause"/></svg></button>
+            <button class="icon-btn" id="how-next" aria-label="Next step"><svg><use href="#i-right"/></svg></button>
+          </div>
         </div>
-        <p class="hero__meta">Version 1.0.0 · KDE Plasma 6, macOS and Windows</p>
       </div>
+      <ol class="steps" id="how-steps">
+        <li class="step"><button data-step="1" aria-current="false"><span class="n">01</span><span class="h3">Drag a file.</span><span class="dsc">Grab any supported file from your desktop or file manager.</span></button></li>
+        <li class="step"><button data-step="2" aria-current="false"><span class="n">02</span><span class="h3">Hold Shift.</span><span class="dsc">The wheel opens around your cursor, with actions for that file.</span></button></li>
+        <li class="step"><button data-step="3" aria-current="false"><span class="n">03</span><span class="h3">Choose. Done.</span><span class="dsc">Drop it on WEBP, PDF or any other wedge. The new file lands next to the original.</span></button></li>
+      </ol>
+      <p class="sr-only" aria-live="polite" id="how-live"></p>
+    </div>
+    <div class="section-foot"><span><strong>Nothing to upload.</strong> Conversions run on your computer.</span><span class="progress"><span id="how-count">01 / 03</span><span class="bar"><i id="how-bar"></i></span></span></div>
+  </div>
+</section>
 
-      <div class="workbench__stage">
-        <div class="stage" id="stage" data-stage tabindex="-1" role="group" aria-label="A desktop to try the wheel on">
-          <ul class="desktop" aria-label="Files on this desktop">
-            <li><button class="file" type="button" data-file="holiday.jpg"><span class="file__icon" aria-hidden="true">JPG</span><span class="file__name">holiday.jpg</span></button></li>
-            <li><button class="file" type="button" data-file="trip.mov"><span class="file__icon" aria-hidden="true">MOV</span><span class="file__name">trip.mov</span></button></li>
-            <li><button class="file" type="button" data-file="song.flac"><span class="file__icon" aria-hidden="true">FLAC</span><span class="file__name">song.flac</span></button></li>
-            <li><button class="file" type="button" data-file="report.pdf"><span class="file__icon" aria-hidden="true">PDF</span><span class="file__name">report.pdf</span></button></li>
-            <li><button class="file" type="button" data-file="notes.docx"><span class="file__icon" aria-hidden="true">DOCX</span><span class="file__name">notes.docx</span></button></li>
-            <li><button class="file" type="button" data-file="photos.zip"><span class="file__icon" aria-hidden="true">ZIP</span><span class="file__name">photos.zip</span></button></li>
-            <li><button class="file" type="button" data-file="film.srt"><span class="file__icon" aria-hidden="true">SRT</span><span class="file__name">film.srt</span></button></li>
-            <li><button class="file file--pair" type="button" data-file="chapters"><span class="file__icon" aria-hidden="true">PDF</span><span class="file__name">2 chapters</span></button></li>
-          </ul>
-          <button class="keycap" type="button" data-shift aria-label="Shift on its own: the wheel without files">
-            <span aria-hidden="true">⇧</span> Shift
-          </button>
-          <svg class="wheel" data-wheel role="group" aria-label="The wheel" aria-hidden="true"></svg>
-          <ol class="cards" data-cards aria-live="polite" aria-label="Work done"></ol>
-          <p class="stage__hint" data-hint aria-live="polite"></p>
-          <p class="visually-hidden" data-status aria-live="polite"></p>
+<!-- ====================================================== 03 SEVEN MODES -->
+<section class="section" id="modes" aria-labelledby="modes-title">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">03 · Seven modes</p>
+      <h2 class="h2" id="modes-title">One wheel. <span class="accent">Seven ways to work.</span></h2>
+      <p class="lede">A file in hand, or nothing at all. McGyver adapts to what you're doing.</p>
+    </div>
+
+    <div class="panel modes reveal">
+      <div class="mode-list">
+        <div class="mode-scroller" role="tablist" aria-label="Wheel modes" aria-orientation="vertical" id="mode-tabs">
+          <p class="label mode-sep" aria-hidden="true">With files</p>
+          <button class="mode" role="tab" id="tab-convert" data-mode="convert" aria-controls="mode-panel"><span class="ico"><svg><use href="#i-convert"/></svg></span><span class="nm">Convert</span><span class="ds">Change file formats</span></button>
+          <button class="mode" role="tab" id="tab-tools" data-mode="tools" aria-controls="mode-panel"><span class="ico"><svg><use href="#i-tools"/></svg></span><span class="nm">Tools</span><span class="ds">Compress, resize, trim</span></button>
+          <button class="mode" role="tab" id="tab-actions" data-mode="actions" aria-controls="mode-panel"><span class="ico"><svg><use href="#i-actions"/></svg></span><span class="nm">Actions</span><span class="ds">Zip, move, share</span></button>
+          <p class="label mode-sep b" aria-hidden="true">Without files <small>Hold Shift</small></p>
+          <button class="mode" role="tab" id="tab-apps" data-mode="apps" aria-controls="mode-panel"><span class="ico"><svg><use href="#i-apps"/></svg></span><span class="nm">Apps</span><span class="ds">Switch instantly</span></button>
+          <button class="mode" role="tab" id="tab-media" data-mode="media" aria-controls="mode-panel"><span class="ico"><svg><use href="#i-media"/></svg></span><span class="nm">Media</span><span class="ds">Control playback</span></button>
+          <button class="mode" role="tab" id="tab-everyday" data-mode="everyday" aria-controls="mode-panel"><span class="ico"><svg><use href="#i-everyday"/></svg></span><span class="nm">Everyday</span><span class="ds">Volume, screen, more</span></button>
+          <button class="mode" role="tab" id="tab-system" data-mode="system" aria-controls="mode-panel"><span class="ico"><svg><use href="#i-system"/></svg></span><span class="nm">System</span><span class="ds">Lock, sleep, dark mode</span></button>
         </div>
-        <p class="stage__note">A demo: nothing leaves this page, and no file is touched. Drag a file onto the space and hold Shift, or just click one.</p>
       </div>
-
-      <div class="tour" id="modes">
-        <h2 class="tour__title">One wheel, seven modes</h2>
-        <p class="tour__lede">The ring around the centre switches between them. Stop on a slice, or move along the ring into it.</p>
-
-        <h3 class="tour__group">With files</h3>
-        <ol class="steps">
-          <li class="step" data-step="holiday.jpg|Convert">
-            <h4 class="step__title">Convert</h4>
-            <p>The wheel opens on Convert. Aim at a format and let go: holiday.webp lands next to holiday.jpg. Pictures, video, audio, PDFs, Office files, archives and subtitles each get their own list.</p>
-            <button class="link-arrow step__try" type="button" data-show="holiday.jpg|Convert">Try Convert <span aria-hidden="true">→</span></button>
-          </li>
-          <li class="step" data-step="trip.mov|Tools">
-            <h4 class="step__title">Tools</h4>
-            <p>Compress, trim, mute or rotate a video, or pull stills out of it. Pictures resize, crop and lose their EXIF; PDFs split and rotate, and two or more merge into one.</p>
-            <button class="link-arrow step__try" type="button" data-show="trip.mov|Tools">Try Tools <span aria-hidden="true">→</span></button>
-          </li>
-          <li class="step" data-step="report.pdf|Actions">
-            <h4 class="step__title">Actions</h4>
-            <p>Zip it, copy or move it somewhere, copy its path, open a terminal there, or send it to your phone, WhatsApp, Telegram, Slack or Teams.</p>
-            <button class="link-arrow step__try" type="button" data-show="report.pdf|Actions">Try Actions <span aria-hidden="true">→</span></button>
-          </li>
-        </ol>
-
-        <h3 class="tour__group">Without files</h3>
-        <p class="tour__aside">Hold Shift on its own for a moment and the wheel is for the computer instead.</p>
-        <ol class="steps">
-          <li class="step" data-step="desk|Apps">
-            <h4 class="step__title">Apps</h4>
-            <p>What is open, the one you used last on top, then the apps you picked in the settings. Alt+Tab, in a circle.</p>
-            <button class="link-arrow step__try" type="button" data-show="desk|Apps">Try Apps <span aria-hidden="true">→</span></button>
-          </li>
-          <li class="step" data-step="desk|Media">
-            <h4 class="step__title">Media</h4>
-            <p>Whatever is playing: play or pause, next, previous, repeat, shuffle, and the player itself.</p>
-            <button class="link-arrow step__try" type="button" data-show="desk|Media">Try Media <span aria-hidden="true">→</span></button>
-          </li>
-          <li class="step" data-step="desk|Everyday">
-            <h4 class="step__title">Everyday</h4>
-            <p>Keyboard layout, the computer’s language, volume, brightness, screenshots, screen recording, and how busy the computer is.</p>
-            <button class="link-arrow step__try" type="button" data-show="desk|Everyday">Try Everyday <span aria-hidden="true">→</span></button>
-          </li>
-          <li class="step" data-step="desk|System">
-            <h4 class="step__title">System</h4>
-            <p>Lock, Dark Mode, Stay Awake, the microphone, the trash and sleep. Try Dark Mode: this page goes dark with it.</p>
-            <button class="link-arrow step__try" type="button" data-show="desk|System">Try System <span aria-hidden="true">→</span></button>
-          </li>
-        </ol>
-      </div>
-    </section>
-
-    <section class="opens" id="opens" aria-labelledby="opens-title">
-      <div class="opens__head">
-        <h2 class="section__title" id="opens-title">What each file gets</h2>
-        <p class="section__lede">The wheel only offers what the files in your hand can become. A file already in a format skips it; a mode with nothing to offer has no slice.</p>
-      </div>
-      <table class="spec">
-        <caption class="visually-hidden">Wedges per kind of file</caption>
-        <thead>
-          <tr><th scope="col">File</th><th scope="col">Convert to</th><th scope="col">Tools</th></tr>
-        </thead>
-        <tbody>
-          <tr><th scope="row">Pictures <span>JPEG, PNG, HEIC, camera RAW, PSD, SVG…</span></th><td>JPG · PNG · WEBP · HEIC · AVIF · TIFF · GIF · BMP · ICO · PDF</td><td>Compress · Resize · Crop · Rotate · Strip EXIF</td></tr>
-          <tr><th scope="row">Video <span>needs FFmpeg</span></th><td>MP4 · MOV · MKV · WEBM · GIF · MP3</td><td>Compress · Trim · Mute · Rotate · Frames</td></tr>
-          <tr><th scope="row">Audio <span>needs FFmpeg</span></th><td>MP3 · M4A · WAV · FLAC · OGG · OPUS · AIFF</td><td>Trim · Normalize · Compress · Merge</td></tr>
-          <tr><th scope="row">PDF</th><td>DOCX · PPTX · XLSX · JPG · PNG · EPUB · TXT · MD</td><td>Compress · Split · Rotate · Merge</td></tr>
-          <tr><th scope="row">Documents <span>DOCX, DOC, ODT, RTF</span></th><td>PDF · DOCX · ODT · RTF · HTML · TXT · MD</td><td>Merge</td></tr>
-          <tr><th scope="row">Spreadsheets <span>XLSX, XLS, ODS, CSV</span></th><td>PDF · XLSX · CSV · TSV · HTML · MD</td><td>Merge</td></tr>
-          <tr><th scope="row">Slides <span>PPTX; PPT and ODP to MD</span></th><td>PDF · PPTX · TXT · MD</td><td>Compress</td></tr>
-          <tr><th scope="row">Archives <span>ZIP, 7Z, RAR, TAR…</span></th><td>Unzip · ZIP · 7Z · TAR.GZ · TAR.XZ · TAR.ZST · TAR.BZ2 · TAR</td><td>—</td></tr>
-          <tr><th scope="row">Compressed files <span>GZ, XZ, ZST, BZ2, LZ4</span></th><td>Unzip · GZ · XZ · ZST · BZ2 · LZ4 · ZIP · 7Z</td><td>—</td></tr>
-          <tr><th scope="row">Subtitles <span>SRT, VTT</span></th><td>VTT · SRT · TXT</td><td>Shift by half a second or a second</td></tr>
-          <tr><th scope="row">Folders</th><td>ZIP · 7Z · TAR.GZ · TAR.XZ · TAR.ZST · TAR.BZ2 · TAR</td><td>Flatten</td></tr>
-        </tbody>
-      </table>
-      <p class="opens__foot">Every file and folder also gets <strong>Actions</strong>: Zip, Copy, Cut, Copy To, Move To, Copy Path, Terminal and Share. Merge appears once two or more files are in hand. HEIC and AVIF appear where the computer’s libheif can write them.</p>
-    </section>
-
-    <section class="get" id="download" aria-labelledby="get-title">
-      <div class="get__head">
-        <h2 class="section__title" id="get-title">Get McGyver</h2>
-        <p class="section__lede">One download, then it waits in the tray or the menu bar until you hold Shift.</p>
-      </div>
-      <div class="platforms" data-platforms>
-        <article class="platform" data-os="linux">
-          <h3 class="platform__name">KDE Plasma 6</h3>
-          <p class="platform__needs">Linux, on Wayland. Where McGyver started.</p>
-          <p class="platform__note">After the first start, press <em>Set up</em> in its settings, so the wheel opens the moment you press Shift during a drag.</p>
-          <a class="btn platform__get" href="/download/deb">Download for Linux</a>
-          <p class="platform__alt">A .deb for Debian and Ubuntu, or <a href="/download/rpm">the .rpm</a> for Fedora.</p>
-        </article>
-        <article class="platform" data-os="mac">
-          <h3 class="platform__name">macOS</h3>
-          <p class="platform__needs">macOS 11 or later. One app for Apple Silicon and Intel.</p>
-          <p class="platform__note">Open the disk image and the app offers to move itself to Applications. It isn’t notarized yet: the first time, Control-click it and choose <em>Open</em> (from macOS 15 on, <em>Open Anyway</em> in Privacy &amp; Security).</p>
-          <a class="btn btn--soft platform__get" href="/download/macos">Download for Mac</a>
-          <p class="platform__alt">For Apple Silicon and Intel, or <a href="/download/macos-arm64">Apple Silicon only</a> (smaller).</p>
-        </article>
-        <article class="platform" data-os="windows">
-          <h3 class="platform__name">Windows</h3>
-          <p class="platform__needs">Windows 10 and 11, on x64 and ARM64 PCs.</p>
-          <p class="platform__note">On a PC without a graphics driver, like a virtual machine, it draws with Mesa’s software OpenGL, which comes in the zip. SmartScreen asks once: <em>More info</em>, then <em>Run anyway</em>.</p>
-          <a class="btn btn--soft platform__get" href="/download/windows-x64">Download for Windows</a>
-          <p class="platform__alt">For x64 PCs, or <a href="/download/windows-arm64">ARM64</a>.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="privacy" id="privacy" aria-labelledby="privacy-title">
-      <h2 class="section__title" id="privacy-title">Privacy</h2>
-      <p class="section__lede">Once a day the app asks mcgyver.ferdiunal.tr whether a new version is out. That request also carries the app version, the operating system and its version, the processor type, the app’s language, and a machine ID that is a one-way hash of the system’s own ID (it can’t be turned back into it). The server also sees the IP address and the country it comes from, and stores them with that ID.</p>
-      <p class="section__lede">No files, file names, or what you do with the wheel ever leave the computer. To keep the app from asking at all, start it with <code>MCGYVER_OFFLINE=1</code> in its environment.</p>
-    </section>
-
-    <section class="support" id="support" aria-labelledby="support-title">
-      <h2 class="support__title" id="support-title">Free to use, kept going by sponsors.</h2>
-      <p class="support__text">McGyver is built by Ferdi ÜNAL. If it saves you a few clicks a day, sponsoring it keeps the work going.</p>
-      <div class="support__actions">
-        <a class="btn btn--lg support__sponsor" href="https://github.com/sponsors/ferdiunal">
-          <svg class="heart" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14s-5.5-3.4-5.5-7.3A3 3 0 0 1 8 4.6a3 3 0 0 1 5.5 2.1C13.5 10.6 8 14 8 14z"/></svg>
-          Sponsor on GitHub
-        </a>
-        <a class="link-arrow" href="https://github.com/ferdiunal">Ferdi on GitHub <span aria-hidden="true">↗</span></a>
-        <a class="link-arrow" href="https://ferdiunal.tr/?utm_source=mcgyver-site">ferdiunal.tr <span aria-hidden="true">↗</span></a>
-      </div>
-    </section>
-  </main>
-
-  <footer class="foot">
-    <div class="marquee" data-marquee>
-      <button class="marquee__toggle" type="button" data-marquee-toggle aria-pressed="false" aria-label="Pause the moving list">
-        <svg class="marquee__pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9M11 3.5v9"/></svg>
-        <svg class="marquee__play" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.2v9.6L12.6 8z"/></svg>
-      </button>
-      <div class="marquee__track" aria-hidden="true">
-        <span>JPG · PNG · WEBP · HEIC · AVIF · PDF · DOCX · XLSX · PPTX · EPUB · MD · MP4 · MKV · WEBM · MP3 · FLAC · OPUS · ZIP · 7Z · TAR.GZ · SRT · VTT ·&nbsp;</span>
-        <span>JPG · PNG · WEBP · HEIC · AVIF · PDF · DOCX · XLSX · PPTX · EPUB · MD · MP4 · MKV · WEBM · MP3 · FLAC · OPUS · ZIP · 7Z · TAR.GZ · SRT · VTT ·&nbsp;</span>
+      <div class="mode-view" role="tabpanel" id="mode-panel" tabindex="0">
+        <div class="mode-view-head"><span><i class="dot"></i>McGyver · Mode preview</span><span id="mode-ctx"><i class="dot g"></i>holiday.jpg in hand</span></div>
+        <div class="mode-wheel"><svg class="wheel" id="mode-wheel" viewBox="-210 -210 420 420" aria-hidden="true"></svg></div>
+        <div class="mode-desc"><p id="mode-text"><b>Convert</b> opens first. Aim at a format and let go: holiday.webp lands next to holiday.jpg. A format the file already has is skipped.</p><span class="ctx" id="mode-count"></span></div>
       </div>
     </div>
-    <div class="foot__meta">
-      <p class="foot__line"><img src="assets/icon.svg" alt="" width="22" height="22"> McGyver 1.0.0 · MIT or Apache-2.0 · © 2026 The McGyver authors</p>
-      <ul class="foot__links">
-        <li><a href="https://github.com/ferdiunal">GitHub</a></li>
-        <li><a href="https://github.com/sponsors/ferdiunal">Sponsor</a></li>
-        <li><a href="#privacy">Privacy</a></li>
-        <li><a href="/tr/" hreflang="tr" lang="tr" data-lang="tr">Türkçe</a></li>
-        <li><a href="mailto:mail@ferdiunal.tr">mail@ferdiunal.tr</a></li>
-      </ul>
+    <div class="section-foot"><span><strong>One gesture.</strong> The wheel changes to match your next move.</span><span>Wedges shown are examples. The real wheel only offers what fits.</span></div>
+  </div>
+</section>
+
+<!-- ====================================================== 04 EVERYDAY WORKFLOWS -->
+<section class="section" id="workflows" aria-labelledby="flows-title">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">04 · Everyday workflows</p>
+      <h2 class="h2" id="flows-title">Those little tasks. <span class="accent">Already handled.</span></h2>
+      <p class="lede">Images, videos, PDFs, sharing. The small jobs that usually interrupt your day, now part of your flow.</p>
     </div>
-  </footer>
+
+    <div class="flows">
+      <article class="panel flow reveal">
+        <p class="label">01 / Images</p>
+        <h3 class="h3">New format. Same photo.</h3>
+        <p>JPG to WEBP, PNG, TIFF and more, without opening another app. The original stays as it is.</p>
+        <div class="flow-viz" aria-label="holiday.webp is saved next to holiday.jpg">
+          <div class="fcard img src"><div class="thumb" data-thumb></div><span class="fn">holiday.jpg</span></div>
+          <span class="arrow" aria-hidden="true"></span>
+          <div class="fcard img out"><div class="thumb" data-thumb></div><span class="fn">holiday.webp</span><span class="badge">WEBP</span></div>
+        </div>
+      </article>
+      <article class="panel flow reveal">
+        <p class="label">02 / Video</p>
+        <h3 class="h3">Make a video lighter.</h3>
+        <p>Compress it and keep moving. Needs FFmpeg.</p>
+        <div class="flow-viz" aria-label="trip.mov is compressed into trip (compressed).mov">
+          <div class="fcard vid src"><span class="play"></span><span class="fn">trip.mov</span></div>
+          <span class="arrow" aria-hidden="true"></span>
+          <div class="fcard doc out"><svg><use href="#i-media"/></svg><span class="fn">trip (compressed).mov</span><span class="badge">COMPRESSED</span></div>
+        </div>
+      </article>
+      <article class="panel flow reveal">
+        <p class="label">03 / Documents</p>
+        <h3 class="h3">Many PDFs. One file.</h3>
+        <p>Hold two or more PDFs and Merge appears in Tools. Chapters, reports, scans.</p>
+        <div class="flow-viz" aria-label="Three PDFs merge into chapter-1 (merged).pdf">
+          <div class="pages" aria-hidden="true"><i></i><i></i><i></i></div>
+          <span class="arrow" aria-hidden="true"></span>
+          <div class="fcard doc out"><svg><use href="#i-doc"/></svg><span class="fn">chapter-1 (merged).pdf</span></div>
+        </div>
+      </article>
+      <article class="panel flow reveal">
+        <p class="label">04 / Actions</p>
+        <h3 class="h3">Send it on its way.</h3>
+        <p>Copy its path, move it, or share it from where you are.</p>
+        <div class="flow-viz" aria-label="report.pdf with Copy Path, Move To and Share actions">
+          <div class="fcard file src"><svg><use href="#i-doc"/></svg><span class="fn">report.pdf</span></div>
+          <span class="arrow" aria-hidden="true"></span>
+          <div class="chips"><span class="chip on"><svg><use href="#i-link"/></svg>Copy Path</span><span class="chip"><svg><use href="#i-move"/></svg>Move To</span><span class="chip"><svg><use href="#i-share"/></svg>Share</span></div>
+        </div>
+      </article>
+    </div>
+    <div class="section-foot"><span><strong>One less interruption.</strong> One more thing off your list.</span></div>
+  </div>
+</section>
+
+<!-- ====================================================== 05 PRIVATE BY DESIGN -->
+<section class="section" id="private" aria-labelledby="private-title">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">05 · Private by design</p>
+      <h2 class="h2" id="private-title">Your files stay. <span class="accent">Right where they are.</span></h2>
+      <p class="lede">Converting a file doesn't mean uploading it. McGyver does the work on your own computer.</p>
+    </div>
+    <div class="private">
+      <div class="panel local reveal">
+        <div class="local-head"><span>Local conversion</span><span>holiday.jpg → holiday.webp</span></div>
+        <div class="device" role="img" aria-label="Inside your computer: holiday.jpg goes into McGyver and holiday.webp comes out. Nothing crosses the boundary.">
+          <span class="tagline"><svg><use href="#i-device"/></svg>Your computer</span>
+          <div class="fcard img"><div class="thumb" data-thumb></div><span class="fn">holiday.jpg</span></div>
+          <span class="pulse" aria-hidden="true"></span>
+          <div class="engine"><div><img src="/assets/icon.svg" alt="" width="28" height="28"><span>McGyver<br>on this device</span></div></div>
+          <span class="pulse b" aria-hidden="true"></span>
+          <div class="fcard img"><div class="thumb" data-thumb></div><span class="fn">holiday.webp</span></div>
+        </div>
+        <p class="outside"><svg><use href="#i-info"/></svg><span>Sharing is different. When you choose Share, WhatsApp or Slack, the file goes where you send it, through that service.</span></p>
+      </div>
+      <div class="panel trust reveal">
+        <ul>
+          <li><svg><use href="#i-device"/></svg><b>Processed on your device</b><p>Supported conversions run on your computer, using tools installed there.</p></li>
+          <li><svg><use href="#i-cloudoff"/></svg><b>No conversion uploads</b><p>There's no cloud step to change a format. No account, no queue.</p></li>
+          <li><svg><use href="#i-code"/></svg><b>Open source</b><p>Read exactly what it does. <a href="https://github.com/ferdiunal/mcgyver" data-track="github_click" rel="noopener">Source on GitHub</a>.</p></li>
+          <li id="privacy"><svg><use href="#i-info"/></svg><b>One update check a day</b><p>Once a day the app asks mcgyver.ferdiunal.tr whether a new version is out. The request carries the app version, the operating system and its version, the processor type, the app’s language, and a machine ID that is a one-way hash of the system’s own ID. The server also sees the IP address and its country, and keeps them with that ID. No files, file names or what you do with the wheel ever leave the computer. Start the app with <code>MCGYVER_OFFLINE=1</code> and it never asks.</p></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================== 06 TRY McGYVER -->
+<section class="section" id="try" aria-labelledby="try-title">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">06 · Interactive demo</p>
+      <h2 class="h2" id="try-title">Try the wheel. <span class="accent">Right here.</span></h2>
+      <p class="lede">Pick a sample file, drag it in and hold Shift. Or tap a file and open the wheel. It's a simulation: your own files are never touched.</p>
+    </div>
+
+    <div class="panel demo" id="demo">
+      <div class="demo-files" role="group" aria-label="Sample files">
+        <p class="label">Sample files</p>
+        <div id="demo-files" style="display:contents"></div>
+        <p class="note">These are pretend files. Nothing is uploaded, read or converted.</p>
+      </div>
+      <div class="demo-main">
+        <div class="demo-top">
+          <span class="demo-badge"><i></i>Demo mode · simulated results</span>
+          <div class="seg" role="group" aria-label="Wheel mode" id="demo-modes">
+            <button data-mode="convert" aria-pressed="true">Convert</button>
+            <button data-mode="tools" aria-pressed="false">Tools</button>
+            <button data-mode="actions" aria-pressed="false">Actions</button>
+          </div>
+        </div>
+        <div class="demo-bar">
+          <p class="status" id="demo-status" aria-live="polite">Pick a sample file to begin.</p>
+          <div class="demo-actions">
+            <button class="btn btn-ghost btn-sm" id="open-wheel" aria-expanded="false" aria-controls="demo-wheel">Open wheel</button>
+            <button class="btn btn-ghost btn-sm" id="demo-reset"><svg><use href="#i-reset"/></svg>Reset</button>
+          </div>
+        </div>
+        <div class="space" id="space" aria-describedby="demo-status">
+          <div class="space-empty" id="space-empty"><div><b>Drop a sample file here</b>Then hold <kbd class="key">⇧ Shift</kbd> to open the wheel.</div></div>
+          <div class="held" id="held" hidden><div class="tile" id="held-tile"></div><span id="held-name"></span></div>
+          <div class="dwheel" id="dwheel" hidden><svg class="wheel is-interactive" id="demo-wheel" viewBox="-210 -210 420 420" role="menu" aria-label="McGyver wheel"></svg></div>
+        </div>
+
+      </div>
+    </div>
+    <div class="section-foot"><span><strong>In this demo:</strong> pick a file, press Open wheel, then arrow keys or 1–9, Enter to choose, Esc to close. On touch, long-press the space.</span></div>
+  </div>
+</section>
+
+<!-- ====================================================== 07 SUPPORTED FILES -->
+<section class="section" id="files" aria-labelledby="files-title">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">07 · Supported files</p>
+      <h2 class="h2" id="files-title">Supported file formats. <span class="accent">Is yours on the list?</span></h2>
+      <p class="lede">The wheel only offers what the files in your hand can become. Search for an extension to see where it fits.</p>
+    </div>
+    <div class="files-tools">
+      <label class="search"><span class="sr-only">Search by file extension</span><svg aria-hidden="true"><use href="#i-search"/></svg><input id="file-search" type="search" placeholder="Search an extension, like heic or mkv" autocomplete="off" spellcheck="false"></label>
+      <div class="filters" id="file-filters" role="group" aria-label="Filter by category"></div>
+    </div>
+    <div class="panel ftable" id="file-table" role="table" aria-label="Supported files">
+      <div class="frow head" role="row"><span class="label" role="columnheader">File</span><span class="label" role="columnheader">Convert to</span><span class="label" role="columnheader">Tools</span></div>
+      <div id="file-rows" role="rowgroup"><div class="frow" role="row">
+  <div class="k" role="cell"><b>Pictures</b><small>JPEG, PNG, camera RAW, PSD, SVG, HEIC with libheif…</small></div>
+  <div role="cell"><span class="sub-l" aria-hidden="true">Convert to</span><div class="pills"><span class="pill">JPG</span><span class="pill">PNG</span><span class="pill">WEBP</span><span class="pill cond" title="Where libheif can write it">HEIC<span class="sr-only"> (where the system supports it)</span></span><span class="pill cond" title="Where libheif can write it">AVIF<span class="sr-only"> (where the system supports it)</span></span><span class="pill">TIFF</span><span class="pill">GIF</span><span class="pill">BMP</span><span class="pill">ICO</span><span class="pill">PDF</span></div></div>
+  <div role="cell" class="tool-list"><span class="sub-l" aria-hidden="true">Tools</span>Compress · Resize · Crop · Rotate · Strip EXIF</div>
+  </div><div class="frow" role="row">
+  <div class="k" role="cell"><b>Video</b><small>MP4, MOV, MKV, WEBM…</small><span class="dep">Needs FFmpeg</span></div>
+  <div role="cell"><span class="sub-l" aria-hidden="true">Convert to</span><div class="pills"><span class="pill">MP4</span><span class="pill">MOV</span><span class="pill">MKV</span><span class="pill">WEBM</span><span class="pill">GIF</span><span class="pill">MP3</span></div></div>
+  <div role="cell" class="tool-list"><span class="sub-l" aria-hidden="true">Tools</span>Compress · Trim · Mute · Rotate · Frames</div>
+  </div><div class="frow" role="row">
+  <div class="k" role="cell"><b>Audio</b><small>MP3, M4A, WAV, FLAC, OGG…</small><span class="dep">Needs FFmpeg</span></div>
+  <div role="cell"><span class="sub-l" aria-hidden="true">Convert to</span><div class="pills"><span class="pill">MP3</span><span class="pill">M4A</span><span class="pill">WAV</span><span class="pill">FLAC</span><span class="pill">OGG</span><span class="pill">OPUS</span><span class="pill">AIFF</span></div></div>
+  <div role="cell" class="tool-list"><span class="sub-l" aria-hidden="true">Tools</span>Trim · Normalize · Compress · Merge</div>
+  </div><div class="frow" role="row">
+  <div class="k" role="cell"><b>PDF</b><small>PDF</small></div>
+  <div role="cell"><span class="sub-l" aria-hidden="true">Convert to</span><div class="pills"><span class="pill">DOCX</span><span class="pill">PPTX</span><span class="pill">XLSX</span><span class="pill">JPG</span><span class="pill">PNG</span><span class="pill">EPUB</span><span class="pill">TXT</span><span class="pill">MD</span></div></div>
+  <div role="cell" class="tool-list"><span class="sub-l" aria-hidden="true">Tools</span>Compress · Split · Rotate · Merge</div>
+  </div><div class="frow" role="row">
+  <div class="k" role="cell"><b>Documents</b><small>DOCX, DOC, ODT, RTF</small></div>
+  <div role="cell"><span class="sub-l" aria-hidden="true">Convert to</span><div class="pills"><span class="pill">PDF</span><span class="pill">DOCX</span><span class="pill">ODT</span><span class="pill">RTF</span><span class="pill">HTML</span><span class="pill">TXT</span><span class="pill">MD</span></div></div>
+  <div role="cell" class="tool-list"><span class="sub-l" aria-hidden="true">Tools</span>Merge</div>
+  </div><div class="frow" role="row">
+  <div class="k" role="cell"><b>Spreadsheets</b><small>XLSX, XLS, ODS, CSV</small></div>
+  <div role="cell"><span class="sub-l" aria-hidden="true">Convert to</span><div class="pills"><span class="pill">PDF</span><span class="pill">XLSX</span><span class="pill">CSV</span><span class="pill">TSV</span><span class="pill">HTML</span><span class="pill">MD</span></div></div>
+  <div role="cell" class="tool-list"><span class="sub-l" aria-hidden="true">Tools</span>Merge</div>
+  </div><div class="frow" role="row">
+  <div class="k" role="cell"><b>Slides</b><small>PPTX; PPT and ODP to MD</small></div>
+  <div role="cell"><span class="sub-l" aria-hidden="true">Convert to</span><div class="pills"><span class="pill">PDF</span><span class="pill">PPTX</span><span class="pill">TXT</span><span class="pill">MD</span></div></div>
+  <div role="cell" class="tool-list"><span class="sub-l" aria-hidden="true">Tools</span>Compress</div>
+  </div><div class="frow" role="row">
+  <div class="k" role="cell"><b>Archives</b><small>ZIP, 7Z, RAR, TAR…</small></div>
+  <div role="cell"><span class="sub-l" aria-hidden="true">Convert to</span><div class="pills"><span class="pill">Unzip</span><span class="pill">ZIP</span><span class="pill">7Z</span><span class="pill">TAR.GZ</span><span class="pill">TAR.XZ</span><span class="pill">TAR.ZST</span><span class="pill">TAR.BZ2</span><span class="pill">TAR</span></div></div>
+  <div role="cell" class="tool-list"><span class="sub-l" aria-hidden="true">Tools</span>—</div>
+  </div><div class="frow" role="row">
+  <div class="k" role="cell"><b>Compressed files</b><small>GZ, XZ, ZST, BZ2, LZ4</small></div>
+  <div role="cell"><span class="sub-l" aria-hidden="true">Convert to</span><div class="pills"><span class="pill">Unzip</span><span class="pill">GZ</span><span class="pill">XZ</span><span class="pill">ZST</span><span class="pill">BZ2</span><span class="pill">LZ4</span><span class="pill">ZIP</span><span class="pill">7Z</span></div></div>
+  <div role="cell" class="tool-list"><span class="sub-l" aria-hidden="true">Tools</span>—</div>
+  </div><div class="frow" role="row">
+  <div class="k" role="cell"><b>Subtitles</b><small>SRT, VTT</small></div>
+  <div role="cell"><span class="sub-l" aria-hidden="true">Convert to</span><div class="pills"><span class="pill">VTT</span><span class="pill">SRT</span><span class="pill">TXT</span></div></div>
+  <div role="cell" class="tool-list"><span class="sub-l" aria-hidden="true">Tools</span>Shift by half a second or a second</div>
+  </div><div class="frow" role="row">
+  <div class="k" role="cell"><b>Folders</b><small>Any folder</small></div>
+  <div role="cell"><span class="sub-l" aria-hidden="true">Convert to</span><div class="pills"><span class="pill">ZIP</span><span class="pill">7Z</span><span class="pill">TAR.GZ</span><span class="pill">TAR.XZ</span><span class="pill">TAR.ZST</span><span class="pill">TAR.BZ2</span><span class="pill">TAR</span></div></div>
+  <div role="cell" class="tool-list"><span class="sub-l" aria-hidden="true">Tools</span>Flatten</div>
+  </div></div>
+    </div>
+    <p class="files-note" id="files-count" aria-live="polite"></p>
+    <p class="files-note">Every file and folder also gets <b>Actions</b>: Zip, Copy, Copy To, Move To, Copy Path and Terminal, plus Cut (not on macOS) and Share (with KDE Connect or a messaging app installed). <b>Merge</b> appears once two or more PDFs, documents, spreadsheets or audio files of one kind are in hand. Dashed formats depend on your system: HEIC and AVIF appear where libheif can write them. Video and audio need FFmpeg.</p>
+  </div>
+</section>
+
+<!-- ====================================================== 08 DOWNLOAD -->
+<section class="section" id="download" aria-labelledby="dl-title">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">08 · Download</p>
+      <h2 class="h2" id="dl-title">Download McGyver. <span class="accent">For KDE, Mac or Windows.</span></h2>
+      <p class="lede">One download. It waits in the tray or menu bar until you hold Shift.</p>
+    </div>
+    <div class="dl">
+      <article class="panel os reveal" data-os="linux">
+        <svg class="os-icon" aria-hidden="true"><use href="#i-kde"/></svg>
+        <h3 class="h3">KDE Plasma 6</h3>
+        <span class="status-pill ok">Available</span>
+        <dl><dt>System</dt><dd>KDE Plasma 6 on Wayland, x86-64</dd><dt>Version</dt><dd>1.0.0</dd></dl>
+        <p class="note">Where McGyver started. After the first start, press <b>Set up</b> in its settings so the wheel opens the moment you press Shift during a drag.</p>
+        <a class="btn btn-primary" href="/download/deb" data-track="platform_download_click" data-platform="linux"><svg><use href="#i-download"/></svg>Download for Linux</a>
+        <p class="alt">A .deb for Debian and Ubuntu, or <a href="/download/rpm">the .rpm</a> for Fedora.</p>
+      </article>
+      <article class="panel os reveal" data-os="mac">
+        <svg class="os-icon" aria-hidden="true"><use href="#i-apple"/></svg>
+        <h3 class="h3">macOS</h3>
+        <span class="status-pill ok">Available</span>
+        <dl><dt>System</dt><dd>macOS 11 or later</dd><dt>Chips</dt><dd>Apple Silicon and Intel, one app</dd><dt>Version</dt><dd>1.0.0</dd></dl>
+        <p class="note">Open the disk image and the app offers to move itself to Applications. Not notarized yet: the first time, Control-click it and choose <b>Open</b> (from macOS 15 on, <b>Open Anyway</b> in Privacy &amp; Security).</p>
+        <a class="btn btn-primary" href="/download/macos" data-track="platform_download_click" data-platform="mac"><svg><use href="#i-download"/></svg>Download for Mac</a>
+        <p class="alt">For Apple Silicon and Intel, or <a href="/download/macos-arm64">Apple Silicon only</a> (smaller).</p>
+      </article>
+      <article class="panel os reveal" data-os="windows">
+        <svg class="os-icon" aria-hidden="true"><use href="#i-windows"/></svg>
+        <h3 class="h3">Windows</h3>
+        <span class="status-pill ok">Available</span>
+        <dl><dt>System</dt><dd>Windows 10 and 11</dd><dt>Chips</dt><dd>x64 and ARM64</dd><dt>Version</dt><dd>1.0.0</dd></dl>
+        <p class="note">SmartScreen asks once: <b>More info</b>, then <b>Run anyway</b>.</p>
+        <a class="btn btn-primary" href="/download/windows-x64" data-track="platform_download_click" data-platform="windows"><svg><use href="#i-download"/></svg>Download for Windows</a>
+        <p class="alt">For x64 PCs, or <a href="/download/windows-arm64">ARM64</a>.</p>
+      </article>
+    </div>
+    <div class="dl-foot"><span>All builds come from the <a href="https://github.com/ferdiunal/mcgyver/releases" rel="noopener">GitHub releases page</a>.</span><span>Video and audio tools need <a href="https://ffmpeg.org/download.html" rel="noopener">FFmpeg</a>.</span></div>
+  </div>
+</section>
+
+<!-- ====================================================== 09 OPEN SOURCE -->
+<section class="section" id="open-source" aria-labelledby="os-title">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">09 · Open source</p>
+      <h2 class="h2" id="os-title">Made by one person. <span class="accent">Open to everyone.</span></h2>
+    </div>
+    <div class="panel story reveal">
+      <div class="story-copy">
+        <p><b>McGyver started on KDE Plasma in Gaziantep</b>, built by Ferdi ÜNAL to stop opening a whole app just to change one file.</p>
+        <p>It's free and the source is public. Read it, report a bug, add a format, or port a feature. If it saves you a few clicks a day, sponsoring keeps the work going.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://github.com/sponsors/ferdiunal" data-track="sponsor_click" rel="noopener"><svg><use href="#i-heart"/></svg>Sponsor on GitHub</a>
+          <a class="btn btn-ghost" href="https://github.com/ferdiunal/mcgyver" data-track="github_click" rel="noopener"><svg><use href="#i-github"/></svg>Source on GitHub</a>
+        </div>
+      </div>
+      <div class="story-side">
+        <a class="link-row" href="https://github.com/ferdiunal/mcgyver" data-track="github_click" rel="noopener"><svg class="lead"><use href="#i-github"/></svg><span><b>Repository</b><small>Code, issues and releases</small></span><svg class="go"><use href="#i-out"/></svg></a>
+        <a class="link-row" href="https://github.com/ferdiunal/mcgyver/issues" data-track="github_click" rel="noopener"><svg class="lead"><use href="#i-code"/></svg><span><b>Contribute</b><small>Report a bug or pick up an issue</small></span><svg class="go"><use href="#i-out"/></svg></a>
+        <a class="link-row" href="https://github.com/ferdiunal/mcgyver#license" rel="noopener"><svg class="lead"><use href="#i-doc"/></svg><span><b>License</b><small>MIT or Apache-2.0</small></span><svg class="go"><use href="#i-out"/></svg></a>
+        <a class="link-row" href="https://ferdiunal.tr/?utm_source=mcgyver-site" rel="noopener"><svg class="lead"><use href="#i-out"/></svg><span><b>ferdiunal.tr</b><small>About the maker</small></span><svg class="go"><use href="#i-out"/></svg></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================== 10 FAQ -->
+<section class="section" id="faq" aria-labelledby="faq-title">
+  <div class="wrap faq-grid">
+    <div class="reveal"><p class="eyebrow">10 · FAQ</p><h2 class="h2" id="faq-title">Questions. <span class="accent">Answered.</span></h2></div>
+    <div class="faq reveal">
+      <details><summary>Is McGyver free?</summary><div class="a"><p>Yes. There's no paid version. You can sponsor it on GitHub if you'd like to support the work.</p></div></details>
+      <details><summary>Is it open source?</summary><div class="a"><p>Yes. The source is on <a href="https://github.com/ferdiunal/mcgyver" rel="noopener">GitHub</a>.</p></div></details>
+      <details><summary>Do my files get uploaded?</summary><div class="a"><p>Not for conversion. Supported conversions run on your computer. If you choose to share a file, for example to WhatsApp or Slack, it goes to that service because you sent it there.</p></div></details>
+      <details><summary>Which operating systems are supported?</summary><div class="a"><p>KDE Plasma 6 on Linux (Wayland), macOS 11 or later, and Windows 10 and 11.</p></div></details>
+      <details><summary>Does it need an internet connection?</summary><div class="a"><p>Not to convert files. Sharing to online services needs a connection, like it would anywhere else.</p></div></details>
+      <details><summary>Does McGyver send anything?</summary><div class="a"><p>Once a day it asks mcgyver.ferdiunal.tr whether a new version is out, and tells it the app version, the system, the processor type, the language and a one-way hash of the machine’s ID. The server sees the IP address too. <a href="#privacy">More on this</a>.</p></div></details>
+      <details><summary>Why does macOS show a security warning?</summary><div class="a"><p>The Mac build isn't notarized by Apple yet. The first time, Control-click McGyver in Applications and choose Open (from macOS 15 on, open it once, then choose Open Anyway in Privacy &amp; Security).</p></div></details>
+      <details><summary>Which file types can I convert?</summary><div class="a"><p>Pictures, video, audio, PDFs, documents, spreadsheets, slides, archives, subtitles and folders. <a href="#files">See the full list</a>.</p></div></details>
+      <details><summary>Does McGyver need FFmpeg?</summary><div class="a"><p>Only for video and audio. Everything else works without it.</p></div></details>
+      <details><summary>How can I contribute?</summary><div class="a"><p>Open an issue, send a pull request, or test a build on your machine and report back. Start at the <a href="https://github.com/ferdiunal/mcgyver" rel="noopener">repository</a>.</p></div></details>
+    </div>
+  </div>
+</section>
+
+<section class="signoff" aria-labelledby="signoff-title">
+  <div class="wrap">
+    <h2 id="signoff-title"><img src="/assets/icon.svg" alt="" width="112" height="112" loading="lazy"><span>McGyver</span></h2>
+    <p>The right tool. Right at your cursor.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#download"><svg aria-hidden="true"><use href="#i-download"/></svg>Get McGyver</a>
+      <a class="btn btn-ghost" href="https://github.com/ferdiunal/mcgyver" data-track="github_click" rel="noopener"><svg aria-hidden="true"><use href="#i-github"/></svg>Star on GitHub</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div><a class="brand" href="#top"><img src="/assets/icon.svg" alt="" width="34" height="34">McGyver</a><p>The right tool. Right at your cursor. Free and open source.</p><a class="btn btn-ghost btn-sm foot-repo" href="https://github.com/ferdiunal/mcgyver" data-track="github_click" rel="noopener"><svg aria-hidden="true"><use href="#i-github"/></svg>ferdiunal/mcgyver on GitHub</a></div>
+      <nav aria-label="Product"><h3>Product</h3><ul><li><a href="#how">How it works</a></li><li><a href="#try">Try the wheel</a></li><li><a href="#files">Supported files</a></li><li><a href="#download">Download</a></li></ul></nav>
+      <nav aria-label="Project"><h3>Project</h3><ul><li><a href="https://github.com/ferdiunal/mcgyver" data-track="github_click" rel="noopener">GitHub</a></li><li><a href="https://github.com/ferdiunal/mcgyver#readme" rel="noopener">Documentation</a></li><li><a href="https://github.com/ferdiunal/mcgyver/releases" rel="noopener">Releases</a></li><li><a href="https://github.com/ferdiunal/mcgyver#license" rel="noopener">License</a></li></ul></nav>
+      <nav aria-label="Support"><h3>Support</h3><ul><li><a href="https://github.com/sponsors/ferdiunal" data-track="sponsor_click" rel="noopener">Sponsor</a></li><li><a href="https://github.com/ferdiunal/mcgyver/issues" rel="noopener">Report an issue</a></li><li><a href="#faq">FAQ</a></li><li><a href="#privacy">Privacy</a></li><li><a href="/tr/" hreflang="tr" lang="tr" data-lang="tr">Türkçe</a></li></ul></nav>
+    </div>
+    <div class="foot-base"><span>Version 1.0.0 · KDE Plasma 6, macOS and Windows</span><span>Made by Ferdi ÜNAL</span></div>
+  </div>
+</footer>
+
+<div class="dghost" id="dghost" aria-hidden="true"><i></i><span></span><em>Hold ⇧</em></div>
+<div class="navwheel" id="navwheel" hidden><svg class="wheel is-interactive" id="nav-wheel-svg" viewBox="-210 -210 420 420" role="menu" aria-label="Jump to a section"></svg></div>
+<!-- Google Analytics (GA4), loaded after the page: visits, and the clicks app.js names (download, demo, sponsor). -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-QLB2KP6MMZ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag() { dataLayer.push(arguments); }
+  gtag("js", new Date());
+  gtag("config", "G-QLB2KP6MMZ");
+</script>
 </body>
 </html>

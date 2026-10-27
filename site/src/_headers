@@ -13,3 +13,15 @@
 /tr/
   Link: </tr/index.md>; rel="alternate"; type="text/markdown"
   Link: </llms.txt>; rel="describedby"
+
+# The Markdown twins point at their pages, so a search engine keeps the page; and say their charset.
+/index.md
+  Link: <https://mcgyver.ferdiunal.tr/>; rel="canonical"
+  Content-Type: text/markdown; charset=utf-8
+
+/tr/index.md
+  Link: <https://mcgyver.ferdiunal.tr/tr/>; rel="canonical"
+  Content-Type: text/markdown; charset=utf-8
+
+/llms.txt
+  Content-Type: text/plain; charset=utf-8

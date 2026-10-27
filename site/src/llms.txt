@@ -4,16 +4,16 @@
 
 Things to know before reading the pages below:
 
-- Version 1.0.0, the first stable release. Free to download; licensed MIT or Apache-2.0. Made by Ferdi ÜNAL.
-- The wheel has seven modes on a ring around its centre. With files in hand: Convert, Tools and Actions. Shift held on its own, without files: Apps, Media, Everyday and System.
-- The wheel only offers what the files in hand can become. A file already in a format skips it, and a mode with nothing to offer has no slice. Merge appears once two or more files are in hand.
+- Version 1.0.0, the first stable release. Free and open source, licensed MIT or Apache-2.0; the source is at https://github.com/ferdiunal/mcgyver. Made by Ferdi ÜNAL.
+- The wheel has seven modes on a ring around its centre. With files in hand: Convert, Tools and Actions. Shift held on its own, without files: Apps, Media, Everyday and System. On a Mac, Media works with Spotify and Music without repeat and shuffle, and there are no Brightness or Desktop wedges.
+- The wheel only offers what the files in hand can become. A file already in a format skips it, and a mode with nothing to offer has no slice. Merge appears once two or more PDFs, documents, spreadsheets or audio files of one kind are in hand.
 - Video and audio need FFmpeg on the computer. HEIC and AVIF appear where the computer's libheif can write them.
 - KDE Plasma 6 needs Wayland, and Set up pressed once in the settings. macOS 11 or later, one app for Apple Silicon and Intel, not notarized yet. Windows 10 and 11 on x64 and ARM64; on a PC without a graphics driver, like a virtual machine, it draws with Mesa's software OpenGL, which comes in the zip.
 - Privacy: once a day the app asks mcgyver.ferdiunal.tr whether a new version is out. That request also carries the app version, the operating system and its version, the processor type, the app's language, and a machine ID that is a one-way hash of the system's own ID (it can't be turned back into it). The server also sees the IP address and the country it comes from, and stores them with that ID. No files, file names, or what you do with the wheel ever leave the computer. Started with MCGYVER_OFFLINE=1 in its environment, the app never asks.
 
 What each kind of file can become (Convert) and what can be done to it (Tools):
 
-- Pictures (JPEG, PNG, HEIC, camera RAW, PSD, SVG…): JPG, PNG, WEBP, HEIC, AVIF, TIFF, GIF, BMP, ICO, PDF. Tools: Compress, Resize, Crop, Rotate, Strip EXIF.
+- Pictures (JPEG, PNG, camera RAW, PSD, SVG, and HEIC where libheif can read it): JPG, PNG, WEBP, HEIC, AVIF, TIFF, GIF, BMP, ICO, PDF. Tools: Compress, Resize, Crop, Rotate, Strip EXIF.
 - Video: MP4, MOV, MKV, WEBM, GIF, MP3. Tools: Compress, Trim, Mute, Rotate, Frames.
 - Audio: MP3, M4A, WAV, FLAC, OGG, OPUS, AIFF. Tools: Trim, Normalize, Compress, Merge.
 - PDF: DOCX, PPTX, XLSX, JPG, PNG, EPUB, TXT, MD. Tools: Compress, Split, Rotate, Merge.
@@ -24,7 +24,7 @@ What each kind of file can become (Convert) and what can be done to it (Tools):
 - Compressed files (GZ, XZ, ZST, BZ2, LZ4): Unzip, GZ, XZ, ZST, BZ2, LZ4, ZIP, 7Z.
 - Subtitles (SRT, VTT): VTT, SRT, TXT. Tools: shift by half a second or a second.
 - Folders: ZIP, 7Z, TAR.GZ, TAR.XZ, TAR.ZST, TAR.BZ2, TAR. Tools: Flatten.
-- Every file and folder: Actions, which are Zip, Copy, Cut, Copy To, Move To, Copy Path, Terminal and Share (to a phone, WhatsApp, Telegram, Slack or Teams).
+- Every file and folder: Actions, which are Zip, Copy, Copy To, Move To, Copy Path and Terminal, plus Cut (not on macOS) and Share (to a phone through KDE Connect, or to WhatsApp, Telegram, Slack or Teams where they are installed).
 
 ## Docs
 
@@ -43,5 +43,6 @@ What each kind of file can become (Convert) and what can be done to it (Tools):
 
 ## Optional
 
+- [Source on GitHub](https://github.com/ferdiunal/mcgyver): the app's code, issues and releases.
 - [Sponsor](https://github.com/sponsors/ferdiunal): support McGyver's development on GitHub Sponsors.
 - [Ferdi ÜNAL](https://ferdiunal.tr/): the author's site.

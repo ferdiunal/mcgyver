@@ -1,8 +1,8 @@
-# McGyver: drag a file, hold Shift, pick a wedge
+# McGyver: the right tool, right at your cursor
 
-McGyver opens a wheel around your pointer while you drag files. Drop them on a wedge: pictures change format, videos shrink, PDFs turn into Word files, folders get zipped. Conversions run on your computer, not in a cloud.
+Convert, compress, merge and share files without breaking your flow. Drag a file, hold Shift, and a wheel opens around your pointer: drop the file on a wedge and pictures change format, videos shrink, PDFs turn into Word files, folders get zipped. Conversions run on your computer, not in a cloud.
 
-Version 1.0.0, the first stable release. For KDE Plasma 6, macOS and Windows.
+Version 1.0.0, the first stable release. For KDE Plasma 6, macOS and Windows. Free and open source: [the source is on GitHub](https://github.com/ferdiunal/mcgyver).
 
 ## One wheel, seven modes
 
@@ -19,9 +19,9 @@ The ring around the centre switches between them. Stop on a slice, or move along
 Hold Shift on its own for a moment and the wheel is for the computer instead.
 
 - **Apps.** What is open, the one you used last on top, then the apps you picked in the settings. Alt+Tab, in a circle.
-- **Media.** Whatever is playing: play or pause, next, previous, repeat, shuffle, and the player itself.
-- **Everyday.** Keyboard layout, the computer's language, volume, brightness, screenshots, screen recording, and how busy the computer is.
-- **System.** Lock, Dark Mode, Stay Awake, the microphone, the trash and sleep.
+- **Media.** The player that is playing: play or pause, next, previous, repeat, shuffle, and the player itself. On a Mac it works with Spotify and Music, without repeat and shuffle.
+- **Everyday.** Keyboard layout, the computer's language, volume, brightness, screenshots, screen recording, and how busy the computer is. A Mac has no Brightness wedge.
+- **System.** Lock, Dark Mode, Stay Awake, the microphone, the trash, the desktop and sleep. A Mac has no Desktop wedge.
 
 ## What each file gets
 
@@ -29,7 +29,7 @@ The wheel only offers what the files in your hand can become. A file already in 
 
 | File | Convert to | Tools |
 | --- | --- | --- |
-| Pictures (JPEG, PNG, HEIC, camera RAW, PSD, SVG…) | JPG · PNG · WEBP · HEIC · AVIF · TIFF · GIF · BMP · ICO · PDF | Compress · Resize · Crop · Rotate · Strip EXIF |
+| Pictures (JPEG, PNG, camera RAW, PSD, SVG, HEIC with libheif…) | JPG · PNG · WEBP · HEIC · AVIF · TIFF · GIF · BMP · ICO · PDF | Compress · Resize · Crop · Rotate · Strip EXIF |
 | Video (needs FFmpeg) | MP4 · MOV · MKV · WEBM · GIF · MP3 | Compress · Trim · Mute · Rotate · Frames |
 | Audio (needs FFmpeg) | MP3 · M4A · WAV · FLAC · OGG · OPUS · AIFF | Trim · Normalize · Compress · Merge |
 | PDF | DOCX · PPTX · XLSX · JPG · PNG · EPUB · TXT · MD | Compress · Split · Rotate · Merge |
@@ -41,13 +41,13 @@ The wheel only offers what the files in your hand can become. A file already in 
 | Subtitles (SRT, VTT) | VTT · SRT · TXT | Shift by half a second or a second |
 | Folders | ZIP · 7Z · TAR.GZ · TAR.XZ · TAR.ZST · TAR.BZ2 · TAR | Flatten |
 
-Every file and folder also gets **Actions**: Zip, Copy, Cut, Copy To, Move To, Copy Path, Terminal and Share. Merge appears once two or more files are in hand. HEIC and AVIF appear where the computer's libheif can write them.
+Every file and folder also gets **Actions**: Zip, Copy, Copy To, Move To, Copy Path and Terminal, plus Cut (not on macOS) and Share (with KDE Connect or a messaging app installed). Merge appears once two or more PDFs, documents, spreadsheets or audio files of one kind are in hand. HEIC and AVIF appear where the computer's libheif can write them.
 
 ## Get McGyver
 
 One download, then it waits in the tray or the menu bar until you hold Shift.
 
-- **KDE Plasma 6.** Linux, on Wayland. Where McGyver started. After the first start, press *Set up* in its settings, so the wheel opens the moment you press Shift during a drag. [Download the .deb](https://mcgyver.ferdiunal.tr/download/deb) for Debian and Ubuntu, or [the .rpm](https://mcgyver.ferdiunal.tr/download/rpm) for Fedora.
+- **KDE Plasma 6.** KDE Plasma 6 on Wayland, x86-64. Where McGyver started. After the first start, press *Set up* in its settings, so the wheel opens the moment you press Shift during a drag. [Download the .deb](https://mcgyver.ferdiunal.tr/download/deb) for Debian and Ubuntu, or [the .rpm](https://mcgyver.ferdiunal.tr/download/rpm) for Fedora.
 - **macOS.** macOS 11 or later. One app for Apple Silicon and Intel. Open the disk image and the app offers to move itself to Applications. It isn't notarized yet: the first time, Control-click it and choose *Open* (from macOS 15 on, *Open Anyway* in Privacy & Security). [Download for Mac](https://mcgyver.ferdiunal.tr/download/macos), or [for Apple Silicon only](https://mcgyver.ferdiunal.tr/download/macos-arm64) (smaller).
 - **Windows.** Windows 10 and 11, on x64 and ARM64 PCs. On a PC without a graphics driver, like a virtual machine, it draws with Mesa's software OpenGL, which comes in the zip. SmartScreen asks once: *More info*, then *Run anyway*. [Download for x64 PCs](https://mcgyver.ferdiunal.tr/download/windows-x64), or [for ARM64](https://mcgyver.ferdiunal.tr/download/windows-arm64).
 

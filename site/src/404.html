@@ -5,31 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Not found · McGyver</title>
   <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0B0D10">
   <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
-  <script>
-    // The look the visitor chose on the front page's wheel, else the system's.
-    (function () {
-      var saved = null;
-      try { saved = localStorage.getItem("mcgyver-theme"); } catch (e) {}
-      var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
-      if (dark) document.documentElement.dataset.theme = "dark";
-    })();
-  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Geist:wght@300..700&display=swap">
-  <link rel="stylesheet" href="/tokens.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;650;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <main class="lost" id="main">
-    <a class="brand" href="/">
-      <img class="brand__mark" src="/assets/icon.svg" alt="" width="34" height="34">
-      <span class="brand__name">McGyver</span>
-    </a>
-    <h1 class="lost__title">No wedge for this one.</h1>
-    <p class="lost__text">The page you asked for isn’t here. The wheel is on the front page.</p>
-    <a class="btn btn--lg" href="/">Back to McGyver</a>
+    <a class="brand" href="/"><img src="/assets/icon.svg" alt="" width="34" height="34">McGyver</a>
+    <h1 class="display">No wedge for this one.</h1>
+    <p class="lede">The page you asked for isn’t here. The wheel is on the front page.</p>
+    <a class="btn btn-primary" href="/">Back to McGyver</a>
   </main>
 </body>
 </html>

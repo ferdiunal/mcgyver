@@ -739,6 +739,10 @@ the context was first made current without a surface, which left the draw buffer
 | `tests/documents.rs` | Word, CSV and PDF to Markdown from hand-built files; scanned and broken files |
 | `tests/office.rs` | Word, spreadsheet and presentation conversions; PDF rotate, split, compress, merge; a PDF as Word, PowerPoint, tables, EPUB, text and pictures; documents and workbooks merged |
 
+## License
+
+McGyver is licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+
 ## Contributors
 
 - [Burak Sormageç](https://github.com/bsormagec)
