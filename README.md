@@ -1,4 +1,4 @@
-<a href="https://mcgyver.ferdiunal.tr"><img alt="McGyver: drag a file, hold Shift, pick a wedge. A wheel of formats (PNG, WebP, AVIF, PDF…) open beside a desktop of files." src="site/src/assets/og.jpg" width="100%"></a>
+<a href="https://mcgyver.ferdiunal.tr"><img alt="McGyver: the right tool, right at your cursor. On a laptop, the wheel is open beside holiday.jpg in Finder, WEBP chosen, with Shift held." src="site/src/assets/og.jpg" width="100%"></a>
 
 # McGyver
 
