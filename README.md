@@ -738,3 +738,9 @@ the context was first made current without a surface, which left the draw buffer
 | `tests/actions.rs` | Copy and Move through their real entry point, with a stand-in folder picker |
 | `tests/documents.rs` | Word, CSV and PDF to Markdown from hand-built files; scanned and broken files |
 | `tests/office.rs` | Word, spreadsheet and presentation conversions; PDF rotate, split, compress, merge; a PDF as Word, PowerPoint, tables, EPUB, text and pictures; documents and workbooks merged |
+
+## Contributors
+
+- [Burak Sormageç](https://github.com/bsormagec)
+- [Sinan Asil](https://github.com/sekiz)
+- [Alişan Alaçam](https://github.com/alisanalacam)
